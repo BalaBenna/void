@@ -6,7 +6,7 @@
 import { URI } from '../../../../../../base/common/uri.js';
 import { ResolveError } from '../../promptFileReferenceErrors.js';
 import { IDisposable } from '../../../../../../base/common/lifecycle.js';
-import { IRange, Range } from '../../../../../../editor/common/core/range.js';
+import { IRange, Range } from '../../../../../../editor/common/language/core/range.js';
 
 /**
  * A resolve error with a parent prompt URI, if any.

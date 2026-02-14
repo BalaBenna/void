@@ -15,20 +15,19 @@ import { mountVoidCommandBar } from './react/out/void-editor-widgets-tsx/index.j
 import { deepClone } from '../../../../base/common/objects.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { IEditCodeService } from './editCodeServiceInterface.js';
-import { ITextModel } from '../../../../editor/common/model.js';
-import { IModelService } from '../../../../editor/common/services/model.js';
+import { ITextModel } from '../../../../editor/common/language/model.js';
+import { IModelService } from '../../../../editor/common/language/services/model.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { VOID_ACCEPT_DIFF_ACTION_ID, VOID_REJECT_DIFF_ACTION_ID, VOID_GOTO_NEXT_DIFF_ACTION_ID, VOID_GOTO_PREV_DIFF_ACTION_ID, VOID_GOTO_NEXT_URI_ACTION_ID, VOID_GOTO_PREV_URI_ACTION_ID, VOID_ACCEPT_FILE_ACTION_ID, VOID_REJECT_FILE_ACTION_ID, VOID_ACCEPT_ALL_DIFFS_ACTION_ID, VOID_REJECT_ALL_DIFFS_ACTION_ID } from './actionIDs.js';
 import { localize2 } from '../../../../nls.js';
 import { KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
 import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
-import { IMetricsService } from '../common/metricsService.js';
-import { KeyMod } from '../../../../editor/common/services/editorBaseApi.js';
+import { IMetricsService } from '../../../../platform/void/common/metricsService.js';
+import { KeyMod } from '../../../../editor/common/language/services/editorBaseApi.js';
 import { KeyCode } from '../../../../base/common/keyCodes.js';
 import { ScrollType } from '../../../../editor/common/editorCommon.js';
 import { IVoidModelService } from '../common/voidModelService.js';
-
 
 
 export interface IVoidCommandBarService {
@@ -115,11 +114,6 @@ export class VoidCommandBarService extends Disposable implements IVoidCommandBar
 		// initialize all existing models + initialize when a new model mounts
 		this._modelService.getModels().forEach(model => { initializeModel(model) })
 		this._register(this._modelService.onModelAdded(model => { initializeModel(model) }));
-
-
-
-
-
 
 		// for every new editor, add the floating widget and update active URI
 		const disposablesOfEditorId: { [editorId: string]: IDisposable[] } = {};
