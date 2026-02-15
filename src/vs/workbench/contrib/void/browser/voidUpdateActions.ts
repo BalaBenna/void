@@ -8,38 +8,170 @@ import Severity from '../../../../base/common/severity.js';
 import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
 import { localize2 } from '../../../../nls.js';
 import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
-import { INotificationService } from '../../../../platform/notification/common/notification.js';
-import { IMetricsService } from '../../../../platform/void/common/metricsService.js';
-import { IVoidUpdateService } from '../../../../platform/void/common/voidUpdateService.js';
+import { INotificationActions, INotificationHandle, INotificationService } from '../../../../platform/notification/common/notification.js';
+import { IMetricsService } from '../common/metricsService.js';
+import { IVoidUpdateService } from '../common/voidUpdateService.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
+import * as dom from '../../../../base/browser/dom.js';
+import { IUpdateService } from '../../../../platform/update/common/update.js';
+import { VoidCheckUpdateRespose } from '../common/voidUpdateServiceTypes.js';
+import { IAction } from '../../../../base/common/actions.js';
 
 
 
 
-const notifyYesUpdate = (notifService: INotificationService, msg?: string) => {
-	const message = msg || 'This is a very old version of void, please download the latest version! [Void Editor](https://voideditor.com/download-beta)!'
-	notifService.notify({
+const notifyUpdate = (res: VoidCheckUpdateRespose & { message: string }, notifService: INotificationService, updateService: IUpdateService): INotificationHandle => {
+	const message = res?.message || 'This is a very old version of Void, please download the latest version! [Void Editor](https://voideditor.com/download-beta)!'
+
+	let actions: INotificationActions | undefined
+
+	if (res?.action) {
+		const primary: IAction[] = []
+
+		if (res.action === 'reinstall') {
+			primary.push({
+				label: `Reinstall`,
+				id: 'void.updater.reinstall',
+				enabled: true,
+				tooltip: '',
+				class: undefined,
+				run: () => {
+					const { window } = dom.getActiveWindow()
+					window.open('https://voideditor.com/download-beta')
+				}
+			})
+		}
+
+		if (res.action === 'download') {
+			primary.push({
+				label: `Download`,
+				id: 'void.updater.download',
+				enabled: true,
+				tooltip: '',
+				class: undefined,
+				run: () => {
+					updateService.downloadUpdate()
+				}
+			})
+		}
+
+
+		if (res.action === 'apply') {
+			primary.push({
+				label: `Apply`,
+				id: 'void.updater.apply',
+				enabled: true,
+				tooltip: '',
+				class: undefined,
+				run: () => {
+					updateService.applyUpdate()
+				}
+			})
+		}
+
+		if (res.action === 'restart') {
+			primary.push({
+				label: `Restart`,
+				id: 'void.updater.restart',
+				enabled: true,
+				tooltip: '',
+				class: undefined,
+				run: () => {
+					updateService.quitAndInstall()
+				}
+			})
+		}
+
+		primary.push({
+			id: 'void.updater.site',
+			enabled: true,
+			label: `Void Site`,
+			tooltip: '',
+			class: undefined,
+			run: () => {
+				const { window } = dom.getActiveWindow()
+				window.open('https://voideditor.com/')
+			}
+		})
+
+		actions = {
+			primary: primary,
+			secondary: [{
+				id: 'void.updater.close',
+				enabled: true,
+				label: `Keep current version`,
+				tooltip: '',
+				class: undefined,
+				run: () => {
+					notifController.close()
+				}
+			}]
+		}
+	}
+	else {
+		actions = undefined
+	}
+
+	const notifController = notifService.notify({
 		severity: Severity.Info,
 		message: message,
+		sticky: true,
+		progress: actions ? { worked: 0, total: 100 } : undefined,
+		actions: actions,
 	})
+
+	return notifController
+	// const d = notifController.onDidClose(() => {
+	// 	notifyYesUpdate(notifService, res)
+	// 	d.dispose()
+	// })
 }
-const notifyNoUpdate = (notifService: INotificationService) => {
-	notifService.notify({
-		severity: Severity.Info,
-		message: 'Void is up-to-date!',
-	})
-}
-const notifyErrChecking = (notifService: INotificationService) => {
+const notifyErrChecking = (notifService: INotificationService): INotificationHandle => {
 	const message = `Void Error: There was an error checking for updates. If this persists, please get in touch or reinstall Void [here](https://voideditor.com/download-beta)!`
-	notifService.notify({
+	const notifController = notifService.notify({
 		severity: Severity.Info,
 		message: message,
+		sticky: true,
 	})
+	return notifController
 }
 
+
+const performVoidCheck = async (
+	explicit: boolean,
+	notifService: INotificationService,
+	voidUpdateService: IVoidUpdateService,
+	metricsService: IMetricsService,
+	updateService: IUpdateService,
+): Promise<INotificationHandle | null> => {
+
+	const metricsTag = explicit ? 'Manual' : 'Auto'
+
+	metricsService.capture(`Void Update ${metricsTag}: Checking...`, {})
+	const res = await voidUpdateService.check(explicit)
+	if (!res) {
+		const notifController = notifyErrChecking(notifService);
+		metricsService.capture(`Void Update ${metricsTag}: Error`, { res })
+		return notifController
+	}
+	else {
+		if (res.message) {
+			const notifController = notifyUpdate(res, notifService, updateService)
+			metricsService.capture(`Void Update ${metricsTag}: Yes`, { res })
+			return notifController
+		}
+		else {
+			metricsService.capture(`Void Update ${metricsTag}: No`, { res })
+			return null
+		}
+	}
+}
 
 
 // Action
+let lastNotifController: INotificationHandle | null = null
+
+
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
@@ -52,11 +184,16 @@ registerAction2(class extends Action2 {
 		const voidUpdateService = accessor.get(IVoidUpdateService)
 		const notifService = accessor.get(INotificationService)
 		const metricsService = accessor.get(IMetricsService)
+		const updateService = accessor.get(IUpdateService)
 
-		const res = await voidUpdateService.check()
-		if (!res) { notifyErrChecking(notifService); metricsService.capture('Void Update: Error', {}) }
-		else if (res.hasUpdate) { notifyYesUpdate(notifService, res.message); metricsService.capture('Void Update: Yes', {}) }
-		else if (!res.hasUpdate) { notifyNoUpdate(notifService); metricsService.capture('Void Update: No', {}) }
+		const currNotifController = lastNotifController
+
+		const newController = await performVoidCheck(true, notifService, voidUpdateService, metricsService, updateService)
+
+		if (newController) {
+			currNotifController?.close()
+			lastNotifController = newController
+		}
 	}
 })
 
@@ -64,24 +201,28 @@ registerAction2(class extends Action2 {
 class VoidUpdateWorkbenchContribution extends Disposable implements IWorkbenchContribution {
 	static readonly ID = 'workbench.contrib.void.voidUpdate'
 	constructor(
-		@IVoidUpdateService private readonly voidUpdateService: IVoidUpdateService,
-		@INotificationService private readonly notifService: INotificationService,
-		@IMetricsService private readonly metricsService: IMetricsService,
+		@IVoidUpdateService voidUpdateService: IVoidUpdateService,
+		@IMetricsService metricsService: IMetricsService,
+		@INotificationService notifService: INotificationService,
+		@IUpdateService updateService: IUpdateService,
 	) {
 		super()
 
-		// on mount
-		setTimeout(async () => {
-			const res = await this.voidUpdateService.check()
+		const autoCheck = () => {
+			performVoidCheck(false, notifService, voidUpdateService, metricsService, updateService)
+		}
 
-			const notifService = this.notifService
-			const metricsService = this.metricsService
+		// check once 5 seconds after mount
+		// check every 3 hours
+		const { window } = dom.getActiveWindow()
 
-			if (!res) { notifyErrChecking(notifService); metricsService.capture('Void Update Startup: Error', {}) }
-			else if (res.hasUpdate) { notifyYesUpdate(this.notifService, res.message); metricsService.capture('Void Update Startup: Yes', {}) }
-			else if (!res.hasUpdate) { metricsService.capture('Void Update Startup: No', {}) } // display nothing if up to date
+		const initId = window.setTimeout(() => autoCheck(), 5 * 1000)
+		this._register({ dispose: () => window.clearTimeout(initId) })
 
-		}, 5 * 1000)
+
+		const intervalId = window.setInterval(() => autoCheck(), 3 * 60 * 60 * 1000) // every 3 hrs
+		this._register({ dispose: () => window.clearInterval(intervalId) })
+
 	}
 }
 registerWorkbenchContribution2(VoidUpdateWorkbenchContribution.ID, VoidUpdateWorkbenchContribution, WorkbenchPhase.BlockRestore);

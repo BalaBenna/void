@@ -8,7 +8,7 @@ import { EditorInput } from '../../../common/editor/editorInput.js';
 import * as nls from '../../../../nls.js';
 import { EditorExtensions } from '../../../common/editor.js';
 import { EditorPane } from '../../../browser/parts/editor/editorPane.js';
-import { IEditorGroup } from '../../../services/editor/common/editorGroupsService.js';
+import { IEditorGroup, IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
 import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 import { IStorageService } from '../../../../platform/storage/common/storage.js';
@@ -25,7 +25,7 @@ import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextke
 
 import { mountVoidSettings } from './react/out/void-settings-tsx/index.js'
 import { Codicon } from '../../../../base/common/codicons.js';
-import { IDisposable } from '../../../../base/common/lifecycle.js';
+import { toDisposable } from '../../../../base/common/lifecycle.js';
 
 
 // refer to preferences.contribution.ts keybindings editor
@@ -35,7 +35,7 @@ class VoidSettingsInput extends EditorInput {
 	static readonly ID: string = 'workbench.input.void.settings';
 
 	static readonly RESOURCE = URI.from({ // I think this scheme is invalid, it just shuts up TS
-		scheme: 'void',  // Custom scheme for our editor
+		scheme: 'void',  // Custom scheme for our editor (try Schemas.https)
 		path: 'settings'
 	})
 	readonly resource = VoidSettingsInput.RESOURCE;
@@ -49,7 +49,7 @@ class VoidSettingsInput extends EditorInput {
 	}
 
 	override getName(): string {
-		return nls.localize('voidSettingsInputsName', 'Void Settings');
+		return nls.localize('voidSettingsInputsName', 'Void\'s Settings');
 	}
 
 	override getIcon() {
@@ -90,12 +90,12 @@ class VoidSettingsPane extends EditorPane {
 
 		// Mount React into the scrollable content
 		this.instantiationService.invokeFunction(accessor => {
-			const disposables: IDisposable[] | undefined = mountVoidSettings(settingsElt, accessor);
+			const disposeFn = mountVoidSettings(settingsElt, accessor)?.dispose;
+			this._register(toDisposable(() => disposeFn?.()))
 
 			// setTimeout(() => { // this is a complete hack and I don't really understand how scrollbar works here
 			// 	this._scrollbar?.scanDomNode();
 			// }, 1000)
-			disposables?.forEach(d => this._register(d));
 		});
 	}
 
@@ -112,7 +112,7 @@ class VoidSettingsPane extends EditorPane {
 
 // register Settings pane
 Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane).registerEditorPane(
-	EditorPaneDescriptor.create(VoidSettingsPane, VoidSettingsPane.ID, nls.localize('VoidSettingsPane', "Void Settings Pane")),
+	EditorPaneDescriptor.create(VoidSettingsPane, VoidSettingsPane.ID, nls.localize('VoidSettingsPane', "Void\'s Settings Pane")),
 	[new SyncDescriptor(VoidSettingsInput)]
 );
 
@@ -141,18 +141,27 @@ registerAction2(class extends Action2 {
 
 	async run(accessor: ServicesAccessor): Promise<void> {
 		const editorService = accessor.get(IEditorService);
+		const editorGroupService = accessor.get(IEditorGroupsService);
+
 		const instantiationService = accessor.get(IInstantiationService);
 
-		// close all instances if found
-		const openEditors = editorService.findEditors(VoidSettingsInput.RESOURCE);
-		if (openEditors.length > 0) {
-			await editorService.closeEditors(openEditors);
+		// if is open, close it
+		const openEditors = editorService.findEditors(VoidSettingsInput.RESOURCE); // should only have 0 or 1 elements...
+		if (openEditors.length !== 0) {
+			const openEditor = openEditors[0].editor
+			const isCurrentlyOpen = editorService.activeEditor?.resource?.fsPath === openEditor.resource?.fsPath
+			if (isCurrentlyOpen)
+				await editorService.closeEditors(openEditors)
+			else
+				await editorGroupService.activeGroup.openEditor(openEditor)
 			return;
 		}
 
+
 		// else open it
 		const input = instantiationService.createInstance(VoidSettingsInput);
-		await editorService.openEditor(input);
+
+		await editorGroupService.activeGroup.openEditor(input);
 	}
 })
 
@@ -163,7 +172,7 @@ registerAction2(class extends Action2 {
 	constructor() {
 		super({
 			id: VOID_OPEN_SETTINGS_ACTION_ID,
-			title: nls.localize2('voidSettings', "Void: Open Settings"),
+			title: nls.localize2('voidSettingsAction2', "Void: Open Settings"),
 			f1: true,
 			icon: Codicon.settingsGear,
 		});
@@ -193,7 +202,7 @@ MenuRegistry.appendMenuItem(MenuId.GlobalActivity, {
 	group: '0_command',
 	command: {
 		id: VOID_TOGGLE_SETTINGS_ACTION_ID,
-		title: nls.localize('voidSettings', "Void Settings")
+		title: nls.localize('voidSettingsActionGear', "Void\'s Settings")
 	},
 	order: 1
 });

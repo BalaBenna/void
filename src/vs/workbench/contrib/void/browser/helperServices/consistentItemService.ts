@@ -25,7 +25,7 @@ export interface IConsistentItemService {
 
 export const IConsistentItemService = createDecorator<IConsistentItemService>('ConsistentItemService');
 
-export class ConsistentItemService extends Disposable {
+export class ConsistentItemService extends Disposable implements IConsistentItemService {
 
 	readonly _serviceBrand: undefined
 
@@ -91,10 +91,7 @@ export class ConsistentItemService extends Disposable {
 		this._register(this._editorService.onCodeEditorAdd(editor => { initializeEditor(editor) }))
 
 		// when an editor is deleted, remove its items
-		this._register(this._editorService.onCodeEditorRemove(editor => {
-			removeItemsFromEditor(editor)
-		}))
-
+		this._register(this._editorService.onCodeEditorRemove(editor => { removeItemsFromEditor(editor) }))
 	}
 
 

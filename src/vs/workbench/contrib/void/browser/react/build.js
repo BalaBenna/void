@@ -3,7 +3,8 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { spawn, execSync } from 'child_process';
+import { execSync } from 'child_process';
+import { spawn } from 'cross-spawn'
 // Added lines below
 import fs from 'fs';
 import path from 'path';
@@ -73,13 +74,29 @@ function saveStylesFile() {
 		} catch (err) {
 			console.error('[scope-tailwind] Error saving styles.css:', err);
 		}
-	}, 3000);
+	}, 6000);
 }
 
 const args = process.argv.slice(2);
 const isWatch = args.includes('--watch') || args.includes('-w');
 
 if (isWatch) {
+	// this just builds it if it doesn't exist instead of waiting for the watcher to trigger
+	// Check if src2/ exists; if not, do an initial scope-tailwind build
+	if (!fs.existsSync('src2')) {
+		try {
+			console.log('🔨 Running initial scope-tailwind build to create src2 folder...');
+			execSync(
+				'npx scope-tailwind ./src -o src2/ -s void-scope -c styles.css -p "void-"',
+				{ stdio: 'inherit' }
+			);
+			console.log('✅ src2/ created successfully.');
+		} catch (err) {
+			console.error('❌ Error running initial scope-tailwind build:', err);
+			process.exit(1);
+		}
+	}
+
 	// Watch mode
 	const scopeTailwindWatcher = spawn('npx', [
 		'nodemon',
