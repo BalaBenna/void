@@ -741,7 +741,11 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
 
 			cb({ cancel: false, requestHeaders: Object.assign(details.requestHeaders, headers) });
 		});
+
 	}
+
+
+
 
 	private marketplaceHeadersPromise: Promise<object> | undefined;
 	private getMarketplaceHeaders(): Promise<object> {
