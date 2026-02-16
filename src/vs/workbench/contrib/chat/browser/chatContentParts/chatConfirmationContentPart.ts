@@ -12,6 +12,7 @@ import { IChatConfirmation, IChatSendRequestOptions, IChatService } from '../../
 import { isResponseVM } from '../../common/chatViewModel.js';
 import { IChatWidgetService } from '../chat.js';
 import { ChatConfirmationWidget } from './chatConfirmationWidget.js';
+// import './media/chatConfirmationWidget.css';
 import { IChatContentPart, IChatContentPartRenderContext } from './chatContentParts.js';
 
 export class ChatConfirmationContentPart extends Disposable implements IChatContentPart {

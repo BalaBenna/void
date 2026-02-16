@@ -15,15 +15,15 @@ import { IDisposable } from '../../../../../../../base/common/lifecycle.js';
 import { ErrorDisplay } from './ErrorDisplay.js';
 import { BlockCode, TextAreaFns, VoidCustomDropdownBox, VoidInputBox2, VoidSlider, VoidSwitch, VoidDiffEditor } from '../util/inputs.js';
 import { ModelDropdown, } from '../void-settings-tsx/ModelDropdown.js';
-import { PastThreadsList } from './SidebarThreadSelector.js';
+import { PastThreadsList, HistoryDropdown } from './SidebarThreadSelector.js';
 import { VOID_CTRL_L_ACTION_ID } from '../../../actionIDs.js';
 import { VOID_OPEN_SETTINGS_ACTION_ID } from '../../../voidSettingsPane.js';
 import { ChatMode, displayInfoOfProviderName, FeatureName, isFeatureNameDisabled } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js';
 import { ICommandService } from '../../../../../../../platform/commands/common/commands.js';
 import { WarningBox } from '../void-settings-tsx/WarningBox.js';
 import { getModelCapabilities, getIsReasoningEnabledState } from '../../../../common/modelCapabilities.js';
-import { AlertTriangle, File, Ban, Check, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text } from 'lucide-react';
-import { ChatMessage, CheckpointEntry, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
+import { AlertTriangle, File, Ban, Check, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Globe, Image as ImageIcon, Clock, Plus, MoreHorizontal, Mic, Monitor } from 'lucide-react';
+import { ChatMessage, CheckpointEntry, ImageAttachment, PlanItem, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
 import { CopyButton, EditToolAcceptRejectButtonsHTML, IconShell1, JumpToFileButton, JumpToTerminalButton, StatusIndicator, StatusIndicatorForApplyButton, useApplyStreamState, useEditToolStreamState } from '../markdown/ApplyBlockHoverButtons.js';
 import { IsRunningType } from '../../../chatThreadService.js';
@@ -247,18 +247,26 @@ const ReasoningOptionSlider = ({ featureName }: { featureName: FeatureName }) =>
 
 
 
-const nameOfChatMode = {
-	'normal': 'Chat',
-	'gather': 'Gather',
+const nameOfChatMode: Record<ChatMode, string> = {
 	'agent': 'Agent',
+	'ask': 'Ask',
+	'plan': 'Plan',
+	'debug': 'Debug',
 }
 
-const detailOfChatMode = {
-	'normal': 'Normal chat',
-	'gather': 'Reads files, but can\'t edit',
-	'agent': 'Edits files and uses tools',
+const detailOfChatMode: Record<ChatMode, string> = {
+	'agent': 'Autonomous coding agent with full tool access',
+	'ask': 'Search and read codebase, no edits',
+	'plan': 'Research and create structured implementation plans',
+	'debug': 'Specialized bug-finding and root-cause analysis',
 }
 
+const iconOfChatMode: Record<ChatMode, typeof Globe> = {
+	'agent': Globe,
+	'ask': File,
+	'plan': Flag,
+	'debug': AlertTriangle,
+}
 
 const ChatModeDropdown = ({ className }: { className: string }) => {
 	const accessor = useAccessor()
@@ -266,22 +274,30 @@ const ChatModeDropdown = ({ className }: { className: string }) => {
 	const voidSettingsService = accessor.get('IVoidSettingsService')
 	const settingsState = useSettingsState()
 
-	const options: ChatMode[] = useMemo(() => ['normal', 'gather', 'agent'], [])
+	const options: ChatMode[] = useMemo(() => ['agent', 'ask', 'plan', 'debug'], [])
+
+	// Fallback to 'agent' if stored mode is invalid (e.g. old 'normal'/'gather')
+	const currentMode: ChatMode = nameOfChatMode[settingsState.globalSettings.chatMode] ? settingsState.globalSettings.chatMode : 'agent'
 
 	const onChangeOption = useCallback((newVal: ChatMode) => {
 		voidSettingsService.setGlobalSetting('chatMode', newVal)
 	}, [voidSettingsService])
 
-	return <VoidCustomDropdownBox
-		className={className}
-		options={options}
-		selectedOption={settingsState.globalSettings.chatMode}
-		onChangeOption={onChangeOption}
-		getOptionDisplayName={(val) => nameOfChatMode[val]}
-		getOptionDropdownName={(val) => nameOfChatMode[val]}
-		getOptionDropdownDetail={(val) => detailOfChatMode[val]}
-		getOptionsEqual={(a, b) => a === b}
-	/>
+	const ModeIcon = iconOfChatMode[currentMode]
+
+	return <div className="flex items-center gap-1">
+		<ModeIcon size={12} className="text-void-fg-3" />
+		<VoidCustomDropdownBox
+			className={className}
+			options={options}
+			selectedOption={currentMode}
+			onChangeOption={onChangeOption}
+			getOptionDisplayName={(val) => nameOfChatMode[val] ?? val}
+			getOptionDropdownName={(val) => nameOfChatMode[val] ?? val}
+			getOptionDropdownDetail={(val) => detailOfChatMode[val] ?? ''}
+			getOptionsEqual={(a, b) => a === b}
+		/>
+	</div>
 
 }
 
@@ -309,14 +325,36 @@ interface VoidChatAreaProps {
 
 	selections?: StagingSelectionItem[]
 	setSelections?: (s: StagingSelectionItem[]) => void
-	// selections?: any[];
-	// onSelectionsChange?: (selections: any[]) => void;
 
 	onClickAnywhere?: () => void;
 	// Optional close button
 	onClose?: () => void;
 
 	featureName: FeatureName;
+
+	// Web search toggle
+	webSearchEnabled?: boolean;
+	onToggleWebSearch?: () => void;
+
+	// Image attachment
+	pendingImages?: ImageAttachment[];
+	onAttachImages?: (images: ImageAttachment[]) => void;
+	onRemoveImage?: (id: string) => void;
+
+	// Voice input
+	isRecording?: boolean;
+	onToggleVoice?: () => void;
+	speechRecognitionAvailable?: boolean;
+
+	// Drag & drop
+	isDragOver?: boolean;
+	onDragEnter?: (e: React.DragEvent) => void;
+	onDragOver?: (e: React.DragEvent) => void;
+	onDragLeave?: (e: React.DragEvent) => void;
+	onDrop?: (e: React.DragEvent) => void;
+
+	// Paste handler (for image paste)
+	onPaste?: (e: React.ClipboardEvent) => void;
 }
 
 export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
@@ -336,7 +374,22 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 	setSelections,
 	featureName,
 	loadingIcon,
+	webSearchEnabled,
+	onToggleWebSearch,
+	pendingImages,
+	onAttachImages,
+	onRemoveImage,
+	isRecording,
+	onToggleVoice,
+	speechRecognitionAvailable = true,
+	isDragOver,
+	onDragEnter,
+	onDragOver,
+	onDragLeave,
+	onDrop,
+	onPaste,
 }) => {
+	const imageInputRef = useRef<HTMLInputElement>(null);
 	return (
 		<div
 			ref={divRef}
@@ -346,13 +399,18 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
                 rounded-md
                 bg-void-bg-1
 				transition-all duration-200
-				border border-void-border-3 focus-within:border-void-border-1 hover:border-void-border-1
+				border ${isDragOver ? 'border-blue-400 bg-blue-500/5' : 'border-void-border-3'} focus-within:border-void-border-1 hover:border-void-border-1
 				max-h-[80vh] overflow-y-auto
                 ${className}
             `}
 			onClick={(e) => {
 				onClickAnywhere?.()
 			}}
+			onDragEnter={onDragEnter}
+			onDragOver={onDragOver}
+			onDragLeave={onDragLeave}
+			onDrop={onDrop}
+			onPaste={onPaste}
 		>
 			{/* Selections section */}
 			{showSelections && selections && setSelections && (
@@ -362,6 +420,30 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 					setSelections={setSelections}
 					showProspectiveSelections={showProspectiveSelections}
 				/>
+			)}
+
+			{/* Pending image thumbnails */}
+			{pendingImages && pendingImages.length > 0 && (
+				<div className="flex flex-wrap gap-1 pb-1">
+					{pendingImages.map((img) => (
+						<div key={img.id} className="relative group">
+							<img
+								src={`data:${img.mimeType};base64,${img.base64Data}`}
+								alt={img.fileName || 'attached image'}
+								className="h-16 w-16 object-cover rounded border border-void-border-2"
+							/>
+							{onRemoveImage && (
+								<button
+									type='button'
+									className="absolute -top-1 -right-1 bg-void-bg-1 border border-void-border-2 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+									onClick={() => onRemoveImage(img.id)}
+								>
+									<X size={10} />
+								</button>
+							)}
+						</div>
+					))}
+				</div>
 			)}
 
 			{/* Input section */}
@@ -380,6 +462,39 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 				)}
 			</div>
 
+			{/* Hidden file input for image attachment */}
+			<input
+				ref={imageInputRef}
+				type="file"
+				accept="image/*"
+				multiple
+				className="hidden"
+				onChange={(e) => {
+					const files = e.target.files;
+					if (!files || !onAttachImages) return;
+					const promises = Array.from(files).map(file => {
+						return new Promise<ImageAttachment>((resolve, reject) => {
+							const reader = new FileReader();
+							reader.onload = () => {
+								const base64 = (reader.result as string).split(',')[1];
+								resolve({
+									id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+									base64Data: base64,
+									mimeType: file.type,
+									fileName: file.name,
+								});
+							};
+							reader.onerror = () => reject(new Error(`Failed to read image: ${file.name}`));
+							reader.readAsDataURL(file);
+						});
+					});
+					Promise.all(promises).then(images => {
+						onAttachImages(images);
+					}).catch(err => console.error('Error reading image files:', err));
+					e.target.value = ''; // reset input
+				}}
+			/>
+
 			{/* Bottom row */}
 			<div className='flex flex-row justify-between items-end gap-1'>
 				{showModelDropdown && (
@@ -393,9 +508,47 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 					</div>
 				)}
 
-				<div className="flex items-center gap-2">
+				<div className="flex items-center gap-1">
 
 					{isStreaming && loadingIcon}
+
+					{/* Globe icon - web search toggle */}
+					<button
+						type='button'
+						className={`p-1 rounded transition-colors ${webSearchEnabled ? 'text-blue-400 bg-blue-500/10' : 'text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-2-hover'}`}
+						onClick={onToggleWebSearch}
+						data-tooltip-id='void-tooltip'
+						data-tooltip-content={webSearchEnabled ? 'Web Search (On)' : 'Web Search'}
+						data-tooltip-place='top'
+					>
+						<Globe size={16} />
+					</button>
+
+					{/* Image icon */}
+					<button
+						type='button'
+						className="p-1 rounded text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-2-hover transition-colors"
+						onClick={() => imageInputRef.current?.click()}
+						data-tooltip-id='void-tooltip'
+						data-tooltip-content='Attach Image'
+						data-tooltip-place='top'
+					>
+						<ImageIcon size={16} />
+					</button>
+
+					{/* Mic icon (voice input) */}
+					{speechRecognitionAvailable && (
+						<button
+							type='button'
+							className={`p-1 rounded transition-colors ${isRecording ? 'text-red-400 bg-red-500/10' : 'text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-2-hover'}`}
+							onClick={onToggleVoice}
+							data-tooltip-id='void-tooltip'
+							data-tooltip-content={isRecording ? 'Stop Recording' : 'Voice Input'}
+							data-tooltip-place='top'
+						>
+							<Mic size={16} />
+						</button>
+					)}
 
 					{isStreaming ? (
 						<ButtonStop onClick={onAbort} />
@@ -1089,6 +1242,18 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	if (mode === 'display') {
 		chatbubbleContents = <>
 			<SelectedFiles type='past' messageIdx={messageIdx} selections={chatMessage.selections || []} />
+			{chatMessage.images && chatMessage.images.length > 0 && (
+				<div className="flex flex-wrap gap-1 py-1">
+					{chatMessage.images.map((img) => (
+						<img
+							key={img.id}
+							src={`data:${img.mimeType};base64,${img.base64Data}`}
+							alt={img.fileName || 'attached image'}
+							className="max-h-32 max-w-48 object-contain rounded border border-void-border-2"
+						/>
+					))}
+				</div>
+			)}
 			<span className='px-0.5'>{chatMessage.displayContent}</span>
 		</>
 	}
@@ -2492,6 +2657,78 @@ const Checkpoint = ({ message, threadId, messageIdx, isCheckpointGhost, threadIs
 }
 
 
+// ==================== Plan Message Component ====================
+
+const PlanMessageComponent = ({ chatMessage, isCheckpointGhost, threadId, messageIdx }: {
+	chatMessage: ChatMessage & { role: 'plan' },
+	isCheckpointGhost: boolean,
+	threadId: string,
+	messageIdx: number,
+}) => {
+	const accessor = useAccessor()
+	const chatThreadsService = accessor.get('IChatThreadService')
+
+	const statusLabel = chatMessage.status === 'draft' ? 'Draft' : chatMessage.status === 'executing' ? 'Executing...' : 'Completed'
+	const statusColor = chatMessage.status === 'draft' ? 'text-yellow-500' : chatMessage.status === 'executing' ? 'text-blue-400' : 'text-green-500'
+
+	const completedCount = chatMessage.items.filter(item => item.completed).length
+	const totalCount = chatMessage.items.length
+
+	const chatMessageLocation: ChatMessageLocation = {
+		threadId,
+		messageIdx,
+	}
+
+	return <div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
+		<div className='flex flex-col gap-2'>
+			{/* Plan header with status */}
+			<div className='flex items-center justify-between'>
+				<div className='flex items-center gap-2'>
+					<Flag size={14} className={statusColor} />
+					<span className={`text-xs font-medium ${statusColor}`}>{statusLabel}</span>
+					{totalCount > 0 && (
+						<span className='text-xs text-void-fg-3'>({completedCount}/{totalCount})</span>
+					)}
+				</div>
+			</div>
+
+			{/* Plan content rendered as markdown */}
+			<ProseWrapper>
+				<ChatMarkdownRender
+					string={chatMessage.displayContent || chatMessage.content}
+					chatMessageLocation={chatMessageLocation}
+					isApplyEnabled={false}
+					isLinkDetectionEnabled={true}
+				/>
+			</ProseWrapper>
+
+			{/* Build button - only shown for draft plans */}
+			{chatMessage.status === 'draft' && (
+				<button
+					className='self-start px-3 py-1.5 text-xs font-medium rounded
+						bg-green-600 hover:bg-green-700 text-white
+						transition-colors cursor-pointer select-none'
+					onClick={() => {
+						chatThreadsService.executePlan(threadId, messageIdx)
+					}}
+				>
+					Build
+				</button>
+			)}
+
+			{/* Progress bar during execution */}
+			{chatMessage.status === 'executing' && totalCount > 0 && (
+				<div className='w-full h-1.5 bg-void-bg-2 rounded-full overflow-hidden'>
+					<div
+						className='h-full bg-blue-500 transition-all duration-300 rounded-full'
+						style={{ width: `${(completedCount / totalCount) * 100}%` }}
+					/>
+				</div>
+			)}
+		</div>
+	</div>
+}
+
 type ChatBubbleMode = 'display' | 'edit'
 type ChatBubbleProps = {
 	chatMessage: ChatMessage,
@@ -2567,14 +2804,17 @@ const _ChatBubble = ({ threadId, chatMessage, currCheckpointIdx, isCommitted, me
 		</div>
 	}
 
-	else if (role === 'checkpoint') {
-		return <Checkpoint
-			threadId={threadId}
-			message={chatMessage}
-			messageIdx={messageIdx}
+	else if (role === 'plan') {
+		return <PlanMessageComponent
+			chatMessage={chatMessage}
 			isCheckpointGhost={isCheckpointGhost}
-			threadIsRunning={!!chatIsRunning}
+			threadId={threadId}
+			messageIdx={messageIdx}
 		/>
+	}
+
+	else if (role === 'checkpoint') {
+		return null
 	}
 
 }
@@ -2877,6 +3117,112 @@ const EditToolSoFar = ({ toolCallSoFar, }: { toolCallSoFar: RawToolCallObj }) =>
 
 }
 
+// ==================== Chat Header ====================
+
+const ChatHeader = () => {
+	const [historyOpen, setHistoryOpen] = useState(false);
+	const accessor = useAccessor();
+	const chatThreadsService = accessor.get('IChatThreadService');
+	const commandService = accessor.get('ICommandService');
+
+	const chatThreadsState = useChatThreadsState();
+	const currentThread = chatThreadsService.getCurrentThread();
+
+	// Get current thread title from first user message
+	const firstUserMsg = currentThread?.messages.find(m => m.role === 'user');
+	const threadTitle = firstUserMsg && firstUserMsg.role === 'user'
+		? (firstUserMsg.displayContent || 'New Chat')
+		: 'New Chat';
+	const displayTitle = threadTitle.length > 20 ? threadTitle.slice(0, 17) + '...' : threadTitle;
+
+	const hasMessages = (currentThread?.messages.length ?? 0) > 0;
+
+	return (
+		<div className="relative flex items-center justify-between px-2 py-1.5 select-none flex-shrink-0">
+			{/* Left: Thread title tabs */}
+			<div className="flex items-center gap-0.5 min-w-0 flex-1 overflow-hidden">
+				{/* Current thread tab */}
+				{hasMessages && (
+					<div className="flex items-center px-2 py-0.5 text-xs text-void-fg-1 bg-void-bg-2 truncate max-w-[140px]"
+						data-tooltip-id='void-tooltip'
+						data-tooltip-content={threadTitle}
+						data-tooltip-place='bottom'
+					>
+						<span className="truncate">{displayTitle}</span>
+					</div>
+				)}
+
+				{/* New Chat tab */}
+				<button
+					className={`flex items-center px-2 py-0.5 rounded text-xs transition-colors cursor-pointer ${!hasMessages
+						? 'text-void-fg-1 bg-void-bg-2'
+						: 'text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-2-hover'
+						}`}
+					onClick={() => {
+						chatThreadsService.openNewThread();
+						chatThreadsService.focusCurrentChat();
+					}}
+				>
+					New Chat
+				</button>
+			</div>
+
+			{/* Right: Action buttons */}
+			<div className="flex items-center gap-0.5">
+				<button
+					className="p-1 rounded hover:bg-void-bg-2-hover text-void-fg-3 hover:text-void-fg-1 transition-colors"
+					onClick={() => {
+						chatThreadsService.openNewThread();
+						chatThreadsService.focusCurrentChat();
+					}}
+					data-tooltip-id='void-tooltip'
+					data-tooltip-content='New Chat'
+					data-tooltip-place='bottom'
+				>
+					<Plus size={14} />
+				</button>
+
+				<button
+					className={`p-1 rounded hover:bg-void-bg-2-hover text-void-fg-3 hover:text-void-fg-1 transition-colors ${historyOpen ? 'bg-void-bg-2-hover text-void-fg-1' : ''}`}
+					onClick={() => setHistoryOpen(!historyOpen)}
+					data-tooltip-id='void-tooltip'
+					data-tooltip-content='Chat History'
+					data-tooltip-place='bottom'
+				>
+					<Clock size={14} />
+				</button>
+
+				<button
+					className="p-1 rounded hover:bg-void-bg-2-hover text-void-fg-3 hover:text-void-fg-1 transition-colors"
+					onClick={() => {
+						commandService.executeCommand(VOID_OPEN_SETTINGS_ACTION_ID);
+					}}
+					data-tooltip-id='void-tooltip'
+					data-tooltip-content='Settings'
+					data-tooltip-place='bottom'
+				>
+					<MoreHorizontal size={14} />
+				</button>
+
+				<button
+					className="p-1 rounded hover:bg-void-bg-2-hover text-void-fg-3 hover:text-void-fg-1 transition-colors"
+					onClick={() => {
+						commandService.executeCommand('workbench.action.closeSidebar');
+					}}
+					data-tooltip-id='void-tooltip'
+					data-tooltip-content='Close'
+					data-tooltip-place='bottom'
+				>
+					<X size={14} />
+				</button>
+			</div>
+
+			{/* History dropdown */}
+			<HistoryDropdown isOpen={historyOpen} onClose={() => setHistoryOpen(false)} />
+		</div>
+	);
+};
+
 
 export const SidebarChat = () => {
 	const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -2913,7 +3259,26 @@ export const SidebarChat = () => {
 	const initVal = ''
 	const [instructionsAreEmpty, setInstructionsAreEmpty] = useState(!initVal)
 
-	const isDisabled = instructionsAreEmpty || !!isFeatureNameDisabled('Chat', settingsState)
+	// Web search toggle
+	const [webSearchEnabled, setWebSearchEnabled] = useState(false)
+
+	// Image attachment
+	const [pendingImages, setPendingImages] = useState<ImageAttachment[]>([])
+
+	// Voice input
+	const [isRecording, setIsRecording] = useState(false)
+	const recognitionRef = useRef<{ stop: () => void } | null>(null)
+	const [speechRecognitionAvailable, setSpeechRecognitionAvailable] = useState(false)
+	useEffect(() => {
+		const w = window as any
+		setSpeechRecognitionAvailable(!!(w.SpeechRecognition || w.webkitSpeechRecognition))
+	}, [])
+
+	// Drag & drop
+	const [isDragOver, setIsDragOver] = useState(false)
+	const dragCounter = useRef(0)
+
+	const isDisabled = (instructionsAreEmpty && pendingImages.length === 0) || !!isFeatureNameDisabled('Chat', settingsState)
 
 	const sidebarRef = useRef<HTMLDivElement>(null)
 	const scrollContainerRef = useRef<HTMLDivElement | null>(null)
@@ -2926,18 +3291,26 @@ export const SidebarChat = () => {
 
 		// send message to LLM
 		const userMessage = _forceSubmit || textAreaRef.current?.value || ''
+		const imagesToSend = pendingImages.length > 0 ? [...pendingImages] : undefined
+
+		setSelections([]) // clear staging
+		setPendingImages([]) // clear pending images
+		textAreaFnsRef.current?.setValue('')
+
+		// scroll to bottom: first call ensures isAtBottom=true (via onScroll handler),
+		// second call after paint catches the DOM update with the new message
+		scrollToBottom(scrollContainerRef)
+		requestAnimationFrame(() => scrollToBottom(scrollContainerRef))
 
 		try {
-			await chatThreadsService.addUserMessageAndStreamResponse({ userMessage, threadId })
+			await chatThreadsService.addUserMessageAndStreamResponse({ userMessage, threadId, webSearchEnabled, images: imagesToSend })
 		} catch (e) {
 			console.error('Error while sending message in chat:', e)
 		}
 
-		setSelections([]) // clear staging
-		textAreaFnsRef.current?.setValue('')
 		textAreaRef.current?.focus() // focus input after submit
 
-	}, [chatThreadsService, isDisabled, isRunning, textAreaRef, textAreaFnsRef, setSelections, settingsState])
+	}, [chatThreadsService, isDisabled, isRunning, textAreaRef, textAreaFnsRef, setSelections, settingsState, scrollContainerRef, webSearchEnabled, pendingImages])
 
 	const onAbort = async () => {
 		const threadId = currentThread.id
@@ -3052,6 +3425,183 @@ export const SidebarChat = () => {
 	</ScrollToBottomContainer>
 
 
+	// Voice input handlers
+	const onToggleVoice = useCallback(() => {
+		if (isRecording) {
+			recognitionRef.current?.stop()
+			recognitionRef.current = null
+			setIsRecording(false)
+			return
+		}
+		const w = window as any
+		const SpeechRecognition = w.SpeechRecognition || w.webkitSpeechRecognition
+		if (!SpeechRecognition) return
+		const recognition = new SpeechRecognition()
+		recognition.continuous = true
+		recognition.interimResults = true
+		recognition.lang = 'en-US'
+		recognition.onresult = (event: any) => {
+			let transcript = ''
+			for (let i = event.resultIndex; i < event.results.length; i++) {
+				if (event.results[i].isFinal) {
+					transcript += event.results[i][0].transcript
+				}
+			}
+			if (transcript && textAreaFnsRef.current) {
+				const current = textAreaRef.current?.value || ''
+				const separator = current && !current.endsWith(' ') ? ' ' : ''
+				textAreaFnsRef.current.setValue(current + separator + transcript)
+				setInstructionsAreEmpty(false)
+			}
+		}
+		recognition.onerror = (event: any) => {
+			console.error('Speech recognition error:', event.error)
+			setIsRecording(false)
+			recognitionRef.current = null
+		}
+		recognition.onend = () => {
+			setIsRecording(false)
+			recognitionRef.current = null
+		}
+		try {
+			recognition.start()
+			recognitionRef.current = { stop: () => recognition.stop() }
+			setIsRecording(true)
+		} catch (e) {
+			console.error('Failed to start speech recognition:', e)
+			setIsRecording(false)
+			recognitionRef.current = null
+		}
+	}, [isRecording, textAreaRef, textAreaFnsRef])
+
+	// Image paste handler
+	const onPaste = useCallback((e: React.ClipboardEvent) => {
+		const items = e.clipboardData?.items
+		if (!items) return
+		const imageFiles: File[] = []
+		for (let i = 0; i < items.length; i++) {
+			if (items[i].type.startsWith('image/')) {
+				const file = items[i].getAsFile()
+				if (file) imageFiles.push(file)
+			}
+		}
+		if (imageFiles.length === 0) return
+		e.preventDefault()
+		const promises = imageFiles.map(file => {
+			return new Promise<ImageAttachment>((resolve, reject) => {
+				const reader = new FileReader()
+				reader.onload = () => {
+					const base64 = (reader.result as string).split(',')[1]
+					resolve({
+						id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+						base64Data: base64,
+						mimeType: file.type,
+						fileName: file.name || 'pasted-image',
+					})
+				}
+				reader.onerror = () => reject(new Error(`Failed to read pasted image`))
+				reader.readAsDataURL(file)
+			})
+		})
+		Promise.all(promises).then(images => {
+			setPendingImages(prev => [...prev, ...images])
+		}).catch(err => console.error('Error reading pasted images:', err))
+	}, [])
+
+	// Drag & drop handlers
+	const onDragEnter = useCallback((e: React.DragEvent) => {
+		e.preventDefault()
+		e.stopPropagation()
+		dragCounter.current++
+		if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('text/uri-list')) {
+			setIsDragOver(true)
+		}
+	}, [])
+
+	const onDragOver = useCallback((e: React.DragEvent) => {
+		e.preventDefault()
+		e.stopPropagation()
+	}, [])
+
+	const onDragLeave = useCallback((e: React.DragEvent) => {
+		e.preventDefault()
+		e.stopPropagation()
+		dragCounter.current--
+		if (dragCounter.current === 0) {
+			setIsDragOver(false)
+		}
+	}, [])
+
+	const onDrop = useCallback((e: React.DragEvent) => {
+		e.preventDefault()
+		e.stopPropagation()
+		dragCounter.current = 0
+		setIsDragOver(false)
+
+		// Handle image files
+		const imageFiles: File[] = []
+		const otherFiles: File[] = []
+		if (e.dataTransfer.files) {
+			for (let i = 0; i < e.dataTransfer.files.length; i++) {
+				const file = e.dataTransfer.files[i]
+				if (file.type.startsWith('image/')) {
+					imageFiles.push(file)
+				} else {
+					otherFiles.push(file)
+				}
+			}
+		}
+
+		// Convert image files to ImageAttachment
+		if (imageFiles.length > 0) {
+			const promises = imageFiles.map(file => {
+				return new Promise<ImageAttachment>((resolve, reject) => {
+					const reader = new FileReader()
+					reader.onload = () => {
+						const base64 = (reader.result as string).split(',')[1]
+						resolve({
+							id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+							base64Data: base64,
+							mimeType: file.type,
+							fileName: file.name,
+						})
+					}
+					reader.onerror = () => reject(new Error(`Failed to read dropped image: ${file.name}`))
+					reader.readAsDataURL(file)
+				})
+			})
+			Promise.all(promises).then(images => {
+				setPendingImages(prev => [...prev, ...images])
+			}).catch(err => console.error('Error reading dropped images:', err))
+		}
+
+		// Handle non-image files as staging selections
+		if (otherFiles.length > 0) {
+			const newSelections: StagingSelectionItem[] = otherFiles.map(file => ({
+				type: 'File' as const,
+				uri: URI.file((file as any).path || file.name),
+				language: '',
+				state: { wasAddedAsCurrentFile: false },
+			}))
+			setSelections([...selections, ...newSelections])
+		}
+
+		// Handle URI list drops (from VS Code explorer)
+		const uriList = e.dataTransfer.getData('text/uri-list')
+		if (uriList && otherFiles.length === 0 && imageFiles.length === 0) {
+			const uris = uriList.split('\n').filter(u => u.trim() && !u.startsWith('#'))
+			const newSelections: StagingSelectionItem[] = uris.map(uriStr => ({
+				type: 'File' as const,
+				uri: URI.parse(uriStr.trim()),
+				language: '',
+				state: { wasAddedAsCurrentFile: false },
+			}))
+			if (newSelections.length > 0) {
+				setSelections([...selections, ...newSelections])
+			}
+		}
+	}, [selections, setSelections])
+
 	const onChangeText = useCallback((newStr: string) => {
 		setInstructionsAreEmpty(!newStr)
 	}, [setInstructionsAreEmpty])
@@ -3070,15 +3620,28 @@ export const SidebarChat = () => {
 		isStreaming={!!isRunning}
 		isDisabled={isDisabled}
 		showSelections={true}
-		// showProspectiveSelections={previousMessagesHTML.length === 0}
 		selections={selections}
 		setSelections={setSelections}
 		onClickAnywhere={() => { textAreaRef.current?.focus() }}
+		webSearchEnabled={webSearchEnabled}
+		onToggleWebSearch={() => setWebSearchEnabled(v => !v)}
+		pendingImages={pendingImages}
+		onAttachImages={(images) => setPendingImages(prev => [...prev, ...images])}
+		onRemoveImage={(id) => setPendingImages(prev => prev.filter(img => img.id !== id))}
+		isRecording={isRecording}
+		onToggleVoice={onToggleVoice}
+		speechRecognitionAvailable={speechRecognitionAvailable}
+		isDragOver={isDragOver}
+		onDragEnter={onDragEnter}
+		onDragOver={onDragOver}
+		onDragLeave={onDragLeave}
+		onDrop={onDrop}
+		onPaste={onPaste}
 	>
 		<VoidInputBox2
 			enableAtToMention
-			className={`min-h-[81px] px-0.5 py-0.5`}
-			placeholder={`@ to mention, ${keybindingString ? `${keybindingString} to add a selection. ` : ''}Enter instructions...`}
+			className={`min-h-[140px] px-0.5 py-0.5`}
+			placeholder={`Plan, @ for context, / for commands`}
 			onChangeText={onChangeText}
 			onKeyDown={onKeyDown}
 			onFocus={() => { chatThreadsService.setCurrentlyFocusedMessageIdx(undefined) }}
@@ -3112,39 +3675,40 @@ export const SidebarChat = () => {
 
 
 	const threadPageInput = <div key={'input' + chatThreadsState.currentThreadId}>
-		<div className='px-4'>
-			<CommandBarInChat />
-		</div>
 		<div className='px-2 pb-2'>
 			{inputChatArea}
 		</div>
 	</div>
 
-	const landingPageInput = <div>
-		<div className='pt-8'>
-			{inputChatArea}
-		</div>
+	const landingPageInput = <div className='px-2 pt-1'>
+		{inputChatArea}
 	</div>
 
 	const landingPageContent = <div
 		ref={sidebarRef}
-		className='w-full h-full max-h-full flex flex-col overflow-auto px-4'
+		className='w-full h-full max-h-full flex flex-col overflow-auto'
 	>
+		{/* Input at top */}
 		<ErrorBoundary>
 			{landingPageInput}
 		</ErrorBoundary>
 
-		{Object.keys(chatThreadsState.allThreads).length > 1 ? // show if there are threads
-			<ErrorBoundary>
-				<div className='pt-8 mb-2 text-void-fg-3 text-root select-none pointer-events-none'>Previous Threads</div>
-				<PastThreadsList />
-			</ErrorBoundary>
-			:
-			<ErrorBoundary>
-				<div className='pt-8 mb-2 text-void-fg-3 text-root select-none pointer-events-none'>Suggestions</div>
-				{initiallySuggestedPromptsHTML}
-			</ErrorBoundary>
-		}
+		{/* Flexible empty space pushes Past Chats to bottom */}
+		<div className='flex-1' />
+
+		{/* Past Chats pinned at bottom */}
+		<div className='px-4 pb-3'>
+			{Object.keys(chatThreadsState.allThreads).length > 1 ?
+				<ErrorBoundary>
+					<PastThreadsList />
+				</ErrorBoundary>
+				:
+				<ErrorBoundary>
+					<div className='mb-2 text-void-fg-3 text-root select-none pointer-events-none'>Suggestions</div>
+					{initiallySuggestedPromptsHTML}
+				</ErrorBoundary>
+			}
+		</div>
 	</div>
 
 
@@ -3176,11 +3740,13 @@ export const SidebarChat = () => {
 
 
 	return (
-		<Fragment key={threadId} // force rerender when change thread
-		>
-			{isLandingPage ?
-				landingPageContent
-				: threadPageContent}
-		</Fragment>
+		<div className='w-full h-full flex flex-col'>
+			<ChatHeader />
+			<Fragment key={threadId}>
+				{isLandingPage ?
+					landingPageContent
+					: threadPageContent}
+			</Fragment>
+		</div>
 	)
 }

@@ -19,12 +19,6 @@ export const defaultProviderSettings = {
 	deepseek: {
 		apiKey: '',
 	},
-	ollama: {
-		endpoint: 'http://127.0.0.1:11434',
-	},
-	vLLM: {
-		endpoint: 'http://localhost:8000',
-	},
 	openRouter: {
 		apiKey: '',
 	},
@@ -45,11 +39,8 @@ export const defaultProviderSettings = {
 	mistral: {
 		apiKey: '',
 	},
-	lmStudio: {
-		endpoint: 'http://localhost:1234',
-	},
 	liteLLM: { // https://docs.litellm.ai/docs/providers/openai_compatible
-		endpoint: '',
+		endpoint: 'http://localhost:4000',
 	},
 	googleVertex: { // google https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/call-vertex-using-openai-library
 		region: 'us-west2',
@@ -66,12 +57,16 @@ export const defaultProviderSettings = {
 		endpoint: '', // optionally allow overriding default
 	},
 
+	ollama: {
+		endpoint: 'http://localhost:11434',
+	},
 } as const
 
 
 
 
 export const defaultModelsOfProvider = {
+	ollama: [],
 	openAI: [ // https://platform.openai.com/docs/models/gp
 		'gpt-4.1',
 		'gpt-4.1-mini',
@@ -109,11 +104,6 @@ export const defaultModelsOfProvider = {
 		'deepseek-chat',
 		'deepseek-reasoner',
 	],
-	ollama: [ // autodetected
-	],
-	vLLM: [ // autodetected
-	],
-	lmStudio: [], // autodetected
 
 	openRouter: [ // https://openrouter.ai/models
 		// 'anthropic/claude-3.7-sonnet:thinking',
@@ -155,7 +145,7 @@ export const defaultModelsOfProvider = {
 	liteLLM: [],
 
 
-} as const satisfies Record<ProviderName, string[]>
+} as const satisfies Record<ProviderName, readonly string[]>
 
 
 
@@ -181,10 +171,10 @@ export type VoidStaticModelInfo = { // not stateful
 		readonly reasoningSlider?:
 		| undefined
 		| { type: 'budget_slider'; min: number; max: number; default: number } // anthropic supports this (reasoning budget)
-		| { type: 'effort_slider'; values: string[]; default: string } // openai-compatible supports this (reasoning effort)
+		| { type: 'effort_slider'; values: readonly string[]; default: string } // openai-compatible supports this (reasoning effort)
 
 		// if it's open source and specifically outputs think tags, put the think tags here and we'll parse them out (e.g. ollama)
-		readonly openSourceThinkTags?: [string, string];
+		readonly openSourceThinkTags?: readonly [string, string];
 
 		// the only other field related to reasoning is "providerReasoningIOSettings", which varies by provider.
 	};
@@ -1135,114 +1125,6 @@ const awsBedrockSettings: VoidStaticProviderInfo = {
 
 
 // ---------------- VLLM, OLLAMA, OPENAICOMPAT (self-hosted / local) ----------------
-const ollamaModelOptions = {
-	'qwen2.5-coder:7b': {
-		contextWindow: 32_000,
-		reservedOutputTokenSpace: null,
-		cost: { input: 0, output: 0 },
-		downloadable: { sizeGb: 1.9 },
-		supportsFIM: true,
-		supportsSystemMessage: 'system-role',
-		reasoningCapabilities: false,
-	},
-	'qwen2.5-coder:3b': {
-		contextWindow: 32_000,
-		reservedOutputTokenSpace: null,
-		cost: { input: 0, output: 0 },
-		downloadable: { sizeGb: 1.9 },
-		supportsFIM: true,
-		supportsSystemMessage: 'system-role',
-		reasoningCapabilities: false,
-	},
-	'qwen2.5-coder:1.5b': {
-		contextWindow: 32_000,
-		reservedOutputTokenSpace: null,
-		cost: { input: 0, output: 0 },
-		downloadable: { sizeGb: .986 },
-		supportsFIM: true,
-		supportsSystemMessage: 'system-role',
-		reasoningCapabilities: false,
-	},
-	'llama3.1': {
-		contextWindow: 128_000,
-		reservedOutputTokenSpace: null,
-		cost: { input: 0, output: 0 },
-		downloadable: { sizeGb: 4.9 },
-		supportsFIM: false,
-		supportsSystemMessage: 'system-role',
-		reasoningCapabilities: false,
-	},
-	'qwen2.5-coder': {
-		contextWindow: 128_000,
-		reservedOutputTokenSpace: null,
-		cost: { input: 0, output: 0 },
-		downloadable: { sizeGb: 4.7 },
-		supportsFIM: false,
-		supportsSystemMessage: 'system-role',
-		reasoningCapabilities: false,
-	},
-	'qwq': {
-		contextWindow: 128_000,
-		reservedOutputTokenSpace: 32_000,
-		cost: { input: 0, output: 0 },
-		downloadable: { sizeGb: 20 },
-		supportsFIM: false,
-		supportsSystemMessage: 'system-role',
-		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: false, canTurnOffReasoning: false, openSourceThinkTags: ['<think>', '</think>'] },
-	},
-	'deepseek-r1': {
-		contextWindow: 128_000,
-		reservedOutputTokenSpace: null,
-		cost: { input: 0, output: 0 },
-		downloadable: { sizeGb: 4.7 },
-		supportsFIM: false,
-		supportsSystemMessage: 'system-role',
-		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: false, canTurnOffReasoning: false, openSourceThinkTags: ['<think>', '</think>'] },
-	},
-	'devstral:latest': {
-		contextWindow: 131_000,
-		reservedOutputTokenSpace: 8_192,
-		cost: { input: 0, output: 0 },
-		downloadable: { sizeGb: 14 },
-		supportsFIM: false,
-		supportsSystemMessage: 'system-role',
-		reasoningCapabilities: false,
-	},
-
-} as const satisfies Record<string, VoidStaticModelInfo>
-
-export const ollamaRecommendedModels = ['qwen2.5-coder:1.5b', 'llama3.1', 'qwq', 'deepseek-r1', 'devstral:latest'] as const satisfies (keyof typeof ollamaModelOptions)[]
-
-
-const vLLMSettings: VoidStaticProviderInfo = {
-	modelOptionsFallback: (modelName) => extensiveModelOptionsFallback(modelName, { downloadable: { sizeGb: 'not-known' } }),
-	modelOptions: {},
-	providerReasoningIOSettings: {
-		// reasoning: OAICompat + response.choices[0].delta.reasoning_content // https://docs.vllm.ai/en/stable/features/reasoning_outputs.html#streaming-chat-completions
-		input: { includeInPayload: openAICompatIncludeInPayloadReasoning },
-		output: { nameOfFieldInDelta: 'reasoning_content' },
-	},
-}
-
-const lmStudioSettings: VoidStaticProviderInfo = {
-	modelOptionsFallback: (modelName) => extensiveModelOptionsFallback(modelName, { downloadable: { sizeGb: 'not-known' }, contextWindow: 4_096 }),
-	modelOptions: {},
-	providerReasoningIOSettings: {
-		input: { includeInPayload: openAICompatIncludeInPayloadReasoning },
-		output: { needsManualParse: true },
-	},
-}
-
-const ollamaSettings: VoidStaticProviderInfo = {
-	modelOptionsFallback: (modelName) => extensiveModelOptionsFallback(modelName, { downloadable: { sizeGb: 'not-known' } }),
-	modelOptions: ollamaModelOptions,
-	providerReasoningIOSettings: {
-		// reasoning: we need to filter out reasoning <think> tags manually
-		input: { includeInPayload: openAICompatIncludeInPayloadReasoning },
-		output: { needsManualParse: true },
-	},
-}
-
 const openaiCompatible: VoidStaticProviderInfo = {
 	modelOptionsFallback: (modelName) => extensiveModelOptionsFallback(modelName),
 	modelOptions: {},
@@ -1449,7 +1331,18 @@ const openRouterSettings: VoidStaticProviderInfo = {
 
 
 
+
+const ollamaSettings: VoidStaticProviderInfo = {
+	modelOptionsFallback: (modelName) => extensiveModelOptionsFallback(modelName),
+	modelOptions: {},
+	providerReasoningIOSettings: {
+		input: { includeInPayload: openAICompatIncludeInPayloadReasoning },
+		output: { nameOfFieldInDelta: 'reasoning_content' },
+	},
+}
+
 // ---------------- model settings of everything above ----------------
+
 
 const modelSettingsOfProvider: { [providerName in ProviderName]: VoidStaticProviderInfo } = {
 	openAI: openAISettings,
@@ -1463,17 +1356,15 @@ const modelSettingsOfProvider: { [providerName in ProviderName]: VoidStaticProvi
 
 	// open source models + providers (mixture of everything)
 	openRouter: openRouterSettings,
-	vLLM: vLLMSettings,
-	ollama: ollamaSettings,
 	openAICompatible: openaiCompatible,
 	mistral: mistralSettings,
 
 	liteLLM: liteLLMSettings,
-	lmStudio: lmStudioSettings,
 
 	googleVertex: googleVertexSettings,
 	microsoftAzure: microsoftAzureSettings,
 	awsBedrock: awsBedrockSettings,
+	ollama: ollamaSettings,
 } as const
 
 

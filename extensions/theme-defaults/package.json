@@ -14,6 +14,12 @@
   "contributes": {
     "themes": [
       {
+        "id": "Islands Dark",
+        "label": "%islandsDarkThemeLabel%",
+        "uiTheme": "vs-dark",
+        "path": "./themes/islands_dark.json"
+      },
+      {
         "id": "Default Dark+",
         "label": "%darkPlusColorThemeLabel%",
         "uiTheme": "vs-dark",

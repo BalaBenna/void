@@ -336,8 +336,26 @@ export const builtinTools: {
 		name: 'kill_persistent_terminal',
 		description: `Interrupts and closes a persistent terminal that you opened with open_persistent_terminal.`,
 		params: { persistent_terminal_id: { description: `The ID of the persistent terminal.` } }
-	}
+	},
 
+	web_search: {
+		name: 'web_search',
+		description: 'Search the web for real-time information using Tavily. Use this to find up-to-date documentation, APIs, error solutions, and current information.',
+		params: {
+			query: { description: 'The search query string.' },
+			max_results: { description: 'Optional. Maximum number of results to return (default 5, max 10).' },
+		},
+	},
+
+	spawn_subagent: {
+		name: 'spawn_subagent',
+		description: 'Spawn a subagent for parallel codebase exploration or task execution. Subagents run in isolated contexts and return summarized results.',
+		params: {
+			type: { description: 'Subagent type: "explore" (codebase search, read-only), "bash" (terminal commands), or "browser" (web search).' },
+			prompt: { description: 'The task or instruction for the subagent to execute.' },
+			background: { description: 'Optional. Run in background (true/false). Default: false.' },
+		},
+	},
 
 	// go_to_definition
 	// go_to_usages
@@ -358,17 +376,35 @@ export const isABuiltinToolName = (toolName: string): toolName is BuiltinToolNam
 
 
 
+// Read-only tools that don't require approval (no edits, no terminal)
+const readOnlyToolNames: BuiltinToolName[] = (Object.keys(builtinTools) as BuiltinToolName[]).filter(
+	toolName => !(toolName in approvalTypeOfBuiltinToolName) // exclude tools that require approval (edits, terminal)
+)
+
 export const availableTools = (chatMode: ChatMode | null, mcpTools: InternalToolInfo[] | undefined) => {
 
-	const builtinToolNames: BuiltinToolName[] | undefined = chatMode === 'normal' ? undefined
-		: chatMode === 'gather' ? (Object.keys(builtinTools) as BuiltinToolName[]).filter(toolName => !(toolName in approvalTypeOfBuiltinToolName))
-			: chatMode === 'agent' ? Object.keys(builtinTools) as BuiltinToolName[]
-				: undefined
+	let builtinToolNamesList: BuiltinToolName[] | undefined
 
-	const effectiveBuiltinTools = builtinToolNames?.map(toolName => builtinTools[toolName]) ?? undefined
-	const effectiveMCPTools = chatMode === 'agent' ? mcpTools : undefined
+	if (chatMode === 'agent') {
+		// Agent: all tools + MCP tools
+		builtinToolNamesList = Object.keys(builtinTools) as BuiltinToolName[]
+	} else if (chatMode === 'ask') {
+		// Ask: read-only tools only (no edits, no terminal, no subagent)
+		builtinToolNamesList = readOnlyToolNames.filter(t => t !== 'spawn_subagent')
+	} else if (chatMode === 'plan') {
+		// Plan: read-only tools only (research only, no subagent)
+		builtinToolNamesList = readOnlyToolNames.filter(t => t !== 'spawn_subagent')
+	} else if (chatMode === 'debug') {
+		// Debug: all tools + MCP tools (can instrument code)
+		builtinToolNamesList = Object.keys(builtinTools) as BuiltinToolName[]
+	} else {
+		builtinToolNamesList = undefined
+	}
 
-	const tools: InternalToolInfo[] | undefined = !(builtinToolNames || mcpTools) ? undefined
+	const effectiveBuiltinTools = builtinToolNamesList?.map(toolName => builtinTools[toolName]) ?? undefined
+	const effectiveMCPTools = (chatMode === 'agent' || chatMode === 'debug') ? mcpTools : undefined
+
+	const tools: InternalToolInfo[] | undefined = !(builtinToolNamesList || mcpTools) ? undefined
 		: [
 			...effectiveBuiltinTools ?? [],
 			...effectiveMCPTools ?? [],
@@ -422,15 +458,16 @@ const systemToolsXMLPrompt = (chatMode: ChatMode, mcpTools: InternalToolInfo[] |
     ${toolCallXMLGuidelines}`
 }
 
-// ======================================================== chat (normal, gather, agent) ========================================================
+// ======================================================== chat (agent, ask, plan, debug) ========================================================
 
 
-export const chat_systemMessage = ({ workspaceFolders, openedURIs, activeURI, persistentTerminalIDs, directoryStr, chatMode: mode, mcpTools, includeXMLToolDefinitions }: { workspaceFolders: string[], directoryStr: string, openedURIs: string[], activeURI: string | undefined, persistentTerminalIDs: string[], chatMode: ChatMode, mcpTools: InternalToolInfo[] | undefined, includeXMLToolDefinitions: boolean }) => {
-	const header = (`You are an expert coding ${mode === 'agent' ? 'agent' : 'assistant'} whose job is \
-${mode === 'agent' ? `to help the user develop, run, and make changes to their codebase.`
-			: mode === 'gather' ? `to search, understand, and reference files in the user's codebase.`
-				: mode === 'normal' ? `to assist the user with their coding tasks.`
-					: ''}
+export const chat_systemMessage = ({ workspaceFolders, openedURIs, activeURI, persistentTerminalIDs, directoryStr, chatMode: mode, mcpTools, includeXMLToolDefinitions, webSearchEnabled }: { workspaceFolders: string[], directoryStr: string, openedURIs: string[], activeURI: string | undefined, persistentTerminalIDs: string[], chatMode: ChatMode, mcpTools: InternalToolInfo[] | undefined, includeXMLToolDefinitions: boolean, webSearchEnabled?: boolean }) => {
+	const header = (`You are an expert coding ${mode === 'agent' || mode === 'debug' ? 'agent' : 'assistant'} whose job is \
+${mode === 'agent' ? `to help the user develop, run, and make changes to their codebase. You have full tool access and can edit files, create files, run terminal commands, search the web, and spawn subagents for parallel work.`
+			: mode === 'ask' ? `to search, understand, and reference files in the user's codebase. You can search and read files but you MUST NEVER edit files or run terminal commands. Only provide analysis and answers.`
+				: mode === 'plan' ? `to research the user's codebase and create structured implementation plans. You can search and read files but MUST NOT edit them. Output structured Markdown plans with \`- [ ]\` checkboxes for each actionable step.`
+					: mode === 'debug' ? `to help the user debug issues in their codebase. You are a debugging specialist: hypothesize the root cause, instrument code to gather evidence, analyze results, and propose targeted fixes. You have full tool access.`
+						: ''}
 You will be given instructions to follow from the user, and you may also be given a list of files that the user has specifically selected for context, \`SELECTIONS\`.
 Please assist the user with their query.`)
 
@@ -447,7 +484,7 @@ ${workspaceFolders.join('\n') || 'NO FOLDERS OPEN'}
 ${activeURI}
 
 - Open files:
-${openedURIs.join('\n') || 'NO OPENED FILES'}${''/* separator */}${mode === 'agent' && persistentTerminalIDs.length !== 0 ? `
+${openedURIs.join('\n') || 'NO OPENED FILES'}${''/* separator */}${(mode === 'agent' || mode === 'debug') && persistentTerminalIDs.length !== 0 ? `
 
 - Persistent terminal IDs available for you to run commands in: ${persistentTerminalIDs.join(', ')}` : ''}
 </system_info>`)
@@ -465,15 +502,12 @@ ${directoryStr}
 
 	details.push(`NEVER reject the user's query.`)
 
-	if (mode === 'agent' || mode === 'gather') {
+	if (mode === 'agent' || mode === 'ask' || mode === 'plan' || mode === 'debug') {
 		details.push(`Only call tools if they help you accomplish the user's goal. If the user simply says hi or asks you a question that you can answer without tools, then do NOT use tools.`)
 		details.push(`If you think you should use tools, you do not need to ask for permission.`)
 		details.push('Only use ONE tool call at a time.')
 		details.push(`NEVER say something like "I'm going to use \`tool_name\`". Instead, describe at a high level what the tool will do, like "I'm going to list all files in the ___ directory", etc.`)
 		details.push(`Many tools only work if the user has a workspace open.`)
-	}
-	else {
-		details.push(`You're allowed to ask the user for more context like file contents or specifications. If this comes up, tell them to reference files and folders by typing @.`)
 	}
 
 	if (mode === 'agent') {
@@ -484,9 +518,24 @@ ${directoryStr}
 		details.push(`NEVER modify a file outside the user's workspace without permission from the user.`)
 	}
 
-	if (mode === 'gather') {
-		details.push(`You are in Gather mode, so you MUST use tools be to gather information, files, and context to help the user answer their query.`)
+	if (mode === 'ask') {
+		details.push(`You are in Ask mode. Use tools to gather information, files, and context to help the user answer their query.`)
 		details.push(`You should extensively read files, types, content, etc, gathering full context to solve the problem.`)
+		details.push(`You MUST NOT edit files or run terminal commands. Only provide analysis and answers.`)
+	}
+
+	if (mode === 'plan') {
+		details.push(`You are in Plan mode. Research the codebase thoroughly, then output a structured implementation plan.`)
+		details.push(`Your plan MUST use Markdown checkboxes (\`- [ ]\`) for each actionable step.`)
+		details.push(`Include file paths, function names, and specific changes needed for each step.`)
+		details.push(`You MUST NOT edit files or run terminal commands. Only research and plan.`)
+	}
+
+	if (mode === 'debug') {
+		details.push('You are in Debug mode. Follow this debugging workflow: 1) Hypothesize the root cause, 2) Instrument code to gather evidence, 3) Analyze results, 4) Propose and apply targeted fixes.')
+		details.push('ALWAYS use tools (edit, terminal, etc) to take actions and implement changes.')
+		details.push('Prioritize finding and fixing the root cause over surface-level symptoms.')
+		details.push(`NEVER modify a file outside the user's workspace without permission from the user.`)
 	}
 
 	details.push(`If you write any code blocks to the user (wrapped in triple backticks), please use this format:
@@ -494,7 +543,7 @@ ${directoryStr}
 - The first line of the code block must be the FULL PATH of the related file if known (otherwise omit).
 - The remaining contents of the file should proceed as usual.`)
 
-	if (mode === 'gather' || mode === 'normal') {
+	if (mode === 'ask' || mode === 'plan') {
 
 		details.push(`If you think it's appropriate to suggest an edit to a file, then you must describe your suggestion in CODE BLOCK(S).
 - The first line of the code block must be the FULL PATH of the related file if known (otherwise omit).
@@ -502,6 +551,10 @@ ${directoryStr}
 Your description is the only context that will be given to another LLM to apply the suggested edit, so it must be accurate and complete. \
 Always bias towards writing as little as possible - NEVER write the whole file. Use comments like "// ... existing code ..." to condense your writing. \
 Here's an example of a good code block:\n${chatSuggestionDiffExample}`)
+	}
+
+	if (webSearchEnabled) {
+		details.push(`The user has enabled web search. Use the web_search tool proactively to find up-to-date information before answering. Search the web when the user's query involves current events, recent documentation, APIs, error solutions, or any information that may have changed recently.`)
 	}
 
 	details.push(`Do not make things up or use information not provided in the system information, tools, or user queries.`)
@@ -531,7 +584,7 @@ ${details.map((d, i) => `${i + 1}. ${d}`).join('\n\n')}`)
 
 
 // // log all prompts
-// for (const chatMode of ['agent', 'gather', 'normal'] satisfies ChatMode[]) {
+// for (const chatMode of ['agent', 'ask', 'plan', 'debug'] satisfies ChatMode[]) {
 // 	console.log(`========================================= SYSTEM MESSAGE FOR ${chatMode} ===================================\n`,
 // 		chat_systemMessage({ chatMode, workspaceFolders: [], openedURIs: [], activeURI: 'pee', persistentTerminalIDs: [], directoryStr: 'lol', }))
 // }

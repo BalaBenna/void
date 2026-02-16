@@ -62,8 +62,8 @@
 		} else if (configuration.autoDetectColorScheme) {
 			if (configuration.colorScheme.dark) {
 				baseTheme = 'vs-dark';
-				shellBackground = '#1E1E1E';
-				shellForeground = '#CCCCCC';
+				shellBackground = '#121216';
+				shellForeground = '#bcbec4';
 			} else {
 				baseTheme = 'vs';
 				shellBackground = '#FFFFFF';

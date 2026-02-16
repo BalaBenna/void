@@ -145,8 +145,8 @@ export class LLMMessageChannel implements IServerChannel {
 			...params,
 			onSuccess: (p) => { emitters.success.fire({ requestId, ...p }); },
 			onError: (p) => { emitters.error.fire({ requestId, ...p }); },
-		}
-		sendLLMMessageToProviderImplementation[providerName].list(mainThreadParams)
+		};
+		(sendLLMMessageToProviderImplementation[providerName] as any).list(mainThreadParams)
 	}
 
 

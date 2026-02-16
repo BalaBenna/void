@@ -289,9 +289,19 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 			}
 			// add disableSystemMessage feature
 			if (readS.globalSettings.disableSystemMessage === undefined) readS.globalSettings.disableSystemMessage = false;
-			
+
 			// add autoAcceptLLMChanges feature
 			if (readS.globalSettings.autoAcceptLLMChanges === undefined) readS.globalSettings.autoAcceptLLMChanges = false;
+
+			// migrate old chat modes: 'normal' -> 'ask', 'gather' -> 'ask'
+			const oldMode = readS.globalSettings.chatMode as string
+			if (oldMode === 'normal' || oldMode === 'gather') {
+				readS.globalSettings.chatMode = 'ask'
+			}
+
+			// add new global settings with defaults
+			if (readS.globalSettings.tavilyApiKey === undefined) (readS.globalSettings as any).tavilyApiKey = '';
+			if (readS.globalSettings.subagentConfig === undefined) (readS.globalSettings as any).subagentConfig = { enabled: true, maxConcurrent: 3 };
 		}
 		catch (e) {
 			readS = defaultState()

@@ -6,9 +6,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAccessor, useIsDark, useSettingsState } from '../util/services.js';
 import { Brain, Check, ChevronRight, DollarSign, ExternalLink, Lock, X } from 'lucide-react';
-import { displayInfoOfProviderName, ProviderName, providerNames, localProviderNames, featureNames, FeatureName, isFeatureNameDisabled } from '../../../../common/voidSettingsTypes.js';
+import { displayInfoOfProviderName, ProviderName, providerNames, featureNames, FeatureName, isFeatureNameDisabled } from '../../../../common/voidSettingsTypes.js';
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js';
-import { OllamaSetupInstructions, OneClickSwitchButton, SettingsForProvider, ModelDump } from '../void-settings-tsx/Settings.js';
+import { OneClickSwitchButton, SettingsForProvider, ModelDump } from '../void-settings-tsx/Settings.js';
 import { ColorScheme } from '../../../../../../../platform/theme/common/theme.js';
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js';
 import { isLinux } from '../../../../../../../base/common/platform.js';
@@ -95,7 +95,7 @@ const FadeIn = ({ children, className, delayMs = 0, durationMs, ...props }: { ch
 //  New AddProvidersPage Component and helpers
 // =============================================
 
-const tabNames = ['Free', 'Paid', 'Local'] as const;
+const tabNames = ['Free', 'Paid'] as const;
 
 type TabName = typeof tabNames[number] | 'Cloud/Other';
 
@@ -105,15 +105,13 @@ const cloudProviders: ProviderName[] = ['googleVertex', 'liteLLM', 'microsoftAzu
 // Data structures for provider tabs
 const providerNamesOfTab: Record<TabName, ProviderName[]> = {
 	Free: ['gemini', 'openRouter'],
-	Local: localProviderNames,
-	Paid: providerNames.filter(pn => !(['gemini', 'openRouter', ...localProviderNames, ...cloudProviders] as string[]).includes(pn)) as ProviderName[],
+	Paid: providerNames.filter(pn => !(['gemini', 'openRouter', ...cloudProviders] as string[]).includes(pn)) as ProviderName[],
 	'Cloud/Other': cloudProviders,
 };
 
 const descriptionOfTab: Record<TabName, string> = {
 	Free: `Providers with a 100% free tier. Add as many as you'd like!`,
 	Paid: `Connect directly with any provider (bring your own key).`,
-	Local: `Active providers should appear automatically. Add as many as you'd like! `,
 	'Cloud/Other': `Add as many as you'd like! Reach out for custom configuration requests.`,
 };
 
@@ -223,24 +221,17 @@ const AddProvidersPage = ({ pageIndex, setPageIndex }: { pageIndex: number, setP
 					</div>
 					<div>
 						<SettingsForProvider providerName={providerName} showProviderTitle={false} showProviderSuggestions={true} />
-
 					</div>
-					{providerName === 'ollama' && <OllamaSetupInstructions />}
 				</div>
 			))}
 
-			{(currentTab === 'Local' || currentTab === 'Cloud/Other') && (
+			{(currentTab === 'Cloud/Other') && (
 				<div className="w-full max-w-xl mt-8 bg-void-bg-2/50 rounded-lg p-6 border border-void-border-4">
 					<div className="flex items-center gap-2 mb-4">
 						<div className="text-xl font-medium">Models</div>
 					</div>
 
-					{currentTab === 'Local' && (
-						<div className="text-sm opacity-80 text-void-fg-3 my-4 w-full">Local models should be detected automatically. You can add custom models below.</div>
-					)}
-
-					{currentTab === 'Local' && <ModelDump filteredProviders={localProviderNames} />}
-					{currentTab === 'Cloud/Other' && <ModelDump filteredProviders={cloudProviders} />}
+					<ModelDump filteredProviders={cloudProviders} />
 				</div>
 			)}
 
@@ -465,7 +456,7 @@ const PrimaryActionButton = ({ children, className, ringSize, ...props }: { chil
 }
 
 
-type WantToUseOption = 'smart' | 'private' | 'cheap' | 'all'
+type WantToUseOption = 'smart' | 'cheap' | 'all'
 
 const VoidOnboardingContent = () => {
 
@@ -484,8 +475,8 @@ const VoidOnboardingContent = () => {
 
 	// Replace the single selectedProviderName with four separate states
 	// page 2 state - each tab gets its own state
+	// page 2 state - each tab gets its own state
 	const [selectedIntelligentProvider, setSelectedIntelligentProvider] = useState<ProviderName>('anthropic');
-	const [selectedPrivateProvider, setSelectedPrivateProvider] = useState<ProviderName>('ollama');
 	const [selectedAffordableProvider, setSelectedAffordableProvider] = useState<ProviderName>('gemini');
 	const [selectedAllProvider, setSelectedAllProvider] = useState<ProviderName>('anthropic');
 
@@ -493,7 +484,6 @@ const VoidOnboardingContent = () => {
 	const getSelectedProvider = (): ProviderName => {
 		switch (wantToUseOption) {
 			case 'smart': return selectedIntelligentProvider;
-			case 'private': return selectedPrivateProvider;
 			case 'cheap': return selectedAffordableProvider;
 			case 'all': return selectedAllProvider;
 		}
@@ -503,7 +493,6 @@ const VoidOnboardingContent = () => {
 	const setSelectedProvider = (provider: ProviderName) => {
 		switch (wantToUseOption) {
 			case 'smart': setSelectedIntelligentProvider(provider); break;
-			case 'private': setSelectedPrivateProvider(provider); break;
 			case 'cheap': setSelectedAffordableProvider(provider); break;
 			case 'all': setSelectedAllProvider(provider); break;
 		}
@@ -511,8 +500,7 @@ const VoidOnboardingContent = () => {
 
 	const providerNamesOfWantToUseOption: { [wantToUseOption in WantToUseOption]: ProviderName[] } = {
 		smart: ['anthropic', 'openAI', 'gemini', 'openRouter'],
-		private: ['ollama', 'vLLM', 'openAICompatible', 'lmStudio'],
-		cheap: ['gemini', 'deepseek', 'openRouter', 'ollama', 'vLLM'],
+		cheap: ['gemini', 'deepseek', 'openRouter'],
 		all: providerNames,
 	}
 
@@ -555,7 +543,6 @@ const VoidOnboardingContent = () => {
 	// cannot be md
 	const basicDescOfWantToUseOption: { [wantToUseOption in WantToUseOption]: string } = {
 		smart: "Models with the best performance on benchmarks.",
-		private: "Host on your computer or local network for full data privacy.",
 		cheap: "Free and affordable options.",
 		all: "",
 	}
@@ -563,8 +550,7 @@ const VoidOnboardingContent = () => {
 	// can be md
 	const detailedDescOfWantToUseOption: { [wantToUseOption in WantToUseOption]: string } = {
 		smart: "Most intelligent and best for agent mode.",
-		private: "Private-hosted so your data never leaves your computer or network. [Email us](mailto:founders@voideditor.com) for help setting up at your company.",
-		cheap: "Use great deals like Gemini 2.5 Pro, or self-host a model with Ollama or vLLM for free.",
+		cheap: "Use great deals like Gemini 2.5 Pro.",
 		all: "",
 	}
 
@@ -572,9 +558,6 @@ const VoidOnboardingContent = () => {
 	useEffect(() => {
 		if (selectedIntelligentProvider === undefined) {
 			setSelectedIntelligentProvider(providerNamesOfWantToUseOption['smart'][0]);
-		}
-		if (selectedPrivateProvider === undefined) {
-			setSelectedPrivateProvider(providerNamesOfWantToUseOption['private'][0]);
 		}
 		if (selectedAffordableProvider === undefined) {
 			setSelectedAffordableProvider(providerNamesOfWantToUseOption['cheap'][0]);

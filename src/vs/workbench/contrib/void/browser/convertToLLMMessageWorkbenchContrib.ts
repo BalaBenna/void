@@ -5,6 +5,7 @@
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { URI } from '../../../../base/common/uri.js';
+import { IFileService } from '../../../../platform/files/common/files.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { IVoidModelService } from '../common/voidModelService.js';
@@ -16,13 +17,18 @@ class ConvertContribWorkbenchContribution extends Disposable implements IWorkben
 	constructor(
 		@IVoidModelService private readonly voidModelService: IVoidModelService,
 		@IWorkspaceContextService private readonly workspaceContext: IWorkspaceContextService,
+		@IFileService private readonly fileService: IFileService,
 	) {
 		super()
 
-		const initializeURI = (uri: URI) => {
+		const initializeURI = async (uri: URI) => {
 			this.workspaceContext.getWorkspace()
 			const voidRulesURI = URI.joinPath(uri, '.voidrules')
-			this.voidModelService.initializeModel(voidRulesURI)
+			// Only initialize if the file actually exists to avoid noisy error logs
+			const exists = await this.fileService.exists(voidRulesURI)
+			if (exists) {
+				this.voidModelService.initializeModel(voidRulesURI)
+			}
 		}
 
 		// call

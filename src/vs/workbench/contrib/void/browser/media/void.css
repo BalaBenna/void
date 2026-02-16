@@ -94,6 +94,17 @@
 	opacity: 80%;
 }
 
+/* Hide the native VS Code composite header bar and title bar in the Void auxiliary panel */
+/* 1. The icon tab strip at the very top (composite header with action bar) */
+.monaco-workbench .pane-composite-part.auxiliarybar > .header-or-footer.header {
+	display: none !important;
+}
+
+/* 2. The "Chat" title bar with actions */
+.monaco-workbench .part.auxiliarybar > .composite.title {
+	display: none !important;
+}
+
 /* styles for all containers used by void */
 .void-scope {
 	--scrollbar-vertical-width: 8px;

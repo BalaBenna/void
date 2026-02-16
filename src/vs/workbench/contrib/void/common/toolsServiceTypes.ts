@@ -60,7 +60,13 @@ export type BuiltinToolCallParams = {
 	'open_persistent_terminal': { cwd: string | null },
 	'run_persistent_command': { command: string; persistentTerminalId: string },
 	'kill_persistent_terminal': { persistentTerminalId: string },
+	// --- web search ---
+	'web_search': { query: string, maxResults: number },
+	// --- subagent ---
+	'spawn_subagent': { type: string, prompt: string, background: boolean },
 }
+
+export type WebSearchResultItem = { title: string, url: string, content: string }
 
 // RESULT OF TOOL CALL
 export type BuiltinToolResultType = {
@@ -81,6 +87,10 @@ export type BuiltinToolResultType = {
 	'run_persistent_command': { result: string; resolveReason: TerminalResolveReason; },
 	'open_persistent_terminal': { persistentTerminalId: string },
 	'kill_persistent_terminal': {},
+	// --- web search ---
+	'web_search': { results: WebSearchResultItem[], query: string },
+	// --- subagent ---
+	'spawn_subagent': { executionId: string, status: string, result: string },
 }
 
 

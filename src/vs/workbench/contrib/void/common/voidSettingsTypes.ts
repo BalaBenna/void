@@ -16,8 +16,6 @@ type UnionOfKeys<T> = T extends T ? keyof T : never;
 export type ProviderName = keyof typeof defaultProviderSettings
 export const providerNames = Object.keys(defaultProviderSettings) as ProviderName[]
 
-export const localProviderNames = ['ollama', 'vLLM', 'lmStudio'] satisfies ProviderName[] // all local names
-export const nonlocalProviderNames = providerNames.filter((name) => !(localProviderNames as string[]).includes(name)) // all non-local names
 
 type CustomSettingName = UnionOfKeys<typeof defaultProviderSettings[ProviderName]>
 type CustomProviderSettings<providerName extends ProviderName> = {
@@ -70,17 +68,8 @@ export const displayInfoOfProviderName = (providerName: ProviderName): DisplayIn
 	else if (providerName === 'openRouter') {
 		return { title: 'OpenRouter', }
 	}
-	else if (providerName === 'ollama') {
-		return { title: 'Ollama', }
-	}
-	else if (providerName === 'vLLM') {
-		return { title: 'vLLM', }
-	}
 	else if (providerName === 'liteLLM') {
 		return { title: 'LiteLLM', }
-	}
-	else if (providerName === 'lmStudio') {
-		return { title: 'LM Studio', }
 	}
 	else if (providerName === 'openAICompatible') {
 		return { title: 'OpenAI-Compatible', }
@@ -106,6 +95,9 @@ export const displayInfoOfProviderName = (providerName: ProviderName): DisplayIn
 	else if (providerName === 'awsBedrock') {
 		return { title: 'AWS Bedrock', }
 	}
+	else if (providerName === 'ollama') {
+		return { title: 'Ollama', }
+	}
 
 	throw new Error(`descOfProviderName: Unknown provider name: "${providerName}"`)
 }
@@ -124,10 +116,8 @@ export const subTextMdOfProviderName = (providerName: ProviderName): string => {
 	if (providerName === 'googleVertex') return 'You must authenticate before using Vertex with Void. Read more about endpoints [here](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/call-vertex-using-openai-library), and regions [here](https://cloud.google.com/vertex-ai/docs/general/locations#available-regions).'
 	if (providerName === 'microsoftAzure') return 'Read more about endpoints [here](https://learn.microsoft.com/en-us/rest/api/aifoundry/model-inference/get-chat-completions/get-chat-completions?view=rest-aifoundry-model-inference-2024-05-01-preview&tabs=HTTP), and get your API key [here](https://learn.microsoft.com/en-us/azure/search/search-security-api-keys?tabs=rest-use%2Cportal-find%2Cportal-query#find-existing-keys).'
 	if (providerName === 'awsBedrock') return 'Connect via a LiteLLM proxy or the AWS [Bedrock-Access-Gateway](https://github.com/aws-samples/bedrock-access-gateway). LiteLLM Bedrock setup docs are [here](https://docs.litellm.ai/docs/providers/bedrock).'
-	if (providerName === 'ollama') return 'Read more about custom [Endpoints here](https://github.com/ollama/ollama/blob/main/docs/faq.md#how-can-i-expose-ollama-on-my-network).'
-	if (providerName === 'vLLM') return 'Read more about custom [Endpoints here](https://docs.vllm.ai/en/latest/getting_started/quickstart.html#openai-compatible-server).'
-	if (providerName === 'lmStudio') return 'Read more about custom [Endpoints here](https://lmstudio.ai/docs/app/api/endpoints/openai).'
 	if (providerName === 'liteLLM') return 'Read more about endpoints [here](https://docs.litellm.ai/docs/providers/openai_compatible).'
+	if (providerName === 'ollama') return 'Download Ollama [here](https://ollama.com).'
 
 	throw new Error(`subTextMdOfProviderName: Unknown provider name: "${providerName}"`)
 }
@@ -163,23 +153,12 @@ export const displayInfoOfSettingName = (providerName: ProviderName, settingName
 	}
 	else if (settingName === 'endpoint') {
 		return {
-			title: providerName === 'ollama' ? 'Endpoint' :
-				providerName === 'vLLM' ? 'Endpoint' :
-					providerName === 'lmStudio' ? 'Endpoint' :
-						providerName === 'openAICompatible' ? 'baseURL' : // (do not include /chat/completions)
-							providerName === 'googleVertex' ? 'baseURL' :
-								providerName === 'microsoftAzure' ? 'baseURL' :
-									providerName === 'liteLLM' ? 'baseURL' :
-										providerName === 'awsBedrock' ? 'Endpoint' :
-											'(never)',
-
-			placeholder: providerName === 'ollama' ? defaultProviderSettings.ollama.endpoint
-				: providerName === 'vLLM' ? defaultProviderSettings.vLLM.endpoint
-					: providerName === 'openAICompatible' ? 'https://my-website.com/v1'
-						: providerName === 'lmStudio' ? defaultProviderSettings.lmStudio.endpoint
-							: providerName === 'liteLLM' ? 'http://localhost:4000'
-								: providerName === 'awsBedrock' ? 'http://localhost:4000/v1'
-									: '(never)',
+			title: 'Endpoint',
+			placeholder: providerName === 'openAICompatible' ? 'https://my-website.com/v1'
+				: providerName === 'liteLLM' ? 'http://localhost:4000'
+					: providerName === 'awsBedrock' ? 'http://localhost:4000/v1'
+						: providerName === 'ollama' ? 'http://localhost:11434'
+							: '(never)',
 
 
 		}
@@ -244,7 +223,7 @@ const defaultCustomSettings: Record<CustomSettingName, undefined> = {
 }
 
 
-const modelInfoOfDefaultModelNames = (defaultModelNames: string[]): { models: VoidStatefulModelInfo[] } => {
+const modelInfoOfDefaultModelNames = (defaultModelNames: readonly string[]): { models: VoidStatefulModelInfo[] } => {
 	return {
 		models: defaultModelNames.map((modelName, i) => ({
 			modelName,
@@ -298,12 +277,6 @@ export const defaultSettingsOfProvider: SettingsOfProvider = {
 		...modelInfoOfDefaultModelNames(defaultModelsOfProvider.liteLLM),
 		_didFillInProviderSettings: undefined,
 	},
-	lmStudio: {
-		...defaultCustomSettings,
-		...defaultProviderSettings.lmStudio,
-		...modelInfoOfDefaultModelNames(defaultModelsOfProvider.lmStudio),
-		_didFillInProviderSettings: undefined,
-	},
 	groq: { // aggregator (serves models from multiple providers)
 		...defaultCustomSettings,
 		...defaultProviderSettings.groq,
@@ -322,18 +295,6 @@ export const defaultSettingsOfProvider: SettingsOfProvider = {
 		...modelInfoOfDefaultModelNames(defaultModelsOfProvider.openAICompatible),
 		_didFillInProviderSettings: undefined,
 	},
-	ollama: { // aggregator (serves models from multiple providers)
-		...defaultCustomSettings,
-		...defaultProviderSettings.ollama,
-		...modelInfoOfDefaultModelNames(defaultModelsOfProvider.ollama),
-		_didFillInProviderSettings: undefined,
-	},
-	vLLM: { // aggregator (serves models from multiple providers)
-		...defaultCustomSettings,
-		...defaultProviderSettings.vLLM,
-		...modelInfoOfDefaultModelNames(defaultModelsOfProvider.vLLM),
-		_didFillInProviderSettings: undefined,
-	},
 	googleVertex: { // aggregator (serves models from multiple providers)
 		...defaultCustomSettings,
 		...defaultProviderSettings.googleVertex,
@@ -350,6 +311,12 @@ export const defaultSettingsOfProvider: SettingsOfProvider = {
 		...defaultCustomSettings,
 		...defaultProviderSettings.awsBedrock,
 		...modelInfoOfDefaultModelNames(defaultModelsOfProvider.awsBedrock),
+		_didFillInProviderSettings: undefined,
+	},
+	ollama: {
+		...defaultCustomSettings,
+		...defaultProviderSettings.ollama,
+		...modelInfoOfDefaultModelNames(defaultModelsOfProvider.ollama),
 		_didFillInProviderSettings: undefined,
 	},
 }
@@ -386,11 +353,11 @@ export const displayInfoOfFeatureName = (featureName: FeatureName) => {
 
 
 // the models of these can be refreshed (in theory all can, but not all should)
-export const refreshableProviderNames = localProviderNames
-export type RefreshableProviderName = typeof refreshableProviderNames[number]
+export const refreshableProviderNames = ['ollama'] as const
+export type RefreshableProviderName = (typeof refreshableProviderNames)[any]
 
 // models that come with download buttons
-export const hasDownloadButtonsOnModelsProviderNames = ['ollama'] as const satisfies ProviderName[]
+export const hasDownloadButtonsOnModelsProviderNames = [] as const satisfies ProviderName[]
 
 
 
@@ -400,7 +367,7 @@ export const hasDownloadButtonsOnModelsProviderNames = ['ollama'] as const satis
 export const isProviderNameDisabled = (providerName: ProviderName, settingsState: VoidSettingsState) => {
 
 	const settingsAtProvider = settingsState.settingsOfProvider[providerName]
-	const isAutodetected = (refreshableProviderNames as string[]).includes(providerName)
+	const isAutodetected = (refreshableProviderNames as readonly string[]).includes(providerName)
 
 	const isDisabled = settingsAtProvider.models.length === 0
 	if (isDisabled) {
@@ -435,11 +402,14 @@ export const isFeatureNameDisabled = (featureName: FeatureName, settingsState: V
 
 
 
-export type ChatMode = 'agent' | 'gather' | 'normal'
+export type ChatMode = 'agent' | 'ask' | 'plan' | 'debug'
 
+export type SubagentConfig = {
+	enabled: boolean;
+	maxConcurrent: number;
+}
 
 export type GlobalSettings = {
-	autoRefreshModels: boolean;
 	aiInstructions: string;
 	enableAutocomplete: boolean;
 	syncApplyToChat: boolean;
@@ -452,10 +422,11 @@ export type GlobalSettings = {
 	isOnboardingComplete: boolean;
 	disableSystemMessage: boolean;
 	autoAcceptLLMChanges: boolean;
+	tavilyApiKey: string;
+	subagentConfig: SubagentConfig;
 }
 
 export const defaultGlobalSettings: GlobalSettings = {
-	autoRefreshModels: true,
 	aiInstructions: '',
 	enableAutocomplete: false,
 	syncApplyToChat: true,
@@ -468,6 +439,8 @@ export const defaultGlobalSettings: GlobalSettings = {
 	isOnboardingComplete: false,
 	disableSystemMessage: false,
 	autoAcceptLLMChanges: false,
+	tavilyApiKey: '',
+	subagentConfig: { enabled: true, maxConcurrent: 3 },
 }
 
 export type GlobalSettingName = keyof GlobalSettings

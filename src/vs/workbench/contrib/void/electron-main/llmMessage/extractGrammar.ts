@@ -15,7 +15,7 @@ import { ChatMode } from '../../common/voidSettingsTypes.js'
 
 // could simplify this - this assumes we can never add a tag without committing it to the user's screen, but that's not true
 export const extractReasoningWrapper = (
-	onText: OnText, onFinalMessage: OnFinalMessage, thinkTags: [string, string]
+	onText: OnText, onFinalMessage: OnFinalMessage, thinkTags: readonly [string, string]
 ): { newOnText: OnText, newOnFinalMessage: OnFinalMessage } => {
 	let latestAddIdx = 0 // exclusive index in fullText_
 	let foundTag1 = false

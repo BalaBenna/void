@@ -19,6 +19,7 @@ import { RawToolParamsObj } from '../common/sendLLMMessageTypes.js'
 import { MAX_CHILDREN_URIs_PAGE, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_BG_COMMAND_TIME, MAX_TERMINAL_INACTIVE_TIME } from '../common/prompt/prompts.js'
 import { IVoidSettingsService } from '../common/voidSettingsService.js'
 import { generateUuid } from '../../../../base/common/uuid.js'
+import { ISubagentService } from './subagentService.js'
 
 
 // tool use for AI
@@ -153,6 +154,7 @@ export class ToolsService implements IToolsService {
 		@IDirectoryStrService private readonly directoryStrService: IDirectoryStrService,
 		@IMarkerService private readonly markerService: IMarkerService,
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
+		@ISubagentService private readonly subagentService: ISubagentService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
 
@@ -288,6 +290,24 @@ export class ToolsService implements IToolsService {
 				const { persistent_terminal_id: terminalIdUnknown } = params;
 				const persistentTerminalId = validateProposedTerminalId(terminalIdUnknown);
 				return { persistentTerminalId };
+			},
+
+			web_search: (params: RawToolParamsObj) => {
+				const { query: queryUnknown, max_results: maxResultsUnknown } = params
+				const query = validateStr('query', queryUnknown)
+				const maxResults = validateNumber(maxResultsUnknown, { default: 5 }) ?? 5
+				return { query, maxResults: Math.min(maxResults, 10) }
+			},
+
+			spawn_subagent: (params: RawToolParamsObj) => {
+				const { type: typeUnknown, prompt: promptUnknown, background: backgroundUnknown } = params
+				const type = validateStr('type', typeUnknown)
+				if (!['explore', 'bash', 'browser'].includes(type)) {
+					throw new Error(`Invalid subagent type "${type}". Must be "explore", "bash", or "browser".`)
+				}
+				const prompt = validateStr('prompt', promptUnknown)
+				const background = validateBoolean(backgroundUnknown, { default: false })
+				return { type, prompt, background }
 			},
 
 		}
@@ -461,6 +481,50 @@ export class ToolsService implements IToolsService {
 				await this.terminalToolService.killPersistentTerminal(persistentTerminalId)
 				return { result: {} }
 			},
+
+			web_search: async ({ query, maxResults }) => {
+				const tavilyApiKey = this.voidSettingsService.state.globalSettings.tavilyApiKey
+				if (!tavilyApiKey) {
+					throw new Error('Tavily API key not configured. Please add your Tavily API key in Settings > Web Search.')
+				}
+
+				const response = await fetch('https://api.tavily.com/search', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						api_key: tavilyApiKey,
+						query,
+						max_results: maxResults,
+						include_answer: false,
+						include_raw_content: false,
+					}),
+				})
+
+				if (!response.ok) {
+					const errorText = await response.text()
+					throw new Error(`Tavily API error (${response.status}): ${errorText}`)
+				}
+
+				const data = await response.json()
+				const results = (data.results || []).map((r: any) => ({
+					title: r.title || '',
+					url: r.url || '',
+					content: r.content || '',
+				}))
+
+				return { result: { results, query } }
+			},
+
+			spawn_subagent: async ({ type, prompt, background }) => {
+				const execution = await this.subagentService.spawnSubagent('', type as any, prompt, background);
+				return {
+					result: {
+						executionId: execution.id,
+						status: execution.status,
+						result: execution.result ?? 'Subagent is running in the background.',
+					}
+				}
+			},
 		}
 
 
@@ -563,6 +627,19 @@ export class ToolsService implements IToolsService {
 			},
 			kill_persistent_terminal: (params, _result) => {
 				return `Successfully closed terminal "${params.persistentTerminalId}".`;
+			},
+
+			web_search: (params, result) => {
+				if (result.results.length === 0) {
+					return `No results found for query: "${params.query}"`
+				}
+				return result.results.map((r, i) =>
+					`${i + 1}. ${r.title}\n   URL: ${r.url}\n   ${r.content}`
+				).join('\n\n')
+			},
+
+			spawn_subagent: (params, result) => {
+				return `Subagent (${params.type}) completed:\n${result.result}`
 			},
 		}
 

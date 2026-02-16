@@ -10,7 +10,7 @@
 & {
 	--void-bg-1: var(--vscode-input-background);
 	--void-bg-1-alt: var(--vscode-badge-background);
-	--void-bg-2: var(--vscode-sideBar-background);
+	--void-bg-2: #ffffff;
 	--void-bg-2-alt: color-mix(in srgb, var(--vscode-editor-background) 30%, var(--vscode-sideBar-background) 70%);
 	--void-bg-2-hover: color-mix(in srgb, var(--vscode-editor-foreground) 2%, var(--vscode-sideBar-background) 98%);
 	--void-bg-3: var(--vscode-editor-background);
@@ -31,6 +31,10 @@
 
 	--void-ring-color: #007FD4;
 	--void-link-color: #007FD4;
+}
+
+&.dark {
+	--void-bg-2: var(--vscode-sideBar-background);
 }
 
 .select-child-restyle select {

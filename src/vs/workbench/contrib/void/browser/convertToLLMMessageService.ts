@@ -5,7 +5,7 @@ import { registerSingleton, InstantiationType } from '../../../../platform/insta
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
-import { ChatMessage } from '../common/chatThreadServiceTypes.js';
+import { ChatMessage, ImageAttachment } from '../common/chatThreadServiceTypes.js';
 import { getIsReasoningEnabledState, getReservedOutputTokenSpace, getModelCapabilities } from '../common/modelCapabilities.js';
 import { reParsedToolXMLString, chat_systemMessage } from '../common/prompt/prompts.js';
 import { AnthropicLLMChatMessage, AnthropicReasoning, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, OpenAILLMChatMessage, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
@@ -32,6 +32,7 @@ type SimpleLLMMessage = {
 } | {
 	role: 'user';
 	content: string;
+	images?: ImageAttachment[];
 } | {
 	role: 'assistant';
 	content: string;
@@ -381,6 +382,69 @@ const prepareOpenAIOrAnthropicMessages = ({
 	}
 	const llmMessages = llmChatMessages
 
+	// ================ inject images into user messages ================
+	// Walk through original messages (after system shift) and inject images into corresponding user messages
+	const originalMessagesWithImages = (messages as SimpleLLMMessage[]).filter(m => m.role === 'user' && m.images && m.images.length > 0) as (SimpleLLMMessage & { role: 'user'; images: ImageAttachment[] })[]
+	if (originalMessagesWithImages.length > 0) {
+		// Map user message contents to find matching LLM messages
+		let userMsgIdx = 0
+		for (const origMsg of (messages as SimpleLLMMessage[])) {
+			if (origMsg.role !== 'user') continue
+			// Find the corresponding llm message by tracking user messages
+			let llmUserIdx = 0
+			for (let li = 0; li < llmMessages.length; li++) {
+				const lm = llmMessages[li]
+				if (lm.role === 'user') {
+					if (llmUserIdx === userMsgIdx) {
+						// This is the matching user message - inject images if any
+						if (origMsg.images && origMsg.images.length > 0) {
+							const isAnthropicStyle = specialToolFormat === 'anthropic-style'
+							if (typeof lm.content === 'string') {
+								const textBlock = { type: 'text' as const, text: lm.content }
+								if (isAnthropicStyle) {
+									(lm as any).content = [
+										textBlock,
+										...origMsg.images.map(img => ({
+											type: 'image' as const,
+											source: { type: 'base64' as const, media_type: img.mimeType as any, data: img.base64Data },
+										})),
+									]
+								} else {
+									// OpenAI style
+									(lm as any).content = [
+										textBlock,
+										...origMsg.images.map(img => ({
+											type: 'image_url' as const,
+											image_url: { url: `data:${img.mimeType};base64,${img.base64Data}` },
+										})),
+									]
+								}
+							} else if (Array.isArray(lm.content)) {
+								if (isAnthropicStyle) {
+									(lm.content as any[]).push(
+										...origMsg.images.map(img => ({
+											type: 'image' as const,
+											source: { type: 'base64' as const, media_type: img.mimeType as any, data: img.base64Data },
+										}))
+									)
+								} else {
+									(lm.content as any[]).push(
+										...origMsg.images.map(img => ({
+											type: 'image_url' as const,
+											image_url: { url: `data:${img.mimeType};base64,${img.base64Data}` },
+										}))
+									)
+								}
+							}
+						}
+						break
+					}
+					llmUserIdx++
+				}
+			}
+			userMsgIdx++
+		}
+	}
 
 	// ================ system message add as first llmMessage ================
 
@@ -522,7 +586,7 @@ const prepareMessages = (params: {
 export interface IConvertToLLMMessageService {
 	readonly _serviceBrand: undefined;
 	prepareLLMSimpleMessages: (opts: { simpleMessages: SimpleLLMMessage[], systemMessage: string, modelSelection: ModelSelection | null, featureName: FeatureName }) => { messages: LLMChatMessage[], separateSystemMessage: string | undefined }
-	prepareLLMChatMessages: (opts: { chatMessages: ChatMessage[], chatMode: ChatMode, modelSelection: ModelSelection | null }) => Promise<{ messages: LLMChatMessage[], separateSystemMessage: string | undefined }>
+	prepareLLMChatMessages: (opts: { chatMessages: ChatMessage[], chatMode: ChatMode, modelSelection: ModelSelection | null, webSearchEnabled?: boolean }) => Promise<{ messages: LLMChatMessage[], separateSystemMessage: string | undefined }>
 	prepareFIMMessage(opts: { messages: LLMFIMMessage, }): { prefix: string, suffix: string, stopTokens: string[] }
 }
 
@@ -576,14 +640,14 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 
 
 	// system message
-	private _generateChatMessagesSystemMessage = async (chatMode: ChatMode, specialToolFormat: 'openai-style' | 'anthropic-style' | 'gemini-style' | undefined) => {
+	private _generateChatMessagesSystemMessage = async (chatMode: ChatMode, specialToolFormat: 'openai-style' | 'anthropic-style' | 'gemini-style' | undefined, webSearchEnabled?: boolean) => {
 		const workspaceFolders = this.workspaceContextService.getWorkspace().folders.map(f => f.uri.fsPath)
 
 		const openedURIs = this.modelService.getModels().filter(m => m.isAttachedToEditor()).map(m => m.uri.fsPath) || [];
 		const activeURI = this.editorService.activeEditor?.resource?.fsPath;
 
 		const directoryStr = await this.directoryStrService.getAllDirectoriesStr({
-			cutOffMessage: chatMode === 'agent' || chatMode === 'gather' ?
+			cutOffMessage: chatMode === 'agent' || chatMode === 'ask' || chatMode === 'plan' || chatMode === 'debug' ?
 				`...Directories string cut off, use tools to read more...`
 				: `...Directories string cut off, ask user for more if necessary...`
 		})
@@ -593,7 +657,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		const mcpTools = this.mcpService.getMCPTools()
 
 		const persistentTerminalIDs = this.terminalToolService.listPersistentTerminalIds()
-		const systemMessage = chat_systemMessage({ workspaceFolders, openedURIs, directoryStr, activeURI, persistentTerminalIDs, chatMode, mcpTools, includeXMLToolDefinitions })
+		const systemMessage = chat_systemMessage({ workspaceFolders, openedURIs, directoryStr, activeURI, persistentTerminalIDs, chatMode, mcpTools, includeXMLToolDefinitions, webSearchEnabled })
 		return systemMessage
 	}
 
@@ -608,6 +672,15 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		for (const m of chatMessages) {
 			if (m.role === 'checkpoint') continue
 			if (m.role === 'interrupted_streaming_tool') continue
+			if (m.role === 'plan') {
+				// Treat plan messages as assistant messages for the LLM context
+				simpleLLMMessages.push({
+					role: 'assistant',
+					content: m.displayContent,
+					anthropicReasoning: null,
+				})
+				continue
+			}
 			if (m.role === 'assistant') {
 				simpleLLMMessages.push({
 					role: m.role,
@@ -628,6 +701,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 				simpleLLMMessages.push({
 					role: m.role,
 					content: m.content,
+					images: m.images,
 				})
 			}
 		}
@@ -667,7 +741,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		})
 		return { messages, separateSystemMessage };
 	}
-	prepareLLMChatMessages: IConvertToLLMMessageService['prepareLLMChatMessages'] = async ({ chatMessages, chatMode, modelSelection }) => {
+	prepareLLMChatMessages: IConvertToLLMMessageService['prepareLLMChatMessages'] = async ({ chatMessages, chatMode, modelSelection, webSearchEnabled }) => {
 		if (modelSelection === null) return { messages: [], separateSystemMessage: undefined }
 
 		const { overridesOfModel } = this.voidSettingsService.state
@@ -680,7 +754,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		} = getModelCapabilities(providerName, modelName, overridesOfModel)
 
 		const { disableSystemMessage } = this.voidSettingsService.state.globalSettings;
-		const fullSystemMessage = await this._generateChatMessagesSystemMessage(chatMode, specialToolFormat)
+		const fullSystemMessage = await this._generateChatMessagesSystemMessage(chatMode, specialToolFormat, webSearchEnabled)
 		const systemMessage = disableSystemMessage ? '' : fullSystemMessage;
 
 		const modelSelectionOptions = this.voidSettingsService.state.optionsOfModelSelection['Chat'][modelSelection.providerName]?.[modelSelection.modelName]

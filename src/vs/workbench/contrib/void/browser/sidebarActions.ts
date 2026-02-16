@@ -6,15 +6,14 @@
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 
 
-import { Action2, MenuId, registerAction2 } from '../../../../platform/actions/common/actions.js';
+import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
 
 import { KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
-import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 
 import { ICodeEditorService } from '../../../../editor/browser/services/codeEditorService.js';
 import { IRange } from '../../../../editor/common/core/range.js';
-import { VOID_VIEW_CONTAINER_ID, VOID_VIEW_ID } from './sidebarPane.js';
+import { VOID_VIEW_CONTAINER_ID } from './sidebarPane.js';
 import { IMetricsService } from '../common/metricsService.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { VOID_TOGGLE_SETTINGS_ACTION_ID } from './voidSettingsPane.js';
@@ -155,7 +154,7 @@ registerAction2(class extends Action2 {
 				weight: KeybindingWeight.VoidExtension,
 			},
 			icon: { id: 'add' },
-			menu: [{ id: MenuId.ViewTitle, group: 'navigation', when: ContextKeyExpr.equals('view', VOID_VIEW_ID), }],
+			// menu removed - rendered in React ChatHeader instead
 		});
 	}
 	async run(accessor: ServicesAccessor): Promise<void> {
@@ -212,7 +211,7 @@ registerAction2(class extends Action2 {
 			id: 'void.historyAction',
 			title: 'View Past Chats',
 			icon: { id: 'history' },
-			menu: [{ id: MenuId.ViewTitle, group: 'navigation', when: ContextKeyExpr.equals('view', VOID_VIEW_ID), }]
+			// menu removed - rendered in React ChatHeader instead
 		});
 	}
 	async run(accessor: ServicesAccessor): Promise<void> {
@@ -242,7 +241,7 @@ registerAction2(class extends Action2 {
 			id: 'void.settingsAction',
 			title: `Void's Settings`,
 			icon: { id: 'settings-gear' },
-			menu: [{ id: MenuId.ViewTitle, group: 'navigation', when: ContextKeyExpr.equals('view', VOID_VIEW_ID), }]
+			// menu removed - rendered in React ChatHeader instead
 		});
 	}
 	async run(accessor: ServicesAccessor): Promise<void> {

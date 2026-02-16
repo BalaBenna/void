@@ -46,6 +46,20 @@ export type CheckpointEntry = {
 }
 
 
+// Plan items for structured plan output
+export type PlanItem = {
+	text: string;
+	completed: boolean;
+}
+
+// Image attachment for user messages
+export type ImageAttachment = {
+	id: string;
+	base64Data: string;
+	mimeType: string;
+	fileName?: string;
+}
+
 // WARNING: changing this format is a big deal!!!!!! need to migrate old format to new format on users' computers so people don't get errors.
 export type ChatMessage =
 	| {
@@ -53,6 +67,7 @@ export type ChatMessage =
 		content: string; // content displayed to the LLM on future calls - allowed to be '', will be replaced with (empty)
 		displayContent: string; // content displayed to user  - allowed to be '', will be ignored
 		selections: StagingSelectionItem[] | null; // the user's selection
+		images?: ImageAttachment[]; // attached images
 		state: {
 			stagingSelections: StagingSelectionItem[];
 			isBeingEdited: boolean;
@@ -63,6 +78,12 @@ export type ChatMessage =
 		reasoning: string; // reasoning from the LLM, used for step-by-step thinking
 
 		anthropicReasoning: AnthropicReasoning[] | null; // anthropic reasoning
+	} | {
+		role: 'plan';
+		content: string; // raw markdown content
+		displayContent: string; // content displayed to user
+		items: PlanItem[];
+		status: 'draft' | 'executing' | 'completed';
 	}
 	| ToolMessage<ToolName>
 	| DecorativeCanceledTool

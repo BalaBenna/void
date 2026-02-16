@@ -20,7 +20,7 @@ import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, ToolCallParams, T
 import { IToolsService } from './toolsService.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { ILanguageFeaturesService } from '../../../../editor/common/services/languageFeatures.js';
-import { ChatMessage, CheckpointEntry, CodespanLocationLink, StagingSelectionItem, ToolMessage } from '../common/chatThreadServiceTypes.js';
+import { ChatMessage, CheckpointEntry, CodespanLocationLink, ImageAttachment, StagingSelectionItem, ToolMessage } from '../common/chatThreadServiceTypes.js';
 import { Position } from '../../../../editor/common/core/position.js';
 import { IMetricsService } from '../common/metricsService.js';
 import { shorten } from '../../../../base/common/labels.js';
@@ -115,6 +115,8 @@ export type ThreadType = {
 	id: string; // store the id here too
 	createdAt: string; // ISO string
 	lastModified: string; // ISO string
+
+	isSubagent?: boolean; // true if this is a subagent thread (hidden from Past Chats)
 
 	messages: ChatMessage[];
 	filesWithUserChanges: Set<string>;
@@ -280,11 +282,14 @@ export interface IChatThreadService {
 	editUserMessageAndStreamResponse({ userMessage, messageIdx, threadId }: { userMessage: string, messageIdx: number, threadId: string }): Promise<void>;
 
 	// call to add a message
-	addUserMessageAndStreamResponse({ userMessage, threadId }: { userMessage: string, threadId: string }): Promise<void>;
+	addUserMessageAndStreamResponse({ userMessage, threadId, webSearchEnabled, images }: { userMessage: string, threadId: string, webSearchEnabled?: boolean, images?: import('../common/chatThreadServiceTypes.js').ImageAttachment[] }): Promise<void>;
 
 	// approve/reject
 	approveLatestToolRequest(threadId: string): void;
 	rejectLatestToolRequest(threadId: string): void;
+
+	// plan mode
+	executePlan(threadId: string, planMessageIdx: number): void;
 
 	// jump to history
 	jumpToCheckpointBeforeMessageIdx(opts: { threadId: string, messageIdx: number, jumpToUserModified: boolean }): void;
@@ -734,12 +739,14 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		modelSelection,
 		modelSelectionOptions,
 		callThisToolFirst,
+		webSearchEnabled,
 	}: {
 		threadId: string,
 		modelSelection: ModelSelection | null,
 		modelSelectionOptions: ModelSelectionOptions | undefined,
 
-		callThisToolFirst?: ToolMessage<ToolName> & { type: 'tool_request' }
+		callThisToolFirst?: ToolMessage<ToolName> & { type: 'tool_request' },
+		webSearchEnabled?: boolean,
 	}) {
 
 
@@ -780,7 +787,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			const { messages, separateSystemMessage } = await this._convertToLLMMessagesService.prepareLLMChatMessages({
 				chatMessages,
 				modelSelection,
-				chatMode
+				chatMode,
+				webSearchEnabled,
 			})
 
 			if (interruptedWhenIdle) {
@@ -879,6 +887,20 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 				this._addMessageToThread(threadId, { role: 'assistant', displayContent: info.fullText, reasoning: info.fullReasoning, anthropicReasoning: info.anthropicReasoning })
 
+				// In plan mode, if there's no tool call, parse the response for plan items
+				if (chatMode === 'plan' && !toolCall && info.fullText) {
+					const planItems = this._parsePlanItems(info.fullText)
+					if (planItems.length > 0) {
+						this._addMessageToThread(threadId, {
+							role: 'plan',
+							content: info.fullText,
+							displayContent: info.fullText,
+							items: planItems,
+							status: 'draft',
+						})
+					}
+				}
+
 				this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' }) // just decorative for clarity
 
 				// call tool if there is one
@@ -908,6 +930,56 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 		// capture number of messages sent
 		this._metricsService.capture('Agent Loop Done', { nMessagesSent, chatMode })
+	}
+
+	private _parsePlanItems(text: string): { text: string, completed: boolean }[] {
+		const items: { text: string, completed: boolean }[] = []
+		const lines = text.split('\n')
+		for (const line of lines) {
+			const uncheckedMatch = line.match(/^\s*-\s*\[\s*\]\s*(.+)/)
+			const checkedMatch = line.match(/^\s*-\s*\[\s*[xX]\s*\]\s*(.+)/)
+			if (checkedMatch) {
+				items.push({ text: checkedMatch[1].trim(), completed: true })
+			} else if (uncheckedMatch) {
+				items.push({ text: uncheckedMatch[1].trim(), completed: false })
+			}
+		}
+		return items
+	}
+
+	executePlan(threadId: string, planMessageIdx: number) {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return
+
+		const planMessage = thread.messages[planMessageIdx]
+		if (!planMessage || planMessage.role !== 'plan') return
+		if (planMessage.status !== 'draft') return
+
+		// Update plan status to executing
+		this._editMessageInThread(threadId, planMessageIdx, {
+			...planMessage,
+			status: 'executing',
+		})
+
+		// Compose instruction from the plan and run the agent loop
+		const planInstruction = `Execute the following implementation plan step by step. After completing each step, move on to the next:\n\n${planMessage.content}`
+
+		this._addUserMessageAndStreamResponse({
+			userMessage: planInstruction,
+			threadId,
+		}).then(() => {
+			// After execution, mark plan as completed
+			const currentThread = this.state.allThreads[threadId]
+			if (!currentThread) return
+			const currentPlan = currentThread.messages[planMessageIdx]
+			if (currentPlan && currentPlan.role === 'plan') {
+				this._editMessageInThread(threadId, planMessageIdx, {
+					...currentPlan,
+					status: 'completed',
+					items: currentPlan.items.map(item => ({ ...item, completed: true })),
+				})
+			}
+		})
 	}
 
 
@@ -1231,7 +1303,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 	}
 
 
-	private async _addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string }) {
+	private async _addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId, webSearchEnabled, images }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string, webSearchEnabled?: boolean, images?: ImageAttachment[] }) {
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return // should never happen
 
@@ -1251,13 +1323,13 @@ We only need to do it for files that were edited since `from`, ie files between 
 		const currSelns: StagingSelectionItem[] = _chatSelections ?? thread.state.stagingSelections
 
 		const userMessageContent = await chat_userMessageContent(instructions, currSelns, { directoryStrService: this._directoryStringService, fileService: this._fileService }) // user message + names of files (NOT content)
-		const userHistoryElt: ChatMessage = { role: 'user', content: userMessageContent, displayContent: instructions, selections: currSelns, state: defaultMessageState }
+		const userHistoryElt: ChatMessage = { role: 'user', content: userMessageContent, displayContent: instructions, selections: currSelns, images: images && images.length > 0 ? images : undefined, state: defaultMessageState }
 		this._addMessageToThread(threadId, userHistoryElt)
 
 		this._setThreadState(threadId, { currCheckpointIdx: null }) // no longer at a checkpoint because started streaming
 
 		this._wrapRunAgentToNotify(
-			this._runChatAgent({ threadId, ...this._currentModelSelectionProps(), }),
+			this._runChatAgent({ threadId, ...this._currentModelSelectionProps(), webSearchEnabled }),
 			threadId,
 		)
 
@@ -1268,7 +1340,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 	}
 
 
-	async addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string }) {
+	async addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId, webSearchEnabled, images }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string, webSearchEnabled?: boolean, images?: ImageAttachment[] }) {
 		const thread = this.state.allThreads[threadId];
 		if (!thread) return
 
@@ -1291,7 +1363,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 		}
 
 		// Now call the original method to add the user message and stream the response
-		await this._addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId });
+		await this._addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId, webSearchEnabled, images });
 
 	}
 

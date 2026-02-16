@@ -6,7 +6,6 @@
 // disable foreign import complaints
 /* eslint-disable */
 import Anthropic from '@anthropic-ai/sdk';
-import { Ollama } from 'ollama';
 import OpenAI, { ClientOptions, AzureOpenAI } from 'openai';
 import { MistralCore } from '@mistralai/mistralai/core.js';
 import { fimComplete } from '@mistralai/mistralai/funcs/fimComplete.js';
@@ -14,9 +13,9 @@ import { Tool as GeminiTool, FunctionDeclaration, GoogleGenAI, ThinkingConfig, S
 import { GoogleAuth } from 'google-auth-library'
 /* eslint-enable */
 
-import { AnthropicLLMChatMessage, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, ModelListParams, OllamaModelResponse, OnError, OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj } from '../../common/sendLLMMessageTypes.js';
+import { AnthropicLLMChatMessage, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, ModelListParams, OnError, OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj } from '../../common/sendLLMMessageTypes.js';
 import { ChatMode, displayInfoOfProviderName, ModelSelectionOptions, OverridesOfModel, ProviderName, SettingsOfProvider } from '../../common/voidSettingsTypes.js';
-import { getSendableReasoningInfo, getModelCapabilities, getProviderCapabilities, defaultProviderSettings, getReservedOutputTokenSpace } from '../../common/modelCapabilities.js';
+import { getSendableReasoningInfo, getModelCapabilities, getProviderCapabilities, getReservedOutputTokenSpace } from '../../common/modelCapabilities.js';
 import { extractReasoningWrapper, extractXMLToolsWrapper } from './extractGrammar.js';
 import { availableTools, InternalToolInfo } from '../../common/prompt/prompts.js';
 import { generateUuid } from '../../../../../base/common/uuid.js';
@@ -78,19 +77,7 @@ const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includ
 		const thisConfig = settingsOfProvider[providerName]
 		return new OpenAI({ apiKey: thisConfig.apiKey, ...commonPayloadOpts })
 	}
-	else if (providerName === 'ollama') {
-		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({ baseURL: `${thisConfig.endpoint}/v1`, apiKey: 'noop', ...commonPayloadOpts })
-	}
-	else if (providerName === 'vLLM') {
-		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({ baseURL: `${thisConfig.endpoint}/v1`, apiKey: 'noop', ...commonPayloadOpts })
-	}
 	else if (providerName === 'liteLLM') {
-		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({ baseURL: `${thisConfig.endpoint}/v1`, apiKey: 'noop', ...commonPayloadOpts })
-	}
-	else if (providerName === 'lmStudio') {
 		const thisConfig = settingsOfProvider[providerName]
 		return new OpenAI({ baseURL: `${thisConfig.endpoint}/v1`, apiKey: 'noop', ...commonPayloadOpts })
 	}
@@ -389,38 +376,6 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 
 
 
-type OpenAIModel = {
-	id: string;
-	created: number;
-	object: 'model';
-	owned_by: string;
-}
-const _openaiCompatibleList = async ({ onSuccess: onSuccess_, onError: onError_, settingsOfProvider, providerName }: ListParams_Internal<OpenAIModel>) => {
-	const onSuccess = ({ models }: { models: OpenAIModel[] }) => {
-		onSuccess_({ models })
-	}
-	const onError = ({ error }: { error: string }) => {
-		onError_({ error })
-	}
-	try {
-		const openai = await newOpenAICompatibleSDK({ providerName, settingsOfProvider })
-		openai.models.list()
-			.then(async (response) => {
-				const models: OpenAIModel[] = []
-				models.push(...response.data)
-				while (response.hasNextPage()) {
-					models.push(...(await response.getNextPage()).data)
-				}
-				onSuccess({ models })
-			})
-			.catch((error) => {
-				onError({ error: error + '' })
-			})
-	}
-	catch (error) {
-		onError({ error: error + '' })
-	}
-}
 
 
 
@@ -617,68 +572,6 @@ const sendMistralFIM = ({ messages, onFinalMessage, onError, settingsOfProvider,
 }
 
 
-// ------------ OLLAMA ------------
-const newOllamaSDK = ({ endpoint }: { endpoint: string }) => {
-	// if endpoint is empty, normally ollama will send to 11434, but we want it to fail - the user should type it in
-	if (!endpoint) throw new Error(`Ollama Endpoint was empty (please enter ${defaultProviderSettings.ollama.endpoint} in Void if you want the default url).`)
-	const ollama = new Ollama({ host: endpoint })
-	return ollama
-}
-
-const ollamaList = async ({ onSuccess: onSuccess_, onError: onError_, settingsOfProvider }: ListParams_Internal<OllamaModelResponse>) => {
-	const onSuccess = ({ models }: { models: OllamaModelResponse[] }) => {
-		onSuccess_({ models })
-	}
-	const onError = ({ error }: { error: string }) => {
-		onError_({ error })
-	}
-	try {
-		const thisConfig = settingsOfProvider.ollama
-		const ollama = newOllamaSDK({ endpoint: thisConfig.endpoint })
-		ollama.list()
-			.then((response) => {
-				const { models } = response
-				onSuccess({ models })
-			})
-			.catch((error) => {
-				onError({ error: error + '' })
-			})
-	}
-	catch (error) {
-		onError({ error: error + '' })
-	}
-}
-
-const sendOllamaFIM = ({ messages, onFinalMessage, onError, settingsOfProvider, modelName, _setAborter }: SendFIMParams_Internal) => {
-	const thisConfig = settingsOfProvider.ollama
-	const ollama = newOllamaSDK({ endpoint: thisConfig.endpoint })
-
-	let fullText = ''
-	ollama.generate({
-		model: modelName,
-		prompt: messages.prefix,
-		suffix: messages.suffix,
-		options: {
-			stop: messages.stopTokens,
-			num_predict: 300, // max tokens
-			// repeat_penalty: 1,
-		},
-		raw: true,
-		stream: true, // stream is not necessary but lets us expose the
-	})
-		.then(async stream => {
-			_setAborter(() => stream.abort())
-			for await (const chunk of stream) {
-				const newText = chunk.response
-				fullText += newText
-			}
-			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null })
-		})
-		// when error/fail
-		.catch((error) => {
-			onError({ message: error + '', fullError: error })
-		})
-}
 
 // ---------------- GEMINI NATIVE IMPLEMENTATION ----------------
 
@@ -854,7 +747,12 @@ type CallFnOfProvider = {
 	}
 }
 
-export const sendLLMMessageToProviderImplementation = {
+export const sendLLMMessageToProviderImplementation: CallFnOfProvider & { ollama: any } = {
+	ollama: {
+		sendChat: (params: any) => _sendOpenAICompatibleChat(params),
+		sendFIM: (params: any) => _sendOpenAICompatibleFIM(params),
+		list: (params: any) => { params.onSuccess({ models: [] }) },
+	},
 	anthropic: {
 		sendChat: sendAnthropicChat,
 		sendFIM: null,
@@ -880,11 +778,6 @@ export const sendLLMMessageToProviderImplementation = {
 		sendFIM: (params) => sendMistralFIM(params),
 		list: null,
 	},
-	ollama: {
-		sendChat: (params) => _sendOpenAICompatibleChat(params),
-		sendFIM: sendOllamaFIM,
-		list: ollamaList,
-	},
 	openAICompatible: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params), // using openai's SDK is not ideal (your implementation might not do tools, reasoning, FIM etc correctly), talk to us for a custom integration
 		sendFIM: (params) => _sendOpenAICompatibleFIM(params),
@@ -895,11 +788,6 @@ export const sendLLMMessageToProviderImplementation = {
 		sendFIM: (params) => _sendOpenAICompatibleFIM(params),
 		list: null,
 	},
-	vLLM: {
-		sendChat: (params) => _sendOpenAICompatibleChat(params),
-		sendFIM: (params) => _sendOpenAICompatibleFIM(params),
-		list: (params) => _openaiCompatibleList(params),
-	},
 	deepseek: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
 		sendFIM: null,
@@ -909,13 +797,6 @@ export const sendLLMMessageToProviderImplementation = {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
 		sendFIM: null,
 		list: null,
-	},
-
-	lmStudio: {
-		// lmStudio has no suffix parameter in /completions, so sendFIM might not work
-		sendChat: (params) => _sendOpenAICompatibleChat(params),
-		sendFIM: (params) => _sendOpenAICompatibleFIM(params),
-		list: (params) => _openaiCompatibleList(params),
 	},
 	liteLLM: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
@@ -938,7 +819,7 @@ export const sendLLMMessageToProviderImplementation = {
 		list: null,
 	},
 
-} satisfies CallFnOfProvider
+}
 
 
 

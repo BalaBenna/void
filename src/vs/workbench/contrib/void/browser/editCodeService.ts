@@ -203,6 +203,9 @@ class EditCodeService extends Disposable implements IEditCodeService {
 		const registeredModelURIs = new Set<string>()
 		const initializeModel = async (model: ITextModel) => {
 
+			// Skip non-file URIs (e.g. extensions:searchinput, vscode-data:, etc.) to avoid resolve errors
+			if (model.uri.scheme !== 'file') return
+
 			await this._voidModelService.initializeModel(model.uri)
 
 			// do not add listeners to the same model twice - important, or will see duplicates

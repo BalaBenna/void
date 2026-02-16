@@ -27,6 +27,7 @@ import './voidSettingsPane.js'
 
 // register css
 import './media/void.css'
+import './media/islands-dark-ui.css'
 
 // update (frontend part, also see platform/)
 import './voidUpdateActions.js'
@@ -39,6 +40,27 @@ import './terminalToolService.js'
 
 // register Thread History
 import './chatThreadService.js'
+
+// register Subagent service
+import './subagentService.js'
+
+// Phase 1: Agent Event Protocol
+import './agentEventService.js'
+
+// Phase 3: Rules Service
+import './rulesService.js'
+
+// Phase 1: Token Budget Service
+import './tokenBudgetService.js'
+
+// Phase 2: Sandbox Service
+import './sandboxService.js'
+
+// Phase 6: Embeddings / Codebase Search Service
+import './embeddingsService.js'
+
+// Phase 7: Model Router Service
+import './modelRouterService.js'
 
 // ping
 import './metricsPollService.js'

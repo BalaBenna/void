@@ -29,6 +29,15 @@ export const getErrorMessage: (error: unknown) => string = (error) => {
 
 
 
+export type AnthropicImageBlock = {
+	type: 'image';
+	source: { type: 'base64'; media_type: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string; };
+}
+export type OpenAIImageBlock = {
+	type: 'image_url';
+	image_url: { url: string; };
+}
+
 export type AnthropicLLMChatMessage = {
 	role: 'assistant',
 	content: string | (AnthropicReasoning | { type: 'text'; text: string }
@@ -37,12 +46,12 @@ export type AnthropicLLMChatMessage = {
 } | {
 	role: 'user',
 	content: string | (
-		{ type: 'text'; text: string; } | { type: 'tool_result'; tool_use_id: string; content: string; }
+		{ type: 'text'; text: string; } | { type: 'tool_result'; tool_use_id: string; content: string; } | AnthropicImageBlock
 	)[]
 }
 export type OpenAILLMChatMessage = {
 	role: 'system' | 'user' | 'developer';
-	content: string;
+	content: string | ({ type: 'text'; text: string; } | OpenAIImageBlock)[];
 } | {
 	role: 'assistant',
 	content: string | (AnthropicReasoning | { type: 'text'; text: string })[];
@@ -159,27 +168,9 @@ export type EventLLMMessageOnErrorParams = Parameters<OnError>[0] & { requestId:
 
 
 
-
-// These are from 'ollama' SDK
-interface OllamaModelDetails {
-	parent_model: string;
-	format: string;
-	family: string;
-	families: string[];
-	parameter_size: string;
-	quantization_level: string;
-}
-
-export type OllamaModelResponse = {
-	name: string;
-	modified_at: Date;
-	size: number;
-	digest: string;
-	details: OllamaModelDetails;
-	expires_at: Date;
-	size_vram: number;
-}
-
+// Ollama models
+export type OllamaModelResponse = any;
+// OpenRouter models
 export type OpenaiCompatibleModelResponse = {
 	id: string;
 	created: number;
