@@ -3,7 +3,10 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-export type SubagentType = 'explore' | 'bash' | 'browser' | 'custom'
+export type BuiltinSubagentType = 'explore' | 'bash' | 'browser' | 'custom'
+
+// SubagentType is now any string to support custom agent IDs from the registry
+export type SubagentType = string
 
 export interface SubagentDefinition {
 	name: string;

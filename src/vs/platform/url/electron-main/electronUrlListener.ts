@@ -55,6 +55,9 @@ export class ElectronURLListener extends Disposable {
 			app.setAsDefaultProtocolClient(productService.urlProtocol, process.execPath, windowsParameters);
 		}
 
+		// Void: register void:// protocol for OAuth callbacks
+		app.setAsDefaultProtocolClient('void');
+
 		// macOS: listen to `open-url` events from here on to handle
 		const onOpenElectronUrl = Event.map(
 			Event.fromNodeEventEmitter(app, 'open-url', (event: ElectronEvent, url: string) => ({ event, url })),

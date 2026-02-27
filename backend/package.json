@@ -1,0 +1,27 @@
+{
+  "name": "@void/backend",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "start": "bun dist/index.js",
+    "db:migrate": "bun src/db/migrate.ts",
+    "db:seed": "bun src/db/seed.ts"
+  },
+  "dependencies": {
+    "hono": "^4.4.0",
+    "drizzle-orm": "^0.31.0",
+    "postgres": "^3.4.4",
+    "jsonwebtoken": "^9.0.2",
+    "ioredis": "^5.4.1",
+    "google-auth-library": "^9.11.0",
+    "@anthropic-ai/sdk": "^0.28.0",
+    "stripe": "^16.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.6",
+    "drizzle-kit": "^0.22.0",
+    "typescript": "^5.4.0"
+  }
+}

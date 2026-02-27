@@ -5,69 +5,53 @@
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
-import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 
+import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { SubagentDefinition, SubagentExecution, SubagentType } from '../common/subagentTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
+import { IChatThreadService } from './chatThreadServiceInterface.js';
+import { ISubagentService } from './subagentServiceInterface.js';
+import { IAgentRegistryService } from './agentRegistryService.js';
 
+export { ISubagentService } from './subagentServiceInterface.js';
 
-// Built-in subagent definitions
-const builtinSubagentDefinitions: Record<string, SubagentDefinition> = {
-	explore: {
-		name: 'Explore',
-		description: 'Fast agent for codebase exploration. Searches files, reads code, and answers questions about the codebase.',
-		model: 'inherit',
-		readonly: true,
-		isBackground: false,
-		prompt: 'You are an exploration subagent. Search the codebase to find relevant files, patterns, and information. Use read-only tools only. Summarize your findings concisely.',
-		type: 'explore',
-	},
-	bash: {
-		name: 'Bash',
-		description: 'Terminal execution agent. Runs bash commands and returns results.',
-		model: 'inherit',
-		readonly: false,
-		isBackground: false,
-		prompt: 'You are a bash execution subagent. Run the requested terminal commands and return the results.',
-		type: 'bash',
-	},
-	browser: {
-		name: 'Browser',
-		description: 'Web search agent. Searches the web for information using Tavily.',
-		model: 'inherit',
-		readonly: true,
-		isBackground: false,
-		prompt: 'You are a web search subagent. Use the web_search tool to find relevant information online. Summarize your findings concisely.',
-		type: 'browser',
-	},
-};
-
-
-export interface ISubagentService {
-	readonly _serviceBrand: undefined;
-
-	spawnSubagent(parentThreadId: string, type: SubagentType, prompt: string, background?: boolean): Promise<SubagentExecution>;
-	getSubagentExecution(executionId: string): SubagentExecution | undefined;
-	getSubagentResults(executionId: string): string | undefined;
-	getBuiltinDefinition(type: SubagentType): SubagentDefinition | undefined;
-}
-
-export const ISubagentService = createDecorator<ISubagentService>('voidSubagentService');
 
 class SubagentService extends Disposable implements ISubagentService {
 	declare readonly _serviceBrand: undefined;
 
 	private _executions: Map<string, SubagentExecution> = new Map();
 
+	private _chatThreadServiceLazy: IChatThreadService | undefined;
+	private get chatThreadService(): IChatThreadService {
+		if (!this._chatThreadServiceLazy) {
+			this._chatThreadServiceLazy = this._instantiationService.invokeFunction(
+				accessor => accessor.get(IChatThreadService)
+			);
+		}
+		return this._chatThreadServiceLazy;
+	}
+
 	constructor(
 		@IVoidSettingsService private readonly _voidSettingsService: IVoidSettingsService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IAgentRegistryService private readonly _agentRegistryService: IAgentRegistryService,
 	) {
 		super();
 	}
 
 	getBuiltinDefinition(type: SubagentType): SubagentDefinition | undefined {
-		return builtinSubagentDefinitions[type];
+		const agentDef = this._agentRegistryService.getAgent(type)
+		if (!agentDef) return undefined
+		return {
+			name: agentDef.name,
+			description: agentDef.description,
+			model: agentDef.model,
+			readonly: agentDef.readonly,
+			isBackground: agentDef.isBackground,
+			prompt: agentDef.systemPrompt,
+			type: agentDef.id,
+		}
 	}
 
 	async spawnSubagent(parentThreadId: string, type: SubagentType, prompt: string, background: boolean = false): Promise<SubagentExecution> {
@@ -77,7 +61,7 @@ class SubagentService extends Disposable implements ISubagentService {
 			const execution: SubagentExecution = {
 				id: generateUuid(),
 				parentThreadId,
-				definition: builtinSubagentDefinitions[type] ?? builtinSubagentDefinitions['explore']!,
+				definition: this._makeDefinition(type),
 				status: 'failed',
 				result: 'Subagents are disabled in settings.',
 			};
@@ -91,7 +75,7 @@ class SubagentService extends Disposable implements ISubagentService {
 			const execution: SubagentExecution = {
 				id: generateUuid(),
 				parentThreadId,
-				definition: builtinSubagentDefinitions[type] ?? builtinSubagentDefinitions['explore']!,
+				definition: this._makeDefinition(type),
 				status: 'failed',
 				result: `Max concurrent subagents (${config.maxConcurrent}) reached. Wait for a running subagent to complete.`,
 			};
@@ -99,7 +83,30 @@ class SubagentService extends Disposable implements ISubagentService {
 			return execution;
 		}
 
-		const definition = builtinSubagentDefinitions[type] ?? builtinSubagentDefinitions['explore']!;
+		// Look up agent from registry
+		const agentDef = this._agentRegistryService.getAgent(type)
+		if (!agentDef) {
+			const validIds = this._agentRegistryService.getAllAgents().map(a => a.id).join('", "')
+			const execution: SubagentExecution = {
+				id: generateUuid(),
+				parentThreadId,
+				definition: this._makeDefinition(type),
+				status: 'failed',
+				result: `Unknown agent type "${type}". Available agents: "${validIds}"`,
+			};
+			this._executions.set(execution.id, execution);
+			return execution;
+		}
+
+		const definition: SubagentDefinition = {
+			name: agentDef.name,
+			description: agentDef.description,
+			model: agentDef.model,
+			readonly: agentDef.readonly,
+			isBackground: agentDef.isBackground,
+			prompt: agentDef.systemPrompt,
+			type: agentDef.id,
+		}
 
 		const execution: SubagentExecution = {
 			id: generateUuid(),
@@ -109,19 +116,69 @@ class SubagentService extends Disposable implements ISubagentService {
 		};
 		this._executions.set(execution.id, execution);
 
-		// For now, return a placeholder result. Full implementation will create
-		// a hidden thread and run the agent loop on it.
-		// TODO: Create a hidden subagent thread via _chatThreadService with isSubagent: true,
-		// run the agent loop with the appropriate tool subset, collect results, and return them.
-		try {
-			execution.status = 'completed';
-			execution.result = `[Subagent ${definition.name}] Task: "${prompt}" — Subagent execution is not yet fully implemented. This is a placeholder result.`;
-		} catch (e) {
-			execution.status = 'failed';
-			execution.result = `Subagent error: ${e}`;
+		// Build the full prompt with the subagent's system instructions
+		const fullPrompt = `${agentDef.systemPrompt}\n\nTask: ${prompt}`
+
+		// Derive chatMode from agent definition
+		const chatMode = agentDef.readonly ? 'ask' : 'agent'
+		const maxIterations = agentDef.maxIterations
+		const timeoutMs = agentDef.timeout
+
+		// Run the subagent on a hidden thread
+		const runPromise = this.chatThreadService.runSubagentThread({
+			prompt: fullPrompt,
+			chatModeOverride: chatMode,
+			maxIterations,
+			timeoutMs,
+		})
+
+		if (background) {
+			// Fire and forget for background subagents — update execution when done
+			runPromise.then(({ result, status }) => {
+				execution.status = status;
+				execution.result = result;
+			}).catch(e => {
+				execution.status = 'failed';
+				execution.result = `Subagent error: ${e}`;
+			})
+		} else {
+			// Wait for completion
+			try {
+				const { result, status } = await runPromise;
+				execution.status = status;
+				execution.result = result;
+			} catch (e) {
+				execution.status = 'failed';
+				execution.result = `Subagent error: ${e}`;
+			}
 		}
 
 		return execution;
+	}
+
+	private _makeDefinition(type: string): SubagentDefinition {
+		const agentDef = this._agentRegistryService.getAgent(type)
+		if (agentDef) {
+			return {
+				name: agentDef.name,
+				description: agentDef.description,
+				model: agentDef.model,
+				readonly: agentDef.readonly,
+				isBackground: agentDef.isBackground,
+				prompt: agentDef.systemPrompt,
+				type: agentDef.id,
+			}
+		}
+		// Fallback for unknown types
+		return {
+			name: type,
+			description: `Agent: ${type}`,
+			model: 'inherit',
+			readonly: false,
+			isBackground: false,
+			prompt: '',
+			type,
+		}
 	}
 
 	getSubagentExecution(executionId: string): SubagentExecution | undefined {

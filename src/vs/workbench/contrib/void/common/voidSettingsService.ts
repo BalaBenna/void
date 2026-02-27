@@ -11,7 +11,7 @@ import { registerSingleton, InstantiationType } from '../../../../platform/insta
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { IMetricsService } from './metricsService.js';
-import { defaultProviderSettings, getModelCapabilities, ModelOverrides } from './modelCapabilities.js';
+import { defaultProviderSettings, ModelOverrides } from './modelCapabilities.js';
 import { VOID_SETTINGS_STORAGE_KEY } from './storageKeys.js';
 import { defaultSettingsOfProvider, FeatureName, ProviderName, ModelSelectionOfFeature, SettingsOfProvider, SettingName, providerNames, ModelSelection, modelSelectionsEqual, featureNames, VoidStatefulModelInfo, GlobalSettings, GlobalSettingName, defaultGlobalSettings, ModelSelectionOptions, OptionsOfModelSelection, ChatMode, OverridesOfModel, defaultOverridesOfModel, MCPUserStateOfName as MCPUserStateOfName, MCPUserState } from './voidSettingsTypes.js';
 
@@ -112,7 +112,7 @@ export const modelFilterOfFeatureName: {
 		) => boolean;
 		emptyMessage: null | { message: string, priority: 'always' | 'fallback' }
 	} } = {
-	'Autocomplete': { filter: (o, opts) => getModelCapabilities(o.providerName, o.modelName, opts.overridesOfModel).supportsFIM, emptyMessage: { message: 'No models support FIM', priority: 'always' } },
+	'Autocomplete': { filter: () => true, emptyMessage: null },
 	'Chat': { filter: o => true, emptyMessage: null, },
 	'Ctrl+K': { filter: o => true, emptyMessage: null, },
 	'Apply': { filter: o => true, emptyMessage: null, },
@@ -302,6 +302,38 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 			// add new global settings with defaults
 			if (readS.globalSettings.tavilyApiKey === undefined) (readS.globalSettings as any).tavilyApiKey = '';
 			if (readS.globalSettings.subagentConfig === undefined) (readS.globalSettings as any).subagentConfig = { enabled: true, maxConcurrent: 3 };
+
+			// Phase 1: Agent loop hardening settings
+			if (readS.globalSettings.maxAgentIterations === undefined) (readS.globalSettings as any).maxAgentIterations = 50;
+			if (readS.globalSettings.lintRetryLimit === undefined) (readS.globalSettings as any).lintRetryLimit = 3;
+
+			// Phase 2: Sandbox settings
+			if (readS.globalSettings.sandboxMode === undefined) (readS.globalSettings as any).sandboxMode = 'off';
+			if (readS.globalSettings.sandboxPolicy === undefined) (readS.globalSettings as any).sandboxPolicy = defaultGlobalSettings.sandboxPolicy;
+			if (readS.globalSettings.yoloConfig === undefined) (readS.globalSettings as any).yoloConfig = defaultGlobalSettings.yoloConfig;
+			if (readS.globalSettings.secretDetectionEnabled === undefined) (readS.globalSettings as any).secretDetectionEnabled = true;
+
+			// Phase 4: Two-model apply settings
+			if (readS.globalSettings.applyModelRetries === undefined) (readS.globalSettings as any).applyModelRetries = 2;
+			if (readS.globalSettings.applyFallbackToDirect === undefined) (readS.globalSettings as any).applyFallbackToDirect = true;
+
+			// Phase 6: Embeddings settings
+			if (readS.globalSettings.embeddingsConfig === undefined) (readS.globalSettings as any).embeddingsConfig = { enabled: false, reindexOnSave: true, maxResults: 10 };
+
+			// Phase 7: Model router settings
+			if (readS.globalSettings.routerConfig === undefined) (readS.globalSettings as any).routerConfig = defaultGlobalSettings.routerConfig;
+
+			// Phase 8: Memory settings
+			if (readS.globalSettings.memoryConfig === undefined) (readS.globalSettings as any).memoryConfig = defaultGlobalSettings.memoryConfig;
+
+			// Phase 9: Parallel agent settings
+			if (readS.globalSettings.parallelAgentConfig === undefined) (readS.globalSettings as any).parallelAgentConfig = defaultGlobalSettings.parallelAgentConfig;
+
+			// Phase 10: Background agent settings
+			if (readS.globalSettings.backgroundAgentConfig === undefined) (readS.globalSettings as any).backgroundAgentConfig = defaultGlobalSettings.backgroundAgentConfig;
+
+			// Autocomplete config migration
+			if (readS.globalSettings.autocompleteConfig === undefined) (readS.globalSettings as any).autocompleteConfig = defaultGlobalSettings.autocompleteConfig;
 		}
 		catch (e) {
 			readS = defaultState()

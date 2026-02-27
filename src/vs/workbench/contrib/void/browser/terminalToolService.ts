@@ -15,6 +15,8 @@ import { ITerminalService, ITerminalInstance, ICreateTerminalOptions } from '../
 import { MAX_TERMINAL_BG_COMMAND_TIME, MAX_TERMINAL_CHARS, MAX_TERMINAL_INACTIVE_TIME } from '../common/prompt/prompts.js';
 import { TerminalResolveReason } from '../common/toolsServiceTypes.js';
 import { timeout } from '../../../../base/common/async.js';
+import { ISandboxService } from './sandboxService.js';
+import { errorLinePatterns } from '../common/errorPatterns.js';
 
 
 
@@ -74,6 +76,7 @@ export class TerminalToolService extends Disposable implements ITerminalToolServ
 	constructor(
 		@ITerminalService private readonly terminalService: ITerminalService,
 		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
+		@ISandboxService private readonly sandboxService: ISandboxService,
 	) {
 		super();
 
@@ -230,8 +233,7 @@ export class TerminalToolService extends Disposable implements ITerminalToolServ
 		let result = removeAnsiEscapeCodes(lines.join('\n'));
 
 		if (result.length > MAX_TERMINAL_CHARS) {
-			const half = MAX_TERMINAL_CHARS / 2;
-			result = result.slice(0, half) + '\n...\n' + result.slice(result.length - half);
+			result = this._errorAwareTruncate(result, MAX_TERMINAL_CHARS)
 		}
 
 		return result
@@ -314,8 +316,11 @@ export class TerminalToolService extends Disposable implements ITerminalToolServ
 			})
 
 
+			// wrap command with sandbox if enabled
+			const wrappedCommand = this.sandboxService.wrapCommand(command)
+
 			// send the command now that listeners are attached
-			await terminal.sendText(command, true)
+			await terminal.sendText(wrappedCommand, true)
 
 			const waitUntilInterrupt = isPersistent ?
 				// timeout after X seconds
@@ -365,10 +370,7 @@ export class TerminalToolService extends Disposable implements ITerminalToolServ
 			result = removeAnsiEscapeCodes(result)
 			// trim
 			if (result.length > MAX_TERMINAL_CHARS) {
-				const half = MAX_TERMINAL_CHARS / 2
-				result = result.slice(0, half)
-					+ '\n...\n'
-					+ result.slice(result.length - half, Infinity)
+				result = this._errorAwareTruncate(result, MAX_TERMINAL_CHARS)
 			}
 
 			return { result, resolveReason }
@@ -382,6 +384,75 @@ export class TerminalToolService extends Disposable implements ITerminalToolServ
 		}
 	}
 
+
+	private _errorAwareTruncate(output: string, maxChars: number): string {
+		const lines = output.split('\n')
+
+		// Find lines matching error patterns
+		const errorLineIndices = new Set<number>()
+		for (let i = 0; i < lines.length; i++) {
+			for (const pattern of errorLinePatterns) {
+				if (pattern.test(lines[i])) {
+					errorLineIndices.add(i)
+					break
+				}
+			}
+		}
+
+		// If no error lines found, fall back to half-split
+		if (errorLineIndices.size === 0) {
+			const half = maxChars / 2
+			return output.slice(0, half) + '\n...\n' + output.slice(output.length - half)
+		}
+
+		// Build filtered output: keep first 10%, error lines ±3 context, last 20%
+		const firstCount = Math.max(1, Math.floor(lines.length * 0.1))
+		const lastCount = Math.max(1, Math.floor(lines.length * 0.2))
+		const lastStart = lines.length - lastCount
+
+		const keepIndices = new Set<number>()
+
+		// First 10%
+		for (let i = 0; i < firstCount && i < lines.length; i++) {
+			keepIndices.add(i)
+		}
+
+		// Error lines ±3 context
+		for (const idx of errorLineIndices) {
+			for (let i = Math.max(0, idx - 3); i <= Math.min(lines.length - 1, idx + 3); i++) {
+				keepIndices.add(i)
+			}
+		}
+
+		// Last 20%
+		for (let i = Math.max(0, lastStart); i < lines.length; i++) {
+			keepIndices.add(i)
+		}
+
+		// Build result with gap markers
+		const sortedIndices = [...keepIndices].sort((a, b) => a - b)
+		const resultParts: string[] = []
+		let prevIdx = -1
+
+		for (const idx of sortedIndices) {
+			if (prevIdx !== -1 && idx > prevIdx + 1) {
+				const skipped = idx - prevIdx - 1
+				resultParts.push(`...[${skipped} lines truncated]...`)
+			}
+			resultParts.push(lines[idx])
+			prevIdx = idx
+		}
+
+		let result = resultParts.join('\n')
+
+		// If still exceeds maxChars after filtering, fall back to half-split on filtered result
+		if (result.length > maxChars) {
+			const half = maxChars / 2
+			result = result.slice(0, half) + '\n...\n' + result.slice(result.length - half)
+		}
+
+		return result
+	}
 
 }
 

@@ -24,7 +24,7 @@ import { Widget } from '../../../../base/browser/ui/widget.js';
 import { URI } from '../../../../base/common/uri.js';
 import { IConsistentEditorItemService, IConsistentItemService } from './helperServices/consistentItemService.js';
 import { voidPrefixAndSuffix, ctrlKStream_userMessage, ctrlKStream_systemMessage, defaultQuickEditFimTags, rewriteCode_systemMessage, rewriteCode_userMessage, searchReplaceGivenDescription_systemMessage, searchReplaceGivenDescription_userMessage, tripleTick, } from '../common/prompt/prompts.js';
-import { IVoidCommandBarService } from './voidCommandBarService.js';
+import { IVoidCommandBarService } from './voidCommandBarServiceInterface.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
 import { VOID_ACCEPT_DIFF_ACTION_ID, VOID_REJECT_DIFF_ACTION_ID } from './actionIDs.js';
 
@@ -1235,6 +1235,105 @@ class EditCodeService extends Disposable implements IEditCodeService {
 
 		this._writeURIText(uri, newContent, 'wholeFileRange', { shouldRealignDiffAreas: true })
 		onDone()
+	}
+
+
+	// Phase 4: Two-Model Apply — sends semantic diff to Apply model, gets SEARCH/REPLACE blocks, applies with retry+fallback
+	public async applyWithModel({ uri, semanticDiff }: { uri: URI; semanticDiff: string }): Promise<{ success: boolean; error?: string }> {
+		const featureName: FeatureName = 'Apply'
+		const modelSelection = this._settingsService.state.modelSelectionOfFeature[featureName]
+		if (!modelSelection) return { success: false, error: 'No Apply model selected.' }
+
+		await this._voidModelService.initializeModel(uri)
+		const { model } = this._voidModelService.getModel(uri)
+		if (!model) return { success: false, error: 'File does not exist.' }
+
+		const originalCode = model.getValue(EndOfLinePreference.LF)
+		const maxRetries = this._settingsService.state.globalSettings.applyModelRetries ?? 2
+		const fallbackToDirect = this._settingsService.state.globalSettings.applyFallbackToDirect ?? true
+
+		let lastError: string | undefined
+
+		for (let attempt = 0; attempt < maxRetries; attempt++) {
+			try {
+				const userContent = attempt === 0
+					? searchReplaceGivenDescription_userMessage({ originalCode, applyStr: semanticDiff })
+					: searchReplaceGivenDescription_userMessage({ originalCode, applyStr: `${semanticDiff}\n\nPrevious attempt produced an error: ${lastError}\nPlease fix the SEARCH/REPLACE blocks.` })
+
+				const { messages, separateSystemMessage } = this._convertToLLMMessageService.prepareLLMSimpleMessages({
+					systemMessage: searchReplaceGivenDescription_systemMessage,
+					simpleMessages: [{ role: 'user', content: userContent }],
+					featureName,
+					modelSelection,
+				})
+
+				// Collect full response synchronously
+				const fullResponse = await new Promise<string>((resolve, reject) => {
+					let text = ''
+					this._llmMessageService.sendLLMMessage({
+						messagesType: 'chatMessages',
+						messages,
+						separateSystemMessage,
+						chatMode: null,
+						logging: { loggingName: 'applyWithModel' },
+						modelSelection,
+						modelSelectionOptions: undefined,
+						overridesOfModel: this._settingsService.state.overridesOfModel,
+						onText: ({ fullText }) => { text = fullText },
+						onFinalMessage: () => { resolve(text) },
+						onError: ({ message }) => { reject(new Error(message)) },
+						onAbort: () => { reject(new Error('Apply model aborted.')) },
+					})
+				})
+
+				// Apply the search/replace blocks
+				await this.callBeforeApplyOrEdit(uri)
+				this.instantlyApplySearchReplaceBlocks({ uri, searchReplaceBlocks: fullResponse })
+				return { success: true }
+
+			} catch (e: any) {
+				lastError = e?.message || String(e)
+			}
+		}
+
+		// All retries failed — fallback to full rewrite if enabled
+		if (fallbackToDirect) {
+			try {
+				const rewriteUserContent = rewriteCode_userMessage({ originalCode, applyStr: semanticDiff, language: model.getLanguageId() })
+				const { messages, separateSystemMessage } = this._convertToLLMMessageService.prepareLLMSimpleMessages({
+					systemMessage: rewriteCode_systemMessage,
+					simpleMessages: [{ role: 'user', content: rewriteUserContent }],
+					featureName,
+					modelSelection,
+				})
+
+				const fullResponse = await new Promise<string>((resolve, reject) => {
+					let text = ''
+					this._llmMessageService.sendLLMMessage({
+						messagesType: 'chatMessages',
+						messages,
+						separateSystemMessage,
+						chatMode: null,
+						logging: { loggingName: 'applyWithModel_fallback' },
+						modelSelection,
+						modelSelectionOptions: undefined,
+						overridesOfModel: this._settingsService.state.overridesOfModel,
+						onText: ({ fullText }) => { text = fullText },
+						onFinalMessage: () => { resolve(text) },
+						onError: ({ message }) => { reject(new Error(message)) },
+						onAbort: () => { reject(new Error('Apply model fallback aborted.')) },
+					})
+				})
+
+				await this.callBeforeApplyOrEdit(uri)
+				this.instantlyRewriteFile({ uri, newContent: fullResponse })
+				return { success: true }
+			} catch (e: any) {
+				return { success: false, error: `Apply model failed after ${maxRetries} retries and fallback also failed: ${e?.message || e}` }
+			}
+		}
+
+		return { success: false, error: `Apply model failed after ${maxRetries} retries: ${lastError}` }
 	}
 
 

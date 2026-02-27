@@ -7,6 +7,14 @@
 import { defaultModelsOfProvider, defaultProviderSettings, ModelOverrides } from './modelCapabilities.js';
 import { ToolApprovalType } from './toolsServiceTypes.js';
 import { VoidSettingsState } from './voidSettingsService.js'
+import { SandboxMode, SandboxPolicy, YoloConfig, defaultSandboxPolicy, defaultYoloConfig } from './sandboxTypes.js';
+import { RouterConfig, defaultRouterConfig } from './modelRouterTypes.js';
+import { MemoryConfig, defaultMemoryConfig } from './memoryTypes.js';
+import { ParallelAgentConfig, defaultParallelAgentConfig } from './parallelAgentTypes.js';
+import { BackgroundAgentConfig, defaultBackgroundAgentConfig } from './backgroundAgentTypes.js';
+import { AutocompleteConfig, defaultAutocompleteConfig } from './autocompleteTypes.js';
+import { SelfHealingConfig, defaultSelfHealingConfig } from './selfHealingTypes.js';
+import { VerificationPipelineConfig, defaultVerificationPipelineConfig } from './verificationPipelineTypes.js';
 
 
 type UnionOfKeys<T> = T extends T ? keyof T : never;
@@ -424,6 +432,36 @@ export type GlobalSettings = {
 	autoAcceptLLMChanges: boolean;
 	tavilyApiKey: string;
 	subagentConfig: SubagentConfig;
+	// Phase 1: Agent Loop Hardening
+	maxAgentIterations: number;
+	lintRetryLimit: number;
+	// Phase 2: Sandbox Execution
+	sandboxMode: SandboxMode;
+	sandboxPolicy: SandboxPolicy;
+	yoloConfig: YoloConfig;
+	secretDetectionEnabled: boolean;
+	// Phase 4: Two-Model Apply
+	applyModelRetries: number;
+	applyFallbackToDirect: boolean;
+	// Phase 6: Embeddings
+	embeddingsConfig: { enabled: boolean; reindexOnSave: boolean; maxResults: number };
+	// Phase 7: Model Router
+	routerConfig: RouterConfig;
+	// Phase 8: Memory System
+	memoryConfig: MemoryConfig;
+	// Phase 9: Parallel Multi-Agent
+	parallelAgentConfig: ParallelAgentConfig;
+	// Phase 10: Background Agents
+	backgroundAgentConfig: BackgroundAgentConfig;
+	// Autocomplete engine config
+	autocompleteConfig: AutocompleteConfig;
+	// Self-Healing
+	selfHealingConfig: SelfHealingConfig;
+	// Verification Pipeline
+	verificationPipelineConfig: VerificationPipelineConfig;
+	// Auth / Backend Proxy
+	useSelfHostedMode: boolean;
+	backendUrl: string;
 }
 
 export const defaultGlobalSettings: GlobalSettings = {
@@ -441,6 +479,36 @@ export const defaultGlobalSettings: GlobalSettings = {
 	autoAcceptLLMChanges: false,
 	tavilyApiKey: '',
 	subagentConfig: { enabled: true, maxConcurrent: 3 },
+	// Phase 1: Agent Loop Hardening
+	maxAgentIterations: 50,
+	lintRetryLimit: 3,
+	// Phase 2: Sandbox Execution
+	sandboxMode: 'off',
+	sandboxPolicy: defaultSandboxPolicy,
+	yoloConfig: defaultYoloConfig,
+	secretDetectionEnabled: true,
+	// Phase 4: Two-Model Apply
+	applyModelRetries: 2,
+	applyFallbackToDirect: true,
+	// Phase 6: Embeddings
+	embeddingsConfig: { enabled: false, reindexOnSave: true, maxResults: 10 },
+	// Phase 7: Model Router
+	routerConfig: defaultRouterConfig,
+	// Phase 8: Memory System
+	memoryConfig: defaultMemoryConfig,
+	// Phase 9: Parallel Multi-Agent
+	parallelAgentConfig: defaultParallelAgentConfig,
+	// Phase 10: Background Agents
+	backgroundAgentConfig: defaultBackgroundAgentConfig,
+	// Autocomplete engine config
+	autocompleteConfig: defaultAutocompleteConfig,
+	// Self-Healing
+	selfHealingConfig: defaultSelfHealingConfig,
+	// Verification Pipeline
+	verificationPipelineConfig: defaultVerificationPipelineConfig,
+	// Auth / Backend Proxy
+	useSelfHostedMode: false,
+	backendUrl: 'http://localhost:3456',
 }
 
 export type GlobalSettingName = keyof GlobalSettings

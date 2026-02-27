@@ -1205,7 +1205,8 @@ export class TerminalService extends Disposable implements ITerminalService {
 	}
 
 	createOnInstanceEvent<T>(getEvent: (instance: ITerminalInstance) => Event<T>): DynamicListEventMultiplexer<ITerminalInstance, T> {
-		return new DynamicListEventMultiplexer(this.instances, this.onDidCreateInstance, this.onDidDisposeInstance, getEvent);
+		const activeInstances = this.instances.filter(e => !e.isDisposed);
+		return new DynamicListEventMultiplexer(activeInstances, this.onDidCreateInstance, this.onDidDisposeInstance, getEvent);
 	}
 
 	createOnInstanceCapabilityEvent<T extends TerminalCapability, K>(capabilityId: T, getEvent: (capability: ITerminalCapabilityImplMap[T]) => Event<K>): IDynamicListEventMultiplexer<{ instance: ITerminalInstance; data: K }> {

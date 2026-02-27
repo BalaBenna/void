@@ -133,6 +133,7 @@ import { LLMMessageChannel } from '../../workbench/contrib/void/electron-main/se
 import { VoidSCMService } from '../../workbench/contrib/void/electron-main/voidSCMMainService.js';
 import { IVoidSCMService } from '../../workbench/contrib/void/common/voidSCMTypes.js';
 import { MCPChannel } from '../../workbench/contrib/void/electron-main/mcpChannel.js';
+import { AuthChannel } from '../../workbench/contrib/void/electron-main/authChannel.js';
 /**
  * The main VS Code application. There will only ever be one instance,
  * even if the user starts many instances (e.g. from the command line).
@@ -874,6 +875,31 @@ export class CodeApplication extends Disposable {
 	private async handleProtocolUrl(windowsMainService: IWindowsMainService, dialogMainService: IDialogMainService, urlService: IURLService, uri: URI, options?: IOpenURLOptions): Promise<boolean> {
 		this.logService.trace('app#handleProtocolUrl():', uri.toString(true), options);
 
+		// Void: Handle void://auth/callback for OAuth
+		if (uri.scheme === 'void' && uri.path === '/auth/callback') {
+			const params = new URLSearchParams(uri.query);
+			const token = params.get('token');
+			const refreshToken = params.get('refreshToken');
+			const userJson = params.get('user');
+
+			if (token && refreshToken && userJson) {
+				try {
+					const user = JSON.parse(decodeURIComponent(userJson));
+					const authChannel = (this as any)._voidAuthChannel as import('../../workbench/contrib/void/electron-main/authChannel.js').AuthChannel | undefined;
+					if (authChannel) {
+						authChannel.handleOAuthCallback({
+							token,
+							refreshToken,
+							user,
+						});
+					}
+				} catch (e) {
+					this.logService.error('Void: Failed to parse OAuth callback params:', e);
+				}
+			}
+			return true;
+		}
+
 		// Support 'workspace' URLs (https://github.com/microsoft/vscode/issues/124263)
 		if (uri.scheme === this.productService.urlProtocol && uri.path === 'workspace') {
 			uri = uri.with({
@@ -1253,6 +1279,13 @@ export class CodeApplication extends Disposable {
 		// Void added this
 		const mcpChannel = new MCPChannel();
 		mainProcessElectronServer.registerChannel('void-channel-mcp', mcpChannel);
+
+		// Void Auth
+		const authChannel = new AuthChannel();
+		mainProcessElectronServer.registerChannel('void-channel-auth', authChannel);
+
+		// Store authChannel on the app instance for OAuth callback handling
+		(this as any)._voidAuthChannel = authChannel;
 
 		// Extension Host Debug Broadcasting
 		const electronExtensionHostDebugBroadcastChannel = new ElectronExtensionHostDebugBroadcastChannel(accessor.get(IWindowsMainService));

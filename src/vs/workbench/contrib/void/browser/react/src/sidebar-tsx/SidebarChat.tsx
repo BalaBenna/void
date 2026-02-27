@@ -22,7 +22,7 @@ import { ChatMode, displayInfoOfProviderName, FeatureName, isFeatureNameDisabled
 import { ICommandService } from '../../../../../../../platform/commands/common/commands.js';
 import { WarningBox } from '../void-settings-tsx/WarningBox.js';
 import { getModelCapabilities, getIsReasoningEnabledState } from '../../../../common/modelCapabilities.js';
-import { AlertTriangle, File, Ban, Check, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Globe, Image as ImageIcon, Clock, Plus, MoreHorizontal, Mic, Monitor } from 'lucide-react';
+import { AlertTriangle, File, Ban, Check, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Globe, Image as ImageIcon, Clock, Plus, MoreHorizontal, Mic, Monitor, Loader2, Circle, Minus } from 'lucide-react';
 import { ChatMessage, CheckpointEntry, ImageAttachment, PlanItem, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
 import { CopyButton, EditToolAcceptRejectButtonsHTML, IconShell1, JumpToFileButton, JumpToTerminalButton, StatusIndicator, StatusIndicatorForApplyButton, useApplyStreamState, useEditToolStreamState } from '../markdown/ApplyBlockHoverButtons.js';
@@ -286,7 +286,6 @@ const ChatModeDropdown = ({ className }: { className: string }) => {
 	const ModeIcon = iconOfChatMode[currentMode]
 
 	return <div className="flex items-center gap-1">
-		<ModeIcon size={12} className="text-void-fg-3" />
 		<VoidCustomDropdownBox
 			className={className}
 			options={options}
@@ -399,10 +398,11 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
                 rounded-md
                 bg-void-bg-1
 				transition-all duration-200
-				border ${isDragOver ? 'border-blue-400 bg-blue-500/5' : 'border-void-border-3'} focus-within:border-void-border-1 hover:border-void-border-1
+				${isDragOver ? 'border border-blue-400 bg-blue-500/5' : ''}
 				max-h-[80vh] overflow-y-auto
                 ${className}
             `}
+			style={isDragOver ? undefined : { border: '1px solid rgba(0,0,0,0.15)', boxShadow: '0 1px 4px rgba(0,0,0,0.12)' }}
 			onClick={(e) => {
 				onClickAnywhere?.()
 			}}
@@ -412,6 +412,16 @@ export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 			onDrop={onDrop}
 			onPaste={onPaste}
 		>
+			{/* Drop overlay */}
+			{isDragOver && (
+				<div className="absolute inset-0 z-10 flex items-center justify-center bg-blue-500/10 rounded-md pointer-events-none">
+					<div className="flex flex-col items-center gap-1 text-blue-400">
+						<Plus size={20} />
+						<span className="text-sm font-medium">Drop files to attach</span>
+					</div>
+				</div>
+			)}
+
 			{/* Selections section */}
 			{showSelections && selections && setSelections && (
 				<SelectedFiles
@@ -1357,6 +1367,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 					: mode === 'display' ? 'p-2 flex flex-col bg-void-bg-1 text-void-fg-1 overflow-x-auto cursor-pointer' : ''
 				}
         `}
+			style={mode === 'display' ? { border: '1px solid rgba(0,0,0,0.15)', boxShadow: '0 1px 4px rgba(0,0,0,0.12)' } : undefined}
 			onClick={() => { if (mode === 'display') { onOpenEdit() } }}
 		>
 			{chatbubbleContents}
@@ -2659,6 +2670,31 @@ const Checkpoint = ({ message, threadId, messageIdx, isCheckpointGhost, threadIs
 
 // ==================== Plan Message Component ====================
 
+const PlanTaskStatusIcon = ({ status }: { status?: PlanItem['status'] }) => {
+	switch (status) {
+		case 'in_progress':
+			return <Loader2 size={14} className='text-blue-400 animate-spin' />
+		case 'complete':
+			return <Check size={14} className='text-green-500' />
+		case 'failed':
+			return <X size={14} className='text-red-500' />
+		case 'skipped':
+			return <Minus size={14} className='text-void-fg-3' />
+		default: // pending or undefined
+			return <Circle size={14} className='text-void-fg-3' />
+	}
+}
+
+const PlanSizeBadge = ({ size }: { size?: PlanItem['size'] }) => {
+	if (!size) return null
+	const colors = {
+		S: 'bg-green-900/50 text-green-400',
+		M: 'bg-yellow-900/50 text-yellow-400',
+		L: 'bg-red-900/50 text-red-400',
+	}
+	return <span className={`px-1.5 py-0.5 text-[10px] font-mono font-medium rounded ${colors[size]}`}>{size}</span>
+}
+
 const PlanMessageComponent = ({ chatMessage, isCheckpointGhost, threadId, messageIdx }: {
 	chatMessage: ChatMessage & { role: 'plan' },
 	isCheckpointGhost: boolean,
@@ -2667,17 +2703,21 @@ const PlanMessageComponent = ({ chatMessage, isCheckpointGhost, threadId, messag
 }) => {
 	const accessor = useAccessor()
 	const chatThreadsService = accessor.get('IChatThreadService')
+	const streamState = useChatThreadsStreamState(threadId)
 
 	const statusLabel = chatMessage.status === 'draft' ? 'Draft' : chatMessage.status === 'executing' ? 'Executing...' : 'Completed'
 	const statusColor = chatMessage.status === 'draft' ? 'text-yellow-500' : chatMessage.status === 'executing' ? 'text-blue-400' : 'text-green-500'
 
-	const completedCount = chatMessage.items.filter(item => item.completed).length
+	const completedCount = chatMessage.items.filter(item => item.completed || item.status === 'complete').length
 	const totalCount = chatMessage.items.length
 
 	const chatMessageLocation: ChatMessageLocation = {
 		threadId,
 		messageIdx,
 	}
+
+	// Check if we're in a step-by-step pause (awaiting_user during plan execution)
+	const isAwaitingContinue = streamState?.isRunning === 'awaiting_user' && chatMessage.status === 'executing'
 
 	return <div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
 		<div className='flex flex-col gap-2'>
@@ -2692,29 +2732,105 @@ const PlanMessageComponent = ({ chatMessage, isCheckpointGhost, threadId, messag
 				</div>
 			</div>
 
-			{/* Plan content rendered as markdown */}
-			<ProseWrapper>
-				<ChatMarkdownRender
-					string={chatMessage.displayContent || chatMessage.content}
-					chatMessageLocation={chatMessageLocation}
-					isApplyEnabled={false}
-					isLinkDetectionEnabled={true}
-				/>
-			</ProseWrapper>
-
-			{/* Build button - only shown for draft plans */}
-			{chatMessage.status === 'draft' && (
-				<button
-					className='self-start px-3 py-1.5 text-xs font-medium rounded
-						bg-green-600 hover:bg-green-700 text-white
-						transition-colors cursor-pointer select-none'
-					onClick={() => {
-						chatThreadsService.executePlan(threadId, messageIdx)
-					}}
-				>
-					Build
-				</button>
+			{/* Interactive task list */}
+			{chatMessage.items.length > 0 && (
+				<div className='flex flex-col gap-1 py-1'>
+					{chatMessage.items.map((item, idx) => (
+						<div key={item.id ?? idx} className={`flex items-start gap-2 py-0.5 ${item.status === 'complete' ? 'opacity-60' : ''}`}>
+							<div className='mt-0.5 flex-shrink-0'>
+								<PlanTaskStatusIcon status={item.status} />
+							</div>
+							<div className='flex-1 min-w-0'>
+								<span className={`text-xs ${item.status === 'complete' ? 'line-through text-void-fg-3' : 'text-void-fg-1'}`}>
+									{item.text}
+								</span>
+								<div className='flex items-center gap-1 mt-0.5 flex-wrap'>
+									{item.size && <PlanSizeBadge size={item.size} />}
+									{item.files?.map((file, fIdx) => (
+										<span key={fIdx} className='text-[10px] text-blue-400 bg-blue-900/30 px-1 py-0.5 rounded font-mono'>
+											{file.split('/').pop()}
+										</span>
+									))}
+								</div>
+							</div>
+						</div>
+					))}
+				</div>
 			)}
+
+			{/* Plan content rendered as markdown (collapsed behind details for rich plans) */}
+			<details className='text-xs'>
+				<summary className='cursor-pointer text-void-fg-3 hover:text-void-fg-2 select-none'>Full plan details</summary>
+				<div className='mt-1'>
+					<ProseWrapper>
+						<ChatMarkdownRender
+							string={chatMessage.displayContent || chatMessage.content}
+							chatMessageLocation={chatMessageLocation}
+							isApplyEnabled={false}
+							isLinkDetectionEnabled={true}
+						/>
+					</ProseWrapper>
+				</div>
+			</details>
+
+			{/* Action buttons */}
+			<div className='flex items-center gap-2'>
+				{/* Build button - execute all at once */}
+				{chatMessage.status === 'draft' && (
+					<button
+						className='px-3 py-1.5 text-xs font-medium rounded
+							bg-green-600 hover:bg-green-700 text-white
+							transition-colors cursor-pointer select-none'
+						onClick={() => {
+							chatThreadsService.executePlan(threadId, messageIdx)
+						}}
+					>
+						Build
+					</button>
+				)}
+
+				{/* Build Step-by-Step button */}
+				{chatMessage.status === 'draft' && (
+					<button
+						className='px-3 py-1.5 text-xs font-medium rounded
+							bg-blue-600 hover:bg-blue-700 text-white
+							transition-colors cursor-pointer select-none'
+						onClick={() => {
+							chatThreadsService.executePlanStepByStep(threadId, messageIdx)
+						}}
+					>
+						Build Step-by-Step
+					</button>
+				)}
+
+				{/* Revise button - focuses chat input for revision feedback */}
+				{chatMessage.status === 'draft' && (
+					<button
+						className='px-3 py-1.5 text-xs font-medium rounded
+							bg-void-bg-2 hover:bg-void-bg-3 text-void-fg-2
+							transition-colors cursor-pointer select-none'
+						onClick={async () => {
+							await chatThreadsService.focusCurrentChat()
+						}}
+					>
+						Revise
+					</button>
+				)}
+
+				{/* Continue button - shown during step-by-step pause */}
+				{isAwaitingContinue && (
+					<button
+						className='px-3 py-1.5 text-xs font-medium rounded
+							bg-blue-600 hover:bg-blue-700 text-white
+							transition-colors cursor-pointer select-none'
+						onClick={() => {
+							chatThreadsService.continuePlanExecution(threadId)
+						}}
+					>
+						Continue
+					</button>
+				)}
+			</div>
 
 			{/* Progress bar during execution */}
 			{chatMessage.status === 'executing' && totalCount > 0 && (
@@ -3231,6 +3347,9 @@ export const SidebarChat = () => {
 	const accessor = useAccessor()
 	const commandService = accessor.get('ICommandService')
 	const chatThreadsService = accessor.get('IChatThreadService')
+	const fileService = accessor.get('IFileService')
+	const languageService = accessor.get('ILanguageService')
+	const voidSettingsService = accessor.get('IVoidSettingsService')
 
 	const settingsState = useSettingsState()
 	// ----- HIGHER STATE -----
@@ -3538,7 +3657,7 @@ export const SidebarChat = () => {
 		dragCounter.current = 0
 		setIsDragOver(false)
 
-		// Handle image files
+		// Extract dataTransfer data synchronously (cleared after event handler returns)
 		const imageFiles: File[] = []
 		const otherFiles: File[] = []
 		if (e.dataTransfer.files) {
@@ -3551,6 +3670,7 @@ export const SidebarChat = () => {
 				}
 			}
 		}
+		const uriList = e.dataTransfer.getData('text/uri-list')
 
 		// Convert image files to ImageAttachment
 		if (imageFiles.length > 0) {
@@ -3575,43 +3695,111 @@ export const SidebarChat = () => {
 			}).catch(err => console.error('Error reading dropped images:', err))
 		}
 
-		// Handle non-image files as staging selections
-		if (otherFiles.length > 0) {
-			const newSelections: StagingSelectionItem[] = otherFiles.map(file => ({
-				type: 'File' as const,
-				uri: URI.file((file as any).path || file.name),
-				language: '',
-				state: { wasAddedAsCurrentFile: false },
-			}))
-			setSelections([...selections, ...newSelections])
+		// Dedup helper: avoid adding selections that already exist
+		const dedupSelections = (existing: StagingSelectionItem[], incoming: StagingSelectionItem[]) => {
+			const result = [...existing]
+			for (const item of incoming) {
+				const isDup = result.some(s =>
+					s.uri.fsPath === item.uri.fsPath &&
+					((s.type === 'File' && item.type === 'File') || (s.type === 'Folder' && item.type === 'Folder'))
+				)
+				if (!isDup) result.push(item)
+			}
+			return result
 		}
 
-		// Handle URI list drops (from VS Code explorer)
-		const uriList = e.dataTransfer.getData('text/uri-list')
-		if (uriList && otherFiles.length === 0 && imageFiles.length === 0) {
-			const uris = uriList.split('\n').filter(u => u.trim() && !u.startsWith('#'))
-			const newSelections: StagingSelectionItem[] = uris.map(uriStr => ({
-				type: 'File' as const,
-				uri: URI.parse(uriStr.trim()),
-				language: '',
-				state: { wasAddedAsCurrentFile: false },
-			}))
-			if (newSelections.length > 0) {
-				setSelections([...selections, ...newSelections])
+		// Process non-image file drops and URI list drops concurrently
+		const processDrops = async () => {
+			const allNewSelections: StagingSelectionItem[] = []
+
+			// Handle non-image files (Finder / OS file drops with Electron .path)
+			const filePromises = otherFiles.map(async (file): Promise<StagingSelectionItem | null> => {
+				const electronPath = (file as any).path as string | undefined
+				// Skip if no valid Electron path (browser-only File objects without real paths)
+				if (!electronPath || electronPath === file.name) return null
+				const uri = URI.file(electronPath)
+
+				try {
+					const fileStat = await fileService.stat(uri)
+					if (fileStat.isDirectory) {
+						return { type: 'Folder' as const, uri }
+					}
+				} catch {
+					// stat failed — treat as file (it might be a file type stat can't resolve)
+				}
+
+				const langResult = languageService.createByFilepathOrFirstLine(uri, undefined)
+				const language = langResult.languageId || 'plaintext'
+				return {
+					type: 'File' as const,
+					uri,
+					language,
+					state: { wasAddedAsCurrentFile: false },
+				}
+			})
+
+			const fileResults = await Promise.all(filePromises)
+			for (const r of fileResults) {
+				if (r) allNewSelections.push(r)
+			}
+
+			// Handle URI list drops (from VS Code explorer) — per RFC 2483
+			if (uriList) {
+				const uris = uriList.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('#'))
+				const uriPromises = uris.map(async (uriStr): Promise<StagingSelectionItem | null> => {
+					const uri = URI.parse(uriStr)
+					try {
+						const fileStat = await fileService.stat(uri)
+						if (fileStat.isDirectory) {
+							return { type: 'Folder' as const, uri }
+						}
+					} catch {
+						// stat failed — treat as file
+					}
+					const langResult = languageService.createByFilepathOrFirstLine(uri, undefined)
+					const language = langResult.languageId || 'plaintext'
+					return {
+						type: 'File' as const,
+						uri,
+						language,
+						state: { wasAddedAsCurrentFile: false },
+					}
+				})
+
+				const uriResults = await Promise.all(uriPromises)
+				for (const r of uriResults) {
+					if (r) allNewSelections.push(r)
+				}
+			}
+
+			if (allNewSelections.length > 0) {
+				setSelections(dedupSelections(selections, allNewSelections))
 			}
 		}
-	}, [selections, setSelections])
+
+		if (otherFiles.length > 0 || uriList) {
+			processDrops().catch(err => console.error('Error processing dropped files:', err))
+		}
+	}, [selections, setSelections, fileService, languageService])
 
 	const onChangeText = useCallback((newStr: string) => {
 		setInstructionsAreEmpty(!newStr)
 	}, [setInstructionsAreEmpty])
 	const onKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
+		if (e.shiftKey && e.key === 'Tab') {
+			e.preventDefault()
+			const modes: ChatMode[] = ['agent', 'ask', 'plan', 'debug']
+			const currentIdx = modes.indexOf(settingsState.globalSettings.chatMode)
+			const nextIdx = (currentIdx + 1) % modes.length
+			voidSettingsService.setGlobalSetting('chatMode', modes[nextIdx])
+			return
+		}
 		if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
 			onSubmit()
 		} else if (e.key === 'Escape' && isRunning) {
 			onAbort()
 		}
-	}, [onSubmit, onAbort, isRunning])
+	}, [onSubmit, onAbort, isRunning, settingsState.globalSettings.chatMode, voidSettingsService])
 
 	const inputChatArea = <VoidChatArea
 		featureName='Chat'

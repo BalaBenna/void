@@ -38,12 +38,12 @@ import { IConfigurationService } from '../../../../../../../platform/configurati
 import { IPathService } from '../../../../../../../workbench/services/path/common/pathService.js'
 import { IMetricsService } from '../../../../../../../workbench/contrib/void/common/metricsService.js'
 import { URI } from '../../../../../../../base/common/uri.js'
-import { IChatThreadService, ThreadsState, ThreadStreamState } from '../../../chatThreadService.js'
+import { IChatThreadService, ThreadsState, ThreadStreamState } from '../../../chatThreadServiceInterface.js'
 import { ITerminalToolService } from '../../../terminalToolService.js'
 import { ILanguageService } from '../../../../../../../editor/common/languages/language.js'
 import { IVoidModelService } from '../../../../common/voidModelService.js'
 import { IWorkspaceContextService } from '../../../../../../../platform/workspace/common/workspace.js'
-import { IVoidCommandBarService } from '../../../voidCommandBarService.js'
+import { IVoidCommandBarService } from '../../../voidCommandBarServiceInterface.js'
 import { INativeHostService } from '../../../../../../../platform/native/common/native.js';
 import { IEditCodeService } from '../../../editCodeServiceInterface.js'
 import { IToolsService } from '../../../toolsService.js'
@@ -52,9 +52,18 @@ import { ITerminalService } from '../../../../../terminal/browser/terminal.js'
 import { ISearchService } from '../../../../../../services/search/common/search.js'
 import { IExtensionManagementService } from '../../../../../../../platform/extensionManagement/common/extensionManagement.js'
 import { IMCPService } from '../../../../common/mcpService.js';
-import { ISubagentService } from '../../../subagentService.js';
+import { ISubagentService } from '../../../subagentServiceInterface.js';
 import { IStorageService, StorageScope } from '../../../../../../../platform/storage/common/storage.js'
 import { OPT_OUT_KEY } from '../../../../common/storageKeys.js'
+import { IAgentRegistryService } from '../../../agentRegistryService.js'
+import { IRulesService } from '../../../rulesService.js'
+import { IEmbeddingsService } from '../../../embeddingsService.js'
+import { IEnvFileService } from '../../../envFileService.js'
+import { VoidAgentDefinition } from '../../../../common/agentRegistryTypes.js'
+import { VoidRule } from '../../../../common/rulesTypes.js'
+import { IndexStatus } from '../../../../common/embeddingsTypes.js'
+import { IVoidAuthService } from '../../../voidAuthService.js'
+import { AuthState } from '../../../../common/authTypes.js'
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -83,6 +92,21 @@ const commandBarURIStateListeners: Set<(uri: URI) => void> = new Set();
 const activeURIListeners: Set<(uri: URI | null) => void> = new Set();
 
 const mcpListeners: Set<() => void> = new Set()
+
+// Agent registry, rules, embeddings, env
+let agentRegistryAgents: VoidAgentDefinition[] = []
+const agentRegistryListeners: Set<(agents: VoidAgentDefinition[]) => void> = new Set()
+
+let rulesState: VoidRule[] = []
+const rulesListeners: Set<(rules: VoidRule[]) => void> = new Set()
+
+let indexStatus: IndexStatus = { state: 'idle', totalFiles: 0, indexedFiles: 0, progress: 0 }
+const indexStatusListeners: Set<(s: IndexStatus) => void> = new Set()
+
+const envFileListeners: Set<() => void> = new Set()
+
+let authState: AuthState = { isAuthenticated: false, session: null, isLoading: true, error: null }
+const authStateListeners: Set<(s: AuthState) => void> = new Set()
 
 
 // must call this before you can use any of the hooks below
@@ -177,6 +201,54 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		})
 	)
 
+	// Agent Registry
+	const agentRegistryService = accessor.get(IAgentRegistryService)
+	agentRegistryAgents = agentRegistryService.getAllAgents()
+	disposables.push(
+		agentRegistryService.onDidChangeAgents(() => {
+			agentRegistryAgents = agentRegistryService.getAllAgents()
+			agentRegistryListeners.forEach(l => l(agentRegistryAgents))
+		})
+	)
+
+	// Rules
+	const rulesService = accessor.get(IRulesService)
+	rulesState = rulesService.getAllRules()
+	disposables.push(
+		rulesService.onDidChangeRules(() => {
+			rulesState = rulesService.getAllRules()
+			rulesListeners.forEach(l => l(rulesState))
+		})
+	)
+
+	// Embeddings Index Status
+	const embeddingsService = accessor.get(IEmbeddingsService)
+	indexStatus = embeddingsService.getIndexStatus()
+	disposables.push(
+		embeddingsService.onDidChangeIndexStatus((status) => {
+			indexStatus = status
+			indexStatusListeners.forEach(l => l(indexStatus))
+		})
+	)
+
+	// Env File
+	const envFileService = accessor.get(IEnvFileService)
+	disposables.push(
+		envFileService.onDidChangeEnvVars(() => {
+			envFileListeners.forEach(l => l())
+		})
+	)
+
+	// Auth
+	const voidAuthService = accessor.get(IVoidAuthService)
+	authState = voidAuthService.state
+	disposables.push(
+		voidAuthService.onDidChangeAuthState((state) => {
+			authState = state
+			authStateListeners.forEach(l => l(authState))
+		})
+	)
+
 
 	return disposables
 }
@@ -229,8 +301,13 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IExtensionTransferService: accessor.get(IExtensionTransferService),
 		IMCPService: accessor.get(IMCPService),
 		ISubagentService: accessor.get(ISubagentService),
+		IAgentRegistryService: accessor.get(IAgentRegistryService),
+		IRulesService: accessor.get(IRulesService),
+		IEmbeddingsService: accessor.get(IEmbeddingsService),
+		IEnvFileService: accessor.get(IEnvFileService),
 
 		IStorageService: accessor.get(IStorageService),
+		IVoidAuthService: accessor.get(IVoidAuthService),
 
 	} as const
 	return reactAccessor
@@ -334,14 +411,14 @@ export const useRefreshModelListener = (listener: (providerName: RefreshableProv
 	useEffect(() => {
 		refreshModelProviderListeners.add(listener)
 		return () => { refreshModelProviderListeners.delete(listener) }
-	}, [listener, refreshModelProviderListeners])
+	}, [listener])
 }
 
 export const useCtrlKZoneStreamingState = (listener: (diffareaid: number, s: boolean) => void) => {
 	useEffect(() => {
 		ctrlKZoneStreamingStateListeners.add(listener)
 		return () => { ctrlKZoneStreamingStateListeners.delete(listener) }
-	}, [listener, ctrlKZoneStreamingStateListeners])
+	}, [listener])
 }
 
 export const useIsDark = () => {
@@ -386,7 +463,7 @@ export const useActiveURI = () => {
 		const listener = () => { ss(commandBarService.activeURI) }
 		activeURIListeners.add(listener);
 		return () => { activeURIListeners.delete(listener) };
-	}, [])
+	}, [commandBarService])
 	return { uri: s }
 }
 
@@ -401,7 +478,7 @@ export const useMCPServiceState = () => {
 		const listener = () => { ss(mcpService.state) }
 		mcpListeners.add(listener);
 		return () => { mcpListeners.delete(listener) };
-	}, []);
+	}, [mcpService]);
 	return s
 }
 
@@ -423,8 +500,63 @@ export const useIsOptedOut = () => {
 			ss(getVal())
 		})
 		disposables.add(d)
-		return () => disposables.clear()
+		return () => disposables.dispose()
 	}, [storageService, getVal])
 
+	return s
+}
+
+
+// ──── Agent Registry, Rules, Embeddings, Env hooks ────
+
+export const useAgentRegistry = () => {
+	const [s, ss] = useState(agentRegistryAgents)
+	useEffect(() => {
+		ss(agentRegistryAgents)
+		agentRegistryListeners.add(ss)
+		return () => { agentRegistryListeners.delete(ss) }
+	}, [ss])
+	return s
+}
+
+export const useRules = () => {
+	const [s, ss] = useState(rulesState)
+	useEffect(() => {
+		ss(rulesState)
+		rulesListeners.add(ss)
+		return () => { rulesListeners.delete(ss) }
+	}, [ss])
+	return s
+}
+
+export const useIndexStatus = () => {
+	const [s, ss] = useState(indexStatus)
+	useEffect(() => {
+		ss(indexStatus)
+		indexStatusListeners.add(ss)
+		return () => { indexStatusListeners.delete(ss) }
+	}, [ss])
+	return s
+}
+
+export const useEnvFileVars = () => {
+	const accessor = useAccessor()
+	const envFileService = accessor.get('IEnvFileService')
+	const [s, ss] = useState(envFileService.getAllEnvVars())
+	useEffect(() => {
+		const listener = () => { ss(envFileService.getAllEnvVars()) }
+		envFileListeners.add(listener)
+		return () => { envFileListeners.delete(listener) }
+	}, [envFileService])
+	return s
+}
+
+export const useAuthState = () => {
+	const [s, ss] = useState(authState)
+	useEffect(() => {
+		ss(authState)
+		authStateListeners.add(ss)
+		return () => { authStateListeners.delete(ss) }
+	}, [ss])
 	return s
 }

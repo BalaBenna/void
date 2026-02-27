@@ -18,6 +18,9 @@ import { URI } from '../../../../base/common/uri.js';
 import { EndOfLinePreference } from '../../../../editor/common/model.js';
 import { ToolName } from '../common/toolsServiceTypes.js';
 import { IMCPService } from '../common/mcpService.js';
+import { IRulesService } from './rulesService.js';
+import { IMemoryService } from './memoryService.js';
+import { IAgentRegistryService } from './agentRegistryService.js';
 
 export const EMPTY_MESSAGE = '(empty message)'
 
@@ -605,6 +608,9 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
 		@IVoidModelService private readonly voidModelService: IVoidModelService,
 		@IMCPService private readonly mcpService: IMCPService,
+		@IRulesService private readonly rulesService: IRulesService,
+		@IMemoryService private readonly memoryService: IMemoryService,
+		@IAgentRegistryService private readonly agentRegistryService: IAgentRegistryService,
 	) {
 		super()
 	}
@@ -627,14 +633,43 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		}
 	}
 
-	// Get combined AI instructions from settings and .voidrules files
-	private _getCombinedAIInstructions(): string {
+	// Get combined AI instructions from settings, .voidrules files, .void/rules/, and memories
+	private _getCombinedAIInstructions(latestUserMessage?: string): string {
 		const globalAIInstructions = this.voidSettingsService.state.globalSettings.aiInstructions;
 		const voidRulesFileContent = this._getVoidRulesFileContents();
 
 		const ans: string[] = []
 		if (globalAIInstructions) ans.push(globalAIInstructions)
 		if (voidRulesFileContent) ans.push(voidRulesFileContent)
+
+		// Phase 3: Include always-apply rules from .void/rules/
+		const alwaysApplyRules = this.rulesService.getAlwaysApplyRules()
+		for (const rule of alwaysApplyRules) {
+			ans.push(`--- Rule: ${rule.name} ---\n${rule.content}`)
+		}
+
+		// Include a summary of available on-demand rules (so LLM can use fetch_rules)
+		const allRules = this.rulesService.getAllRules()
+		const onDemandRules = allRules.filter(r => !r.alwaysApply)
+		if (onDemandRules.length > 0) {
+			const ruleList = onDemandRules.map(r => `- ${r.name}: ${r.description} (globs: ${r.globs.join(', ')})`).join('\n')
+			ans.push(`Available project rules (use fetch_rules tool to read):\n${ruleList}`)
+		}
+
+		// Inject agent roster for spawn_subagent tool awareness
+		const roster = this.agentRegistryService.getAgentRosterString()
+		if (roster) ans.push(roster)
+
+		// Phase 8: Inject relevant memories from previous sessions
+		const memoryConfig = this.voidSettingsService.state.globalSettings.memoryConfig;
+		if (memoryConfig.enabled && latestUserMessage) {
+			const memories = this.memoryService.getRelevantMemories(latestUserMessage, 5);
+			if (memories.length > 0) {
+				const memoryStr = memories.map(m => `- [${m.type}] ${m.content}`).join('\n');
+				ans.push(`Relevant memories from previous sessions:\n${memoryStr}`);
+			}
+		}
+
 		return ans.join('\n\n')
 	}
 
@@ -759,8 +794,9 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 
 		const modelSelectionOptions = this.voidSettingsService.state.optionsOfModelSelection['Chat'][modelSelection.providerName]?.[modelSelection.modelName]
 
-		// Get combined AI instructions
-		const aiInstructions = this._getCombinedAIInstructions();
+		// Get combined AI instructions (with memory context from latest user message)
+		const latestUserMsg = [...chatMessages].reverse().find(m => m.role === 'user')
+		const aiInstructions = this._getCombinedAIInstructions(latestUserMsg?.content ?? undefined);
 		const isReasoningEnabled = getIsReasoningEnabledState('Chat', providerName, modelName, modelSelectionOptions, overridesOfModel)
 		const reservedOutputTokenSpace = getReservedOutputTokenSpace(providerName, modelName, { isReasoningEnabled, overridesOfModel })
 		const llmMessages = this._chatMessagesToSimpleMessages(chatMessages)

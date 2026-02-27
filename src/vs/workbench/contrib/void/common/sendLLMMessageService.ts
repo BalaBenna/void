@@ -101,7 +101,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 	}
 
 	sendLLMMessage(params: ServiceSendLLMMessageParams) {
-		const { onText, onFinalMessage, onError, onAbort, modelSelection, ...proxyParams } = params;
+		const { onText, onFinalMessage, onError, onAbort, modelSelection, proxyConfig, ...proxyParams } = params;
 
 		// throw an error if no model/provider selected (this should usually never be reached, the UI should check this first, but might happen in cases like Apply where we haven't built much UI/checks yet, good practice to have check logic on backend)
 		if (modelSelection === null) {
@@ -127,14 +127,26 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		this.llmMessageHooks.onError[requestId] = onError
 		this.llmMessageHooks.onAbort[requestId] = onAbort // used internally only
 
-		// params will be stripped of all its functions over the IPC channel
-		this.channel.call('sendLLMMessage', {
-			...proxyParams,
-			requestId,
-			settingsOfProvider,
-			modelSelection,
-			mcpTools,
-		} satisfies MainSendLLMMessageParams);
+		if (proxyConfig) {
+			// Use proxied LLM call — don't send API keys, backend holds them
+			this.channel.call('sendProxiedLLMMessage', {
+				...proxyParams,
+				requestId,
+				settingsOfProvider, // still needed for model metadata, but keys won't be used
+				modelSelection,
+				mcpTools,
+				proxyConfig,
+			} satisfies MainSendLLMMessageParams);
+		} else {
+			// params will be stripped of all its functions over the IPC channel
+			this.channel.call('sendLLMMessage', {
+				...proxyParams,
+				requestId,
+				settingsOfProvider,
+				modelSelection,
+				mcpTools,
+			} satisfies MainSendLLMMessageParams);
+		}
 
 		return requestId
 	}

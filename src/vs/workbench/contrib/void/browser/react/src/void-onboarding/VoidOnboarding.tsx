@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import { useEffect, useRef, useState } from 'react';
-import { useAccessor, useIsDark, useSettingsState } from '../util/services.js';
+import { useAccessor, useIsDark, useSettingsState, useAuthState } from '../util/services.js';
 import { Brain, Check, ChevronRight, DollarSign, ExternalLink, Lock, X } from 'lucide-react';
 import { displayInfoOfProviderName, ProviderName, providerNames, featureNames, FeatureName, isFeatureNameDisabled } from '../../../../common/voidSettingsTypes.js';
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js';
@@ -18,7 +18,11 @@ const OVERRIDE_VALUE = false
 export const VoidOnboarding = () => {
 
 	const voidSettingsState = useSettingsState()
-	const isOnboardingComplete = voidSettingsState.globalSettings.isOnboardingComplete || OVERRIDE_VALUE
+	const authState = useAuthState()
+	const useSelfHostedMode = voidSettingsState.globalSettings.useSelfHostedMode
+	const isOnboardingComplete = voidSettingsState.globalSettings.isOnboardingComplete
+		|| OVERRIDE_VALUE
+		|| (authState.isAuthenticated && !useSelfHostedMode)
 
 	const isDark = useIsDark()
 
@@ -466,6 +470,9 @@ const VoidOnboardingContent = () => {
 	const voidMetricsService = accessor.get('IMetricsService')
 
 	const voidSettingsState = useSettingsState()
+	const authState = useAuthState()
+	const useSelfHostedMode = voidSettingsState.globalSettings.useSelfHostedMode || false
+	const skipProviderSetup = authState.isAuthenticated && !useSelfHostedMode
 
 	const [pageIndex, setPageIndex] = useState(0)
 
@@ -575,54 +582,58 @@ const VoidOnboardingContent = () => {
 	}, [setPageIndex, voidSettingsState.globalSettings.isOnboardingComplete])
 
 
-	const contentOfIdx: { [pageIndex: number]: React.ReactNode } = {
-		0: <OnboardingPageShell
-			content={
-				<div className='flex flex-col items-center gap-8'>
-					<div className="text-5xl font-light text-center">Welcome to Void</div>
+	const welcomePage = <OnboardingPageShell
+		content={
+			<div className='flex flex-col items-center gap-8'>
+				<div className="text-5xl font-light text-center">Welcome to Void</div>
 
-					{/* Slice of Void image */}
-					<div className='max-w-md w-full h-[30vh] mx-auto flex items-center justify-center'>
-						{!isLinux && <VoidIcon />}
-					</div>
+				{/* Slice of Void image */}
+				<div className='max-w-md w-full h-[30vh] mx-auto flex items-center justify-center'>
+					{!isLinux && <VoidIcon />}
+				</div>
 
 
-					<FadeIn
-						delayMs={1000}
+				<FadeIn
+					delayMs={1000}
+				>
+					<PrimaryActionButton
+						onClick={() => { setPageIndex(1) }}
 					>
-						<PrimaryActionButton
-							onClick={() => { setPageIndex(1) }}
-						>
-							Get Started
-						</PrimaryActionButton>
-					</FadeIn>
+						Get Started
+					</PrimaryActionButton>
+				</FadeIn>
 
+			</div>
+		}
+	/>
+
+	const addProvidersPage = <OnboardingPageShell hasMaxWidth={false}
+		content={
+			<AddProvidersPage pageIndex={pageIndex} setPageIndex={setPageIndex} />
+		}
+	/>
+
+	const settingsTransferPage = <OnboardingPageShell
+
+		content={
+			<div>
+				<div className="text-5xl font-light text-center">Settings and Themes</div>
+
+				<div className="mt-8 text-center flex flex-col items-center gap-4 w-full max-w-md mx-auto">
+					<h4 className="text-void-fg-3 mb-4">Transfer your settings from an existing editor?</h4>
+					<OneClickSwitchButton className='w-full px-4 py-2' fromEditor="VS Code" />
+					<OneClickSwitchButton className='w-full px-4 py-2' fromEditor="Cursor" />
+					<OneClickSwitchButton className='w-full px-4 py-2' fromEditor="Windsurf" />
 				</div>
-			}
-		/>,
+			</div>
+		}
+		bottom={lastPagePrevAndNextButtons}
+	/>
 
-		1: <OnboardingPageShell hasMaxWidth={false}
-			content={
-				<AddProvidersPage pageIndex={pageIndex} setPageIndex={setPageIndex} />
-			}
-		/>,
-		2: <OnboardingPageShell
-
-			content={
-				<div>
-					<div className="text-5xl font-light text-center">Settings and Themes</div>
-
-					<div className="mt-8 text-center flex flex-col items-center gap-4 w-full max-w-md mx-auto">
-						<h4 className="text-void-fg-3 mb-4">Transfer your settings from an existing editor?</h4>
-						<OneClickSwitchButton className='w-full px-4 py-2' fromEditor="VS Code" />
-						<OneClickSwitchButton className='w-full px-4 py-2' fromEditor="Cursor" />
-						<OneClickSwitchButton className='w-full px-4 py-2' fromEditor="Windsurf" />
-					</div>
-				</div>
-			}
-			bottom={lastPagePrevAndNextButtons}
-		/>,
-	}
+	// When authenticated (not self-hosted), skip the provider setup page
+	const contentOfIdx: { [pageIndex: number]: React.ReactNode } = skipProviderSetup
+		? { 0: welcomePage, 1: settingsTransferPage }
+		: { 0: welcomePage, 1: addProvidersPage, 2: settingsTransferPage }
 
 
 	return <div key={pageIndex} className="w-full h-[80vh] text-left mx-auto flex flex-col items-center justify-center">

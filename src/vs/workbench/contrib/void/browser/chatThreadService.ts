@@ -5,7 +5,8 @@
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
-import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
+import { IChatThreadService, ThreadType, ThreadsState, ThreadStreamState, IsRunningType, ChatThreads, WhenMounted } from './chatThreadServiceInterface.js';
+export { IChatThreadService, ThreadType, ThreadsState, ThreadStreamState, IsRunningType } from './chatThreadServiceInterface.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 
 import { URI } from '../../../../base/common/uri.js';
@@ -14,13 +15,13 @@ import { ILLMMessageService } from '../common/sendLLMMessageService.js';
 import { chat_userMessageContent, isABuiltinToolName } from '../common/prompt/prompts.js';
 import { AnthropicReasoning, getErrorMessage, RawToolCallObj, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
-import { FeatureName, ModelSelection, ModelSelectionOptions } from '../common/voidSettingsTypes.js';
+import { ChatMode, FeatureName, ModelSelection, ModelSelectionOptions } from '../common/voidSettingsTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
-import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, ToolCallParams, ToolName, ToolResult } from '../common/toolsServiceTypes.js';
+import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolResultType, ToolCallParams, ToolName, ToolResult } from '../common/toolsServiceTypes.js';
 import { IToolsService } from './toolsService.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { ILanguageFeaturesService } from '../../../../editor/common/services/languageFeatures.js';
-import { ChatMessage, CheckpointEntry, CodespanLocationLink, ImageAttachment, StagingSelectionItem, ToolMessage } from '../common/chatThreadServiceTypes.js';
+import { ChatMessage, CheckpointEntry, CodespanLocationLink, ImageAttachment, PlanItem, StagingSelectionItem, ToolMessage } from '../common/chatThreadServiceTypes.js';
 import { Position } from '../../../../editor/common/core/position.js';
 import { IMetricsService } from '../common/metricsService.js';
 import { shorten } from '../../../../base/common/labels.js';
@@ -39,6 +40,14 @@ import { IDirectoryStrService } from '../common/directoryStrService.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { IMCPService } from '../common/mcpService.js';
 import { RawMCPToolCall } from '../common/mcpServiceTypes.js';
+import { IAgentEventService } from './agentEventService.js';
+import { ITokenBudgetService } from './tokenBudgetService.js';
+import { IModelRouterService } from './modelRouterService.js';
+import { IMemoryService } from './memoryService.js';
+import { IEditorService } from '../../../services/editor/common/editorService.js';
+import { VSBuffer } from '../../../../base/common/buffer.js';
+import { ISelfHealingService } from './selfHealingService.js';
+import { IVoidAuthService } from './voidAuthService.js';
 
 
 // related to retrying when LLM message has error
@@ -95,116 +104,10 @@ A checkpoint appears before every LLM message, and before every user message (be
 */
 
 
-type UserMessageType = ChatMessage & { role: 'user' }
-type UserMessageState = UserMessageType['state']
+type UserMessageState = (ChatMessage & { role: 'user' })['state']
 const defaultMessageState: UserMessageState = {
 	stagingSelections: [],
 	isBeingEdited: false,
-}
-
-// a 'thread' means a chat message history
-
-type WhenMounted = {
-	textAreaRef: { current: HTMLTextAreaElement | null }; // the textarea that this thread has, gets set in SidebarChat
-	scrollToBottom: () => void;
-}
-
-
-
-export type ThreadType = {
-	id: string; // store the id here too
-	createdAt: string; // ISO string
-	lastModified: string; // ISO string
-
-	isSubagent?: boolean; // true if this is a subagent thread (hidden from Past Chats)
-
-	messages: ChatMessage[];
-	filesWithUserChanges: Set<string>;
-
-	// this doesn't need to go in a state object, but feels right
-	state: {
-		currCheckpointIdx: number | null; // the latest checkpoint we're at (null if not at a particular checkpoint, like if the chat is streaming, or chat just finished and we haven't clicked on a checkpt)
-
-		stagingSelections: StagingSelectionItem[];
-		focusedMessageIdx: number | undefined; // index of the user message that is being edited (undefined if none)
-
-		linksOfMessageIdx: { // eg. link = linksOfMessageIdx[4]['RangeFunction']
-			[messageIdx: number]: {
-				[codespanName: string]: CodespanLocationLink
-			}
-		}
-
-
-		mountedInfo?: {
-			whenMounted: Promise<WhenMounted>
-			_whenMountedResolver: (res: WhenMounted) => void
-			mountedIsResolvedRef: { current: boolean };
-		}
-
-
-	};
-}
-
-type ChatThreads = {
-	[id: string]: undefined | ThreadType;
-}
-
-
-export type ThreadsState = {
-	allThreads: ChatThreads;
-	currentThreadId: string; // intended for internal use only
-}
-
-export type IsRunningType =
-	| 'LLM' // the LLM is currently streaming
-	| 'tool' // whether a tool is currently running
-	| 'awaiting_user' // awaiting user call
-	| 'idle' // nothing is running now, but the chat should still appear like it's going (used in-between calls)
-	| undefined
-
-export type ThreadStreamState = {
-	[threadId: string]: undefined | {
-		isRunning: undefined;
-		error?: { message: string, fullError: Error | null, };
-		llmInfo?: undefined;
-		toolInfo?: undefined;
-		interrupt?: undefined;
-	} | { // an assistant message is being written
-		isRunning: 'LLM';
-		error?: undefined;
-		llmInfo: {
-			displayContentSoFar: string;
-			reasoningSoFar: string;
-			toolCallSoFar: RawToolCallObj | null;
-		};
-		toolInfo?: undefined;
-		interrupt: Promise<() => void>; // calling this should have no effect on state - would be too confusing. it just cancels the tool
-	} | { // a tool is being run
-		isRunning: 'tool';
-		error?: undefined;
-		llmInfo?: undefined;
-		toolInfo: {
-			toolName: ToolName;
-			toolParams: ToolCallParams<ToolName>;
-			id: string;
-			content: string;
-			rawParams: RawToolParamsObj;
-			mcpServerName: string | undefined;
-		};
-		interrupt: Promise<() => void>;
-	} | {
-		isRunning: 'awaiting_user';
-		error?: undefined;
-		llmInfo?: undefined;
-		toolInfo?: undefined;
-		interrupt?: undefined;
-	} | {
-		isRunning: 'idle';
-		error?: undefined;
-		llmInfo?: undefined;
-		toolInfo?: undefined;
-		interrupt: 'not_needed' | Promise<() => void>; // calling this should have no effect on state - would be too confusing. it just cancels the tool
-	}
 }
 
 const newThreadObject = () => {
@@ -229,76 +132,6 @@ const newThreadObject = () => {
 
 
 
-export interface IChatThreadService {
-	readonly _serviceBrand: undefined;
-
-	readonly state: ThreadsState;
-	readonly streamState: ThreadStreamState; // not persistent
-
-	onDidChangeCurrentThread: Event<void>;
-	onDidChangeStreamState: Event<{ threadId: string }>
-
-	getCurrentThread(): ThreadType;
-	openNewThread(): void;
-	switchToThread(threadId: string): void;
-
-	// thread selector
-	deleteThread(threadId: string): void;
-	duplicateThread(threadId: string): void;
-
-	// exposed getters/setters
-	// these all apply to current thread
-	getCurrentMessageState: (messageIdx: number) => UserMessageState
-	setCurrentMessageState: (messageIdx: number, newState: Partial<UserMessageState>) => void
-	getCurrentThreadState: () => ThreadType['state']
-	setCurrentThreadState: (newState: Partial<ThreadType['state']>) => void
-
-	// you can edit multiple messages - the one you're currently editing is "focused", and we add items to that one when you press cmd+L.
-	getCurrentFocusedMessageIdx(): number | undefined;
-	isCurrentlyFocusingMessage(): boolean;
-	setCurrentlyFocusedMessageIdx(messageIdx: number | undefined): void;
-
-	popStagingSelections(numPops?: number): void;
-	addNewStagingSelection(newSelection: StagingSelectionItem): void;
-
-	dangerousSetState: (newState: ThreadsState) => void;
-	resetState: () => void;
-
-	// // current thread's staging selections
-	// closeCurrentStagingSelectionsInMessage(opts: { messageIdx: number }): void;
-	// closeCurrentStagingSelectionsInThread(): void;
-
-	// codespan links (link to symbols in the markdown)
-	getCodespanLink(opts: { codespanStr: string, messageIdx: number, threadId: string }): CodespanLocationLink | undefined;
-	addCodespanLink(opts: { newLinkText: string, newLinkLocation: CodespanLocationLink, messageIdx: number, threadId: string }): void;
-	generateCodespanLink(opts: { codespanStr: string, threadId: string }): Promise<CodespanLocationLink>;
-	getRelativeStr(uri: URI): string | undefined
-
-	// entry pts
-	abortRunning(threadId: string): Promise<void>;
-	dismissStreamError(threadId: string): void;
-
-	// call to edit a message
-	editUserMessageAndStreamResponse({ userMessage, messageIdx, threadId }: { userMessage: string, messageIdx: number, threadId: string }): Promise<void>;
-
-	// call to add a message
-	addUserMessageAndStreamResponse({ userMessage, threadId, webSearchEnabled, images }: { userMessage: string, threadId: string, webSearchEnabled?: boolean, images?: import('../common/chatThreadServiceTypes.js').ImageAttachment[] }): Promise<void>;
-
-	// approve/reject
-	approveLatestToolRequest(threadId: string): void;
-	rejectLatestToolRequest(threadId: string): void;
-
-	// plan mode
-	executePlan(threadId: string, planMessageIdx: number): void;
-
-	// jump to history
-	jumpToCheckpointBeforeMessageIdx(opts: { threadId: string, messageIdx: number, jumpToUserModified: boolean }): void;
-
-	focusCurrentChat: () => Promise<void>
-	blurCurrentChat: () => Promise<void>
-}
-
-export const IChatThreadService = createDecorator<IChatThreadService>('voidChatThreadService');
 class ChatThreadService extends Disposable implements IChatThreadService {
 	_serviceBrand: undefined;
 
@@ -311,6 +144,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 	readonly streamState: ThreadStreamState = {}
 	state: ThreadsState // allThreads is persisted, currentThread is not
+
+	// Plan file URI -> { threadId, planMessageIdx } mapping
+	private readonly _planFileMappings = new Map<string, { threadId: string; planMessageIdx: number }>()
 
 	// used in checkpointing
 	// private readonly _userModifiedFilesToCheckInCheckpoints = new LRUCache<string, null>(50)
@@ -332,6 +168,13 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@IDirectoryStrService private readonly _directoryStringService: IDirectoryStrService,
 		@IFileService private readonly _fileService: IFileService,
 		@IMCPService private readonly _mcpService: IMCPService,
+		@IAgentEventService private readonly _agentEventService: IAgentEventService,
+		@ITokenBudgetService _tokenBudgetService: ITokenBudgetService,
+		@IModelRouterService private readonly _modelRouterService: IModelRouterService,
+		@IMemoryService private readonly _memoryService: IMemoryService,
+		@IEditorService private readonly _editorService: IEditorService,
+		@ISelfHealingService private readonly _selfHealingService: ISelfHealingService,
+		@IVoidAuthService private readonly _authService: IVoidAuthService,
 	) {
 		super()
 		this.state = { allThreads: {}, currentThreadId: null as unknown as string } // default state
@@ -740,6 +583,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		modelSelectionOptions,
 		callThisToolFirst,
 		webSearchEnabled,
+		chatModeOverride,
 	}: {
 		threadId: string,
 		modelSelection: ModelSelection | null,
@@ -747,6 +591,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 		callThisToolFirst?: ToolMessage<ToolName> & { type: 'tool_request' },
 		webSearchEnabled?: boolean,
+		chatModeOverride?: ChatMode,
 	}) {
 
 
@@ -755,12 +600,29 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		// _runToolCall does not need setStreamState({idle}) before it, but it needs it after it. (handles its own setStreamState)
 
 		// above just defines helpers, below starts the actual function
-		const { chatMode } = this._settingsService.state.globalSettings // should not change as we loop even if user changes it, so it goes here
+		const chatMode = chatModeOverride ?? this._settingsService.state.globalSettings.chatMode // should not change as we loop even if user changes it, so it goes here
 		const { overridesOfModel } = this._settingsService.state
+
+		// Phase 7: Model Router — auto-select model based on conversation complexity
+		const messagesForRouter = this.state.allThreads[threadId]?.messages ?? []
+		modelSelection = this._modelRouterService.selectModel(messagesForRouter, modelSelection)
+
+		// Phase 1: Agent Loop Hardening
+		const maxIterations = this._settingsService.state.globalSettings.maxAgentIterations ?? 50
+		const lintRetryLimit = this._settingsService.state.globalSettings.lintRetryLimit ?? 3
+
+		// Phase 1.2: Error Recovery - track lint retries per file and tool call repetitions
+		const lintRetryCountByFile = new Map<string, number>()
+		const recentToolCalls: { name: string; paramsHash: string; resultCategory: string | null; timestamp: number }[] = []
+		const MAX_RECENT_TOOL_CALLS = 10
+		const REPEAT_THRESHOLD = 3
 
 		let nMessagesSent = 0
 		let shouldSendAnotherMessage = true
 		let isRunningWhenEnd: IsRunningType = undefined
+
+		// Emit loop start event
+		this._agentEventService.emitSimple('loop_start', threadId, 0, maxIterations)
 
 		// before enter loop, call tool
 		if (callThisToolFirst) {
@@ -774,8 +636,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' })  // just decorative, for clarity
 
 
-		// tool use loop
-		while (shouldSendAnotherMessage) {
+		// tool use loop — Phase 1.1: enforce max iteration limit
+		while (shouldSendAnotherMessage && nMessagesSent < maxIterations) {
 			// false by default each iteration
 			shouldSendAnotherMessage = false
 			isRunningWhenEnd = undefined
@@ -810,6 +672,14 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				let resMessageIsDonePromise: (res: ResTypes) => void // resolves when user approves this tool use (or if tool doesn't require approval)
 				const messageIsDonePromise = new Promise<ResTypes>((res, rej) => { resMessageIsDonePromise = res })
 
+				// Build proxy config if authenticated and not in self-hosted mode
+				const authState = this._authService.state
+				const globalSettings = this._settingsService.state.globalSettings
+				const useSelfHostedMode = globalSettings.useSelfHostedMode || false
+				const proxyConfig = (authState.isAuthenticated && authState.session && !useSelfHostedMode)
+					? { authToken: authState.session.accessToken, backendUrl: globalSettings.backendUrl || 'http://localhost:3456' }
+					: undefined
+
 				const llmCancelToken = this._llmMessageService.sendLLMMessage({
 					messagesType: 'chatMessages',
 					chatMode,
@@ -819,6 +689,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					overridesOfModel,
 					logging: { loggingName: `Chat - ${chatMode}`, loggingExtras: { threadId, nMessagesSent, chatMode } },
 					separateSystemMessage: separateSystemMessage,
+					proxyConfig,
 					onText: ({ fullText, fullReasoning, toolCall }) => {
 						this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: fullText, reasoningSoFar: fullReasoning, toolCallSoFar: toolCall ?? null }, interrupt: Promise.resolve(() => { if (llmCancelToken) this._llmMessageService.abort(llmCancelToken) }) })
 					},
@@ -887,6 +758,11 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 				this._addMessageToThread(threadId, { role: 'assistant', displayContent: info.fullText, reasoning: info.fullReasoning, anthropicReasoning: info.anthropicReasoning })
 
+				// Live progress: if this is a plan execution (chatModeOverride used), parse COMPLETED TASK N markers
+				if (chatModeOverride === 'agent' && info.fullText) {
+					this._updatePlanProgressFromResponse(threadId, info.fullText)
+				}
+
 				// In plan mode, if there's no tool call, parse the response for plan items
 				if (chatMode === 'plan' && !toolCall && info.fullText) {
 					const planItems = this._parsePlanItems(info.fullText)
@@ -898,6 +774,13 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 							items: planItems,
 							status: 'draft',
 						})
+
+						// Generate .md plan file and open it in the editor
+						const thread = this.state.allThreads[threadId]
+						if (thread) {
+							const planMessageIdx = thread.messages.length - 1
+							this._generatePlanFile(threadId, planMessageIdx, planItems, info.fullText)
+						}
 					}
 				}
 
@@ -905,22 +788,165 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 				// call tool if there is one
 				if (toolCall) {
+					// Phase 1.2: Infinite loop detection - track recent tool calls
+					const paramsHash = JSON.stringify(toolCall.rawParams)
+					recentToolCalls.push({ name: toolCall.name, paramsHash, resultCategory: null, timestamp: Date.now() })
+					if (recentToolCalls.length > MAX_RECENT_TOOL_CALLS) recentToolCalls.shift()
+
+					// Check for repeated identical tool calls
+					if (recentToolCalls.length >= REPEAT_THRESHOLD) {
+						const last = recentToolCalls[recentToolCalls.length - 1]
+						const repeatCount = recentToolCalls.filter(tc => tc.name === last.name && tc.paramsHash === last.paramsHash).length
+						if (repeatCount >= REPEAT_THRESHOLD) {
+							this._agentEventService.emitSimple('error_recovery', threadId, nMessagesSent, maxIterations, { reason: 'infinite_loop_detected', toolName: toolCall.name })
+							this._addMessageToThread(threadId, {
+								role: 'user',
+								content: 'You are repeating the same action. Please try a different approach or ask the user for guidance.',
+								displayContent: '[System: Infinite loop detected - agent prompted to change approach]',
+								selections: [],
+								state: { stagingSelections: [], isBeingEdited: false },
+							})
+							shouldSendAnotherMessage = true
+							this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' })
+							continue // skip tool call, send the injection message instead
+						}
+					}
+
+					// Phase 1.2: Lint retry cap - track read_lint_errors per file
+					if (toolCall.name === 'read_lint_errors' && toolCall.rawParams?.uri) {
+						const filePath = String(toolCall.rawParams.uri)
+						const count = (lintRetryCountByFile.get(filePath) ?? 0) + 1
+						lintRetryCountByFile.set(filePath, count)
+						if (count > lintRetryLimit) {
+							this._agentEventService.emitSimple('error_recovery', threadId, nMessagesSent, maxIterations, { reason: 'lint_retry_limit', file: filePath })
+							this._addMessageToThread(threadId, {
+								role: 'user',
+								content: `Lint retry limit reached for ${filePath}. Moving on to other tasks.`,
+								displayContent: `[System: Lint retry limit reached for ${filePath}]`,
+								selections: [],
+								state: { stagingSelections: [], isBeingEdited: false },
+							})
+							shouldSendAnotherMessage = true
+							this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' })
+							continue // skip tool call
+						}
+					}
+
+					// Emit tool start event
+					this._agentEventService.emitSimple('tool_start', threadId, nMessagesSent, maxIterations, { toolName: toolCall.name })
+
 					const mcpTools = this._mcpService.getMCPTools()
 					const mcpTool = mcpTools?.find(t => t.name === toolCall.name)
 
 					const { awaitingUserApproval, interrupted } = await this._runToolCall(threadId, toolCall.name, toolCall.id, mcpTool?.mcpServerName, { preapproved: false, unvalidatedToolParams: toolCall.rawParams })
+
+					// Emit tool end event
+					this._agentEventService.emitSimple('tool_end', threadId, nMessagesSent, maxIterations, { toolName: toolCall.name })
+
 					if (interrupted) {
 						this._setStreamState(threadId, undefined)
 						return
 					}
 					if (awaitingUserApproval) { isRunningWhenEnd = 'awaiting_user' }
-					else { shouldSendAnotherMessage = true }
+					else {
+						shouldSendAnotherMessage = true
+
+						// Self-healing: enrich terminal error results with file context
+						const selfHealingConfig = this._settingsService.state.globalSettings.selfHealingConfig
+						if (toolCall.name === 'run_command' || toolCall.name === 'run_persistent_command') {
+							const thread = this.state.allThreads[threadId]
+							const lastMsg = thread?.messages.at(-1)
+							if (lastMsg && lastMsg.role === 'tool' && lastMsg.type === 'success' && lastMsg.result) {
+								const toolResult = lastMsg.result as BuiltinToolResultType['run_command']
+								const classification = toolResult.errorClassification
+
+								// Update the tool call record with error category
+								const lastRecord = recentToolCalls[recentToolCalls.length - 1]
+								if (lastRecord && classification?.primaryCategory) {
+									lastRecord.resultCategory = classification.primaryCategory
+								}
+
+								if (classification?.hasErrors && selfHealingConfig.enabled && selfHealingConfig.autoReadErrorContext) {
+									try {
+										const fileContext = await this._selfHealingService.buildErrorContext(classification.errors)
+										if (fileContext) {
+											const healingPrompt = this._selfHealingService.generateHealingPrompt(classification, fileContext, 0)
+											lastMsg.content = lastMsg.content + '\n\n' + healingPrompt
+											this._agentEventService.emitSimple('self_healing_context_injected', threadId, nMessagesSent, maxIterations, { category: classification.primaryCategory })
+										}
+									} catch {
+										// Silently fail — don't break the agent loop
+									}
+								}
+
+								// Circuit breaker: same error category 3+ times in recent calls
+								if (classification?.primaryCategory && classification.primaryCategory !== 'unknown') {
+									const sameCount = recentToolCalls.slice(-5)
+										.filter(tc => tc.resultCategory === classification.primaryCategory).length
+									if (sameCount >= 3) {
+										this._agentEventService.emitSimple('circuit_breaker_tripped', threadId, nMessagesSent, maxIterations,
+											{ category: classification.primaryCategory })
+										this._addMessageToThread(threadId, {
+											role: 'user',
+											content: `You have encountered the same type of error (${classification.primaryCategory}) 3 times. Stop attempting to fix it automatically and explain the issue to the user.`,
+											displayContent: `[System: Circuit breaker - repeated ${classification.primaryCategory} errors]`,
+											selections: [],
+											state: { stagingSelections: [], isBeingEdited: false },
+										})
+										shouldSendAnotherMessage = true
+										this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' })
+										continue
+									}
+								}
+							}
+						}
+
+						// Oscillation detection (A-B-A-B pattern)
+						if (recentToolCalls.length >= 4) {
+							const last4 = recentToolCalls.slice(-4)
+							const isOscillating = (
+								last4[0].name === last4[2].name && last4[0].paramsHash === last4[2].paramsHash &&
+								last4[1].name === last4[3].name && last4[1].paramsHash === last4[3].paramsHash &&
+								last4[0].name !== last4[1].name
+							)
+							if (isOscillating) {
+								this._agentEventService.emitSimple('error_recovery', threadId, nMessagesSent, maxIterations,
+									{ reason: 'oscillation_detected' })
+								this._addMessageToThread(threadId, {
+									role: 'user',
+									content: 'You are stuck in an edit-test oscillation loop. The same errors keep recurring. Step back, re-read the relevant files, and try a fundamentally different approach. If stuck, ask the user.',
+									displayContent: '[System: Edit-test oscillation detected]',
+									selections: [],
+									state: { stagingSelections: [], isBeingEdited: false },
+								})
+								shouldSendAnotherMessage = true
+								this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' })
+								continue
+							}
+						}
+					}
 
 					this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' }) // just decorative, for clarity
 				}
 
+				// Emit iteration event
+				this._agentEventService.emitSimple('loop_iteration', threadId, nMessagesSent, maxIterations)
+
 			} // end while (attempts)
 		} // end while (send message)
+
+		// Phase 1.1: If we hit the iteration limit, inject a message and stop
+		if (nMessagesSent >= maxIterations && shouldSendAnotherMessage) {
+			this._agentEventService.emitSimple('iteration_limit', threadId, nMessagesSent, maxIterations)
+			this._addMessageToThread(threadId, {
+				role: 'user',
+				content: `Agent iteration limit reached (${maxIterations} iterations). Stopping the agent loop. You can continue by sending another message.`,
+				displayContent: `[System: Agent reached iteration limit of ${maxIterations}]`,
+				selections: [],
+				state: { stagingSelections: [], isBeingEdited: false },
+			})
+			isRunningWhenEnd = undefined
+		}
 
 		// if awaiting user approval, keep isRunning true, else end isRunning
 		this._setStreamState(threadId, { isRunning: isRunningWhenEnd })
@@ -928,23 +954,242 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		// add checkpoint before the next user message
 		if (!isRunningWhenEnd) this._addUserCheckpoint({ threadId })
 
+		// Emit loop end event
+		this._agentEventService.emitSimple('loop_end', threadId, nMessagesSent, maxIterations)
+
 		// capture number of messages sent
-		this._metricsService.capture('Agent Loop Done', { nMessagesSent, chatMode })
+		this._metricsService.capture('Agent Loop Done', { nMessagesSent, chatMode, hitIterationLimit: nMessagesSent >= maxIterations })
+
+		// Phase 8: Memory extraction — after agent loop, extract memories from conversation
+		const memoryConfig = this._settingsService.state.globalSettings.memoryConfig
+		if (memoryConfig.enabled && memoryConfig.autoExtract && nMessagesSent >= 3 && !isRunningWhenEnd) {
+			this._extractMemoriesFromThread(threadId).catch(() => { /* silently fail */ })
+		}
 	}
 
-	private _parsePlanItems(text: string): { text: string, completed: boolean }[] {
-		const items: { text: string, completed: boolean }[] = []
+	/**
+	 * Phase 8: Extract memories from a completed agent conversation.
+	 * Sends a summarization request to the LLM to extract key facts, decisions, and patterns.
+	 */
+	private async _extractMemoriesFromThread(threadId: string): Promise<void> {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return
+
+		// Build a conversation summary from user and assistant messages
+		const threadMessages = thread.messages
+		const summaryParts: string[] = []
+		for (const msg of threadMessages) {
+			if (msg.role === 'user' && msg.displayContent) {
+				summaryParts.push(`User: ${msg.displayContent}`)
+			} else if (msg.role === 'assistant' && msg.displayContent) {
+				if (msg.displayContent.length > 0) {
+					summaryParts.push(`Assistant: ${msg.displayContent.substring(0, 500)}`)
+				}
+			}
+		}
+		if (summaryParts.length < 2) return
+
+		const conversationSummary = summaryParts.join('\n')
+
+		// Use sendLLMMessage to extract memories
+		const modelSelection = this._currentModelSelectionProps().modelSelection
+		if (!modelSelection) return
+
+		const extractionPrompt = `Analyze this conversation and extract key information worth remembering for future sessions. Return a JSON array of objects with: type ("project_fact" | "decision" | "pattern" | "preference"), content (concise description), context (brief context), tags (array of keywords). Only include truly important and reusable information. Return 0-5 items. If nothing is worth remembering, return an empty array [].
+
+Conversation:
+${conversationSummary.substring(0, 3000)}
+
+Return ONLY the JSON array, no other text.`
+
+		// Prepare messages via the convert service
+		const { messages: llmMessages, separateSystemMessage } = this._convertToLLMMessagesService.prepareLLMSimpleMessages({
+			simpleMessages: [{ role: 'user', content: extractionPrompt }],
+			systemMessage: 'You are a memory extraction assistant. Extract key facts from conversations as JSON.',
+			modelSelection,
+			featureName: 'Chat',
+		})
+
+		return new Promise<void>((resolve) => {
+			let fullResponse = ''
+			this._llmMessageService.sendLLMMessage({
+				messagesType: 'chatMessages',
+				messages: llmMessages,
+				separateSystemMessage,
+				chatMode: null,
+				logging: { loggingName: 'memoryExtraction' },
+				modelSelection,
+				modelSelectionOptions: undefined,
+				overridesOfModel: this._settingsService.state.overridesOfModel,
+				onText: ({ fullText }) => { fullResponse = fullText },
+				onFinalMessage: () => {
+					this._memoryService.extractAndStoreFromSummary(fullResponse).then(() => resolve()).catch(() => resolve())
+				},
+				onError: () => { resolve() },
+				onAbort: () => { resolve() },
+			})
+		})
+	}
+
+	private _parsePlanItems(text: string): PlanItem[] {
+		const items: PlanItem[] = []
 		const lines = text.split('\n')
 		for (const line of lines) {
 			const uncheckedMatch = line.match(/^\s*-\s*\[\s*\]\s*(.+)/)
 			const checkedMatch = line.match(/^\s*-\s*\[\s*[xX]\s*\]\s*(.+)/)
-			if (checkedMatch) {
-				items.push({ text: checkedMatch[1].trim(), completed: true })
-			} else if (uncheckedMatch) {
-				items.push({ text: uncheckedMatch[1].trim(), completed: false })
+			const rawText = checkedMatch?.[1]?.trim() ?? uncheckedMatch?.[1]?.trim()
+			if (!rawText) continue
+
+			const completed = !!checkedMatch
+
+			// Parse size label: **[S]**, [S], **[M]**, [M], **[L]**, [L]
+			let size: PlanItem['size']
+			let itemText = rawText
+			const sizeMatch = itemText.match(/^(?:\*\*)?(\[([SML])\])(?:\*\*)?\s*/)
+			if (sizeMatch) {
+				size = sizeMatch[2] as 'S' | 'M' | 'L'
+				itemText = itemText.slice(sizeMatch[0].length)
 			}
+
+			// Extract file paths from backtick-wrapped strings containing a dot extension
+			const fileMatches = itemText.match(/`([^`]+\.[a-zA-Z0-9]+)`/g)
+			const files = fileMatches?.map(m => m.slice(1, -1)) ?? []
+
+			items.push({
+				id: generateUuid(),
+				text: itemText,
+				completed,
+				status: completed ? 'complete' : 'pending',
+				files: files.length > 0 ? files : undefined,
+				size,
+			})
 		}
 		return items
+	}
+
+	private _updatePlanProgressFromResponse(threadId: string, responseText: string) {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return
+
+		// Find the executing plan message
+		const planIdx = thread.messages.findIndex(m => m.role === 'plan' && m.status === 'executing')
+		if (planIdx === -1) return
+
+		const planMessage = thread.messages[planIdx]
+		if (planMessage.role !== 'plan') return
+
+		// Parse COMPLETED TASK N markers
+		const completedMatches = responseText.matchAll(/COMPLETED TASK (\d+)/gi)
+		let updated = false
+		const items = [...planMessage.items]
+
+		for (const match of completedMatches) {
+			const taskNum = parseInt(match[1], 10) - 1 // 0-indexed
+			if (taskNum >= 0 && taskNum < items.length && items[taskNum].status !== 'complete') {
+				items[taskNum] = { ...items[taskNum], completed: true, status: 'complete' }
+				updated = true
+			}
+		}
+
+		if (updated) {
+			this._editMessageInThread(threadId, planIdx, { ...planMessage, items })
+			this._updatePlanFileCheckboxes(threadId, planIdx, items)
+		}
+	}
+
+	getPlanFileMapping(uri: URI): { threadId: string; planMessageIdx: number } | undefined {
+		return this._planFileMappings.get(uri.toString())
+	}
+
+	private async _generatePlanFile(threadId: string, planMessageIdx: number, planItems: PlanItem[], fullText: string) {
+		const folders = this._workspaceContextService.getWorkspace().folders
+		if (folders.length === 0) return
+
+		const rootUri = folders[0].uri
+		const plansDir = URI.joinPath(rootUri, '.void', 'plans')
+
+		// Ensure .void/plans directory exists
+		try { await this._fileService.createFolder(plansDir) }
+		catch { /* already exists */ }
+
+		// Build markdown content with frontmatter
+		const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+		const fileName = `${timestamp}-plan.md`
+		const planFileUri = URI.joinPath(plansDir, fileName)
+
+		const taskLines = planItems.map(item => {
+			const check = item.completed ? '[x]' : '[ ]'
+			const sizeLabel = item.size ? `**[${item.size}]** ` : ''
+			const fileRefs = item.files?.map(f => `\`${f}\``).join(', ') || ''
+			const fileSuffix = fileRefs ? ` (${fileRefs})` : ''
+			return `- ${check} ${sizeLabel}${item.text}${fileSuffix}`
+		}).join('\n')
+
+		const mdContent = [
+			'---',
+			`threadId: ${threadId}`,
+			`planMessageIdx: ${planMessageIdx}`,
+			`status: draft`,
+			'---',
+			'',
+			'# Plan',
+			'',
+			'## Tasks',
+			taskLines,
+			'',
+			'## Details',
+			fullText,
+			'',
+		].join('\n')
+
+		try {
+			await this._fileService.writeFile(planFileUri, VSBuffer.fromString(mdContent))
+
+			// Track the mapping
+			this._planFileMappings.set(planFileUri.toString(), { threadId, planMessageIdx })
+
+			// Open the file in the editor
+			await this._editorService.openEditor({ resource: planFileUri })
+		} catch (e) {
+			console.error('Failed to generate plan file:', e)
+		}
+	}
+
+	private async _updatePlanFileStatus(threadId: string, planMessageIdx: number, status: string) {
+		for (const [uriStr, mapping] of this._planFileMappings) {
+			if (mapping.threadId === threadId && mapping.planMessageIdx === planMessageIdx) {
+				const uri = URI.parse(uriStr)
+				try {
+					const content = (await this._fileService.readFile(uri)).value.toString()
+					const updated = content.replace(/^status: .+$/m, `status: ${status}`)
+					await this._fileService.writeFile(uri, VSBuffer.fromString(updated))
+				} catch { /* file may have been deleted */ }
+				break
+			}
+		}
+	}
+
+	private async _updatePlanFileCheckboxes(threadId: string, planIdx: number, items: PlanItem[]) {
+		for (const [uriStr, mapping] of this._planFileMappings) {
+			if (mapping.threadId === threadId && mapping.planMessageIdx === planIdx) {
+				const uri = URI.parse(uriStr)
+				try {
+					const content = (await this._fileService.readFile(uri)).value.toString()
+					const lines = content.split('\n')
+					let taskLineIdx = 0
+					for (let i = 0; i < lines.length; i++) {
+						if (lines[i].match(/^\s*-\s*\[[ xX]\]/)) {
+							if (taskLineIdx < items.length && items[taskLineIdx].completed) {
+								lines[i] = lines[i].replace(/\[\s*\]/, '[x]')
+							}
+							taskLineIdx++
+						}
+					}
+					await this._fileService.writeFile(uri, VSBuffer.fromString(lines.join('\n')))
+				} catch { /* file may have been deleted */ }
+				break
+			}
+		}
 	}
 
 	executePlan(threadId: string, planMessageIdx: number) {
@@ -959,26 +1204,193 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		this._editMessageInThread(threadId, planMessageIdx, {
 			...planMessage,
 			status: 'executing',
+			items: planMessage.items.map(item => ({ ...item, status: 'pending' as const })),
+		})
+		this._updatePlanFileStatus(threadId, planMessageIdx, 'executing')
+
+		// Compose numbered task list for the LLM
+		const taskList = planMessage.items.map((item, i) =>
+			`${i + 1}. ${item.text}`
+		).join('\n')
+
+		const planInstruction = `Execute the following implementation plan. Complete each task in order. After completing each task, output "COMPLETED TASK N" (where N is the task number) before moving to the next.\n\nTasks:\n${taskList}`
+
+		// Add checkpoint before execution
+		this._addUserCheckpoint({ threadId })
+
+		// Add synthetic user message
+		const userHistoryElt: ChatMessage = {
+			role: 'user',
+			content: planInstruction,
+			displayContent: 'Executing plan...',
+			selections: null,
+			state: defaultMessageState,
+		}
+		this._addMessageToThread(threadId, userHistoryElt)
+		this._setThreadState(threadId, { currCheckpointIdx: null })
+
+		// Run agent with chatModeOverride: 'agent' so LLM gets full tool access
+		const agentPromise = this._runChatAgent({
+			threadId,
+			...this._currentModelSelectionProps(),
+			chatModeOverride: 'agent',
 		})
 
-		// Compose instruction from the plan and run the agent loop
-		const planInstruction = `Execute the following implementation plan step by step. After completing each step, move on to the next:\n\n${planMessage.content}`
+		this._wrapRunAgentToNotify(agentPromise, threadId)
 
-		this._addUserMessageAndStreamResponse({
-			userMessage: planInstruction,
-			threadId,
-		}).then(() => {
-			// After execution, mark plan as completed
+		agentPromise.then(() => {
+			// After execution, mark remaining incomplete items as completed
 			const currentThread = this.state.allThreads[threadId]
 			if (!currentThread) return
 			const currentPlan = currentThread.messages[planMessageIdx]
 			if (currentPlan && currentPlan.role === 'plan') {
+				const completedItems = currentPlan.items.map(item => ({
+					...item,
+					completed: true,
+					status: item.status === 'failed' ? 'failed' as const : 'complete' as const,
+				}))
 				this._editMessageInThread(threadId, planMessageIdx, {
 					...currentPlan,
 					status: 'completed',
-					items: currentPlan.items.map(item => ({ ...item, completed: true })),
+					items: completedItems,
 				})
+				this._updatePlanFileStatus(threadId, planMessageIdx, 'completed')
+				this._updatePlanFileCheckboxes(threadId, planMessageIdx, completedItems)
 			}
+		})
+
+		// Scroll to bottom
+		this.state.allThreads[threadId]?.state.mountedInfo?.whenMounted.then(m => {
+			m.scrollToBottom()
+		})
+	}
+
+	executePlanStepByStep(threadId: string, planMessageIdx: number) {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return
+
+		const planMessage = thread.messages[planMessageIdx]
+		if (!planMessage || planMessage.role !== 'plan') return
+		if (planMessage.status !== 'draft') return
+
+		// Store execution state
+		this._currentPlanExecution = { threadId, planMessageIdx, currentTaskIndex: 0 }
+
+		// Update plan status to executing
+		this._editMessageInThread(threadId, planMessageIdx, {
+			...planMessage,
+			status: 'executing',
+			items: planMessage.items.map(item => ({ ...item, status: 'pending' as const })),
+		})
+
+		this._executeNextPlanStep(threadId)
+	}
+
+	continuePlanExecution(threadId: string) {
+		if (!this._currentPlanExecution || this._currentPlanExecution.threadId !== threadId) return
+		this._executeNextPlanStep(threadId)
+	}
+
+	private _currentPlanExecution: { threadId: string, planMessageIdx: number, currentTaskIndex: number } | null = null
+
+	private _executeNextPlanStep(threadId: string) {
+		if (!this._currentPlanExecution || this._currentPlanExecution.threadId !== threadId) return
+
+		const { planMessageIdx, currentTaskIndex } = this._currentPlanExecution
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return
+
+		const planMessage = thread.messages[planMessageIdx]
+		if (!planMessage || planMessage.role !== 'plan') return
+
+		// Find next uncompleted task
+		let nextIdx = currentTaskIndex
+		while (nextIdx < planMessage.items.length && (planMessage.items[nextIdx].status === 'complete' || planMessage.items[nextIdx].status === 'skipped')) {
+			nextIdx++
+		}
+
+		if (nextIdx >= planMessage.items.length) {
+			// All tasks done
+			this._editMessageInThread(threadId, planMessageIdx, {
+				...planMessage,
+				status: 'completed',
+				items: planMessage.items.map(item => ({
+					...item,
+					completed: true,
+					status: item.status === 'failed' ? 'failed' as const : 'complete' as const,
+				})),
+			})
+			this._currentPlanExecution = null
+			return
+		}
+
+		const task = planMessage.items[nextIdx]
+
+		// Mark current task as in_progress
+		const updatedItems = [...planMessage.items]
+		updatedItems[nextIdx] = { ...task, status: 'in_progress' }
+		this._editMessageInThread(threadId, planMessageIdx, {
+			...planMessage,
+			items: updatedItems,
+		})
+
+		// Add checkpoint and synthetic user message
+		this._addUserCheckpoint({ threadId })
+		const instruction = `Execute ONLY the following task (task ${nextIdx + 1} of ${planMessage.items.length}):\n\n${task.text}\n\nDo not proceed to any other tasks. When done, output "COMPLETED TASK ${nextIdx + 1}".`
+		const userHistoryElt: ChatMessage = {
+			role: 'user',
+			content: instruction,
+			displayContent: `Step ${nextIdx + 1}: ${task.text}`,
+			selections: null,
+			state: defaultMessageState,
+		}
+		this._addMessageToThread(threadId, userHistoryElt)
+		this._setThreadState(threadId, { currCheckpointIdx: null })
+
+		// Update tracking index
+		this._currentPlanExecution.currentTaskIndex = nextIdx + 1
+
+		const agentPromise = this._runChatAgent({
+			threadId,
+			...this._currentModelSelectionProps(),
+			chatModeOverride: 'agent',
+		})
+
+		this._wrapRunAgentToNotify(agentPromise, threadId)
+
+		agentPromise.then(() => {
+			// Mark this step complete
+			const currentThread = this.state.allThreads[threadId]
+			if (!currentThread) return
+			const currentPlan = currentThread.messages[planMessageIdx]
+			if (currentPlan && currentPlan.role === 'plan') {
+				const items = [...currentPlan.items]
+				items[nextIdx] = { ...items[nextIdx], completed: true, status: 'complete' }
+				this._editMessageInThread(threadId, planMessageIdx, { ...currentPlan, items })
+			}
+
+			// Check if more steps remain
+			if (this._currentPlanExecution && this._currentPlanExecution.currentTaskIndex < planMessage.items.length) {
+				// Pause - set stream state to awaiting_user so Continue button shows
+				this._setStreamState(threadId, { isRunning: 'awaiting_user' })
+			} else {
+				// All done
+				const ct = this.state.allThreads[threadId]
+				if (!ct) return
+				const finalPlan = ct.messages[planMessageIdx]
+				if (finalPlan && finalPlan.role === 'plan') {
+					this._editMessageInThread(threadId, planMessageIdx, {
+						...finalPlan,
+						status: 'completed',
+					})
+				}
+				this._currentPlanExecution = null
+			}
+		})
+
+		// Scroll to bottom
+		this.state.allThreads[threadId]?.state.mountedInfo?.whenMounted.then(m => {
+			m.scrollToBottom()
 		})
 	}
 
@@ -1746,6 +2158,111 @@ We only need to do it for files that were edited since `from`, ie files between 
 		}
 		this._storeAllThreads(newThreads)
 		this._setState({ allThreads: newThreads })
+	}
+
+
+	// Phase 5: Run a subagent on a hidden in-memory thread
+	async runSubagentThread({
+		prompt,
+		chatModeOverride,
+		maxIterations = 10,
+		timeoutMs = 120_000,
+	}: {
+		prompt: string;
+		chatModeOverride: ChatMode;
+		maxIterations?: number;
+		timeoutMs?: number;
+	}): Promise<{ result: string; status: 'completed' | 'failed' }> {
+
+		// Create a temporary hidden thread (not stored to disk)
+		const threadId = generateUuid()
+		const now = new Date().toISOString()
+		const hiddenThread: ThreadType = {
+			id: threadId,
+			createdAt: now,
+			lastModified: now,
+			isSubagent: true,
+			messages: [],
+			state: {
+				currCheckpointIdx: null,
+				stagingSelections: [],
+				focusedMessageIdx: undefined,
+				linksOfMessageIdx: {},
+			},
+			filesWithUserChanges: new Set(),
+		}
+
+		// Add the hidden thread to state (but don't switch to it or persist it)
+		const allThreads = { ...this.state.allThreads, [threadId]: hiddenThread }
+		this.state = { ...this.state, allThreads }
+
+		// Add the user prompt as the first message
+		this._addMessageToThread(threadId, {
+			role: 'user',
+			content: prompt,
+			displayContent: prompt,
+			selections: [],
+			state: { stagingSelections: [], isBeingEdited: false },
+		})
+
+		// Temporarily override maxAgentIterations for this run
+		const originalMaxIterations = this._settingsService.state.globalSettings.maxAgentIterations
+		;(this._settingsService.state.globalSettings as any).maxAgentIterations = maxIterations
+
+		try {
+			// Run the agent loop with a timeout
+			const agentPromise = this._runChatAgent({
+				threadId,
+				...this._currentModelSelectionProps(),
+				chatModeOverride,
+			})
+
+			const timeoutPromise = new Promise<void>((_, reject) => {
+				setTimeout(() => reject(new Error('Subagent timed out')), timeoutMs)
+			})
+
+			await Promise.race([agentPromise, timeoutPromise])
+
+			// Extract the final result from the thread's messages
+			const thread = this.state.allThreads[threadId]
+			if (!thread) return { result: 'Subagent thread was deleted.', status: 'failed' }
+
+			// Find the last assistant message as the result
+			let resultText = ''
+			for (let i = thread.messages.length - 1; i >= 0; i--) {
+				const msg = thread.messages[i]
+				if (msg.role === 'assistant') {
+					resultText = msg.displayContent
+					break
+				}
+			}
+
+			// Also collect tool result summaries
+			const toolSummaries: string[] = []
+			for (const msg of thread.messages) {
+				if (msg.role === 'tool' && msg.type === 'success' && msg.content) {
+					const brief = msg.content.length > 200 ? msg.content.substring(0, 200) + '...' : msg.content
+					toolSummaries.push(`[${msg.name}]: ${brief}`)
+				}
+			}
+
+			const finalResult = resultText || (toolSummaries.length > 0
+				? `Subagent completed with ${toolSummaries.length} tool calls:\n${toolSummaries.join('\n')}`
+				: 'Subagent completed but produced no output.')
+
+			return { result: finalResult, status: 'completed' }
+
+		} catch (e: any) {
+			return { result: `Subagent error: ${e?.message || e}`, status: 'failed' }
+		} finally {
+			// Restore original maxIterations
+			;(this._settingsService.state.globalSettings as any).maxAgentIterations = originalMaxIterations
+
+			// Clean up: remove the hidden thread from state (don't persist deletion)
+			const cleanedThreads = { ...this.state.allThreads }
+			delete cleanedThreads[threadId]
+			this.state = { ...this.state, allThreads: cleanedThreads }
+		}
 	}
 
 

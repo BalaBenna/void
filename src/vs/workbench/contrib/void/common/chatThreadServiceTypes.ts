@@ -47,9 +47,15 @@ export type CheckpointEntry = {
 
 
 // Plan items for structured plan output
+export type PlanItemStatus = 'pending' | 'in_progress' | 'complete' | 'failed' | 'skipped'
+
 export type PlanItem = {
+	id?: string;
 	text: string;
 	completed: boolean;
+	status?: PlanItemStatus;
+	files?: string[];
+	size?: 'S' | 'M' | 'L';
 }
 
 // Image attachment for user messages

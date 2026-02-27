@@ -71,6 +71,9 @@ export class LLMMessageChannel implements IServerChannel {
 			if (command === 'sendLLMMessage') {
 				this._callSendLLMMessage(params)
 			}
+			else if (command === 'sendProxiedLLMMessage') {
+				this._callSendProxiedLLMMessage(params)
+			}
 			else if (command === 'abort') {
 				await this._callAbort(params)
 			}
@@ -112,6 +115,122 @@ export class LLMMessageChannel implements IServerChannel {
 		}
 		const p = sendLLMMessage(mainThreadParams, this.metricsService);
 		this._infoOfRunningRequest[requestId].waitForSend = p
+	}
+
+	// Proxied LLM call — sends request to backend server instead of calling providers directly
+	private async _callSendProxiedLLMMessage(params: MainSendLLMMessageParams) {
+		const { requestId, proxyConfig, modelSelection, messagesType, messages } = params;
+
+		if (!proxyConfig) {
+			this.llmMessageEmitters.onError.fire({ requestId, message: 'No proxy config provided', fullError: null });
+			return;
+		}
+
+		if (messagesType !== 'chatMessages') {
+			this.llmMessageEmitters.onError.fire({ requestId, message: 'FIM messages not supported via proxy', fullError: null });
+			return;
+		}
+
+		if (!(requestId in this._infoOfRunningRequest))
+			this._infoOfRunningRequest[requestId] = { waitForSend: undefined, abortRef: { current: null } }
+
+		const abortController = new AbortController();
+		this._infoOfRunningRequest[requestId].abortRef.current = () => abortController.abort();
+
+		const p = (async () => {
+			try {
+				// Format messages for the backend completion API
+				// LLMChatMessage is a union (Anthropic/OpenAI/Gemini), so we pass them as-is to the backend
+				const chatMessages = messages as import('../common/sendLLMMessageTypes.js').LLMChatMessage[];
+
+				const response = await fetch(`${proxyConfig.backendUrl}/v1/completions/stream`, {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						'Authorization': `Bearer ${proxyConfig.authToken}`,
+					},
+					body: JSON.stringify({
+						model: modelSelection.modelName,
+						messages: chatMessages,
+						maxTokens: 4096,
+						stream: true,
+					}),
+					signal: abortController.signal,
+				});
+
+				if (!response.ok) {
+					const errData = await response.json().catch(() => ({ error: 'Unknown error' }));
+					this.llmMessageEmitters.onError.fire({
+						requestId,
+						message: errData.error || `Backend returned ${response.status}`,
+						fullError: null,
+					});
+					return;
+				}
+
+				// Parse SSE stream
+				const reader = response.body?.getReader();
+				if (!reader) {
+					this.llmMessageEmitters.onError.fire({ requestId, message: 'No response body', fullError: null });
+					return;
+				}
+
+				const decoder = new TextDecoder();
+				let buffer = '';
+				let fullText = '';
+
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+
+					buffer += decoder.decode(value, { stream: true });
+					const lines = buffer.split('\n');
+					buffer = lines.pop() || '';
+
+					for (const line of lines) {
+						if (!line.startsWith('data: ')) continue;
+						const jsonStr = line.slice(6).trim();
+						if (!jsonStr) continue;
+
+						try {
+							const event = JSON.parse(jsonStr);
+							if (event.type === 'text') {
+								fullText += event.text;
+								this.llmMessageEmitters.onText.fire({
+									requestId,
+									fullText,
+									fullReasoning: '',
+								});
+							} else if (event.type === 'done') {
+								this.llmMessageEmitters.onFinalMessage.fire({
+									requestId,
+									fullText,
+									fullReasoning: '',
+									anthropicReasoning: null,
+								});
+							} else if (event.type === 'error') {
+								this.llmMessageEmitters.onError.fire({
+									requestId,
+									message: event.error || event.message,
+									fullError: null,
+								});
+							}
+						} catch {
+							// skip malformed JSON lines
+						}
+					}
+				}
+			} catch (e: any) {
+				if (e.name === 'AbortError') return;
+				this.llmMessageEmitters.onError.fire({
+					requestId,
+					message: e.message || 'Proxy request failed',
+					fullError: null,
+				});
+			}
+		})();
+
+		this._infoOfRunningRequest[requestId].waitForSend = p;
 	}
 
 	private async _callAbort(params: MainLLMMessageAbortParams) {

@@ -349,11 +349,38 @@ export const builtinTools: {
 
 	spawn_subagent: {
 		name: 'spawn_subagent',
-		description: 'Spawn a subagent for parallel codebase exploration or task execution. Subagents run in isolated contexts and return summarized results.',
+		description: 'Spawn a subagent for parallel task execution. Available agents are listed in the system prompt.',
 		params: {
-			type: { description: 'Subagent type: "explore" (codebase search, read-only), "bash" (terminal commands), or "browser" (web search).' },
-			prompt: { description: 'The task or instruction for the subagent to execute.' },
+			type: { description: 'Agent type/name to spawn. See available agents in system prompt.' },
+			prompt: { description: 'Task for the subagent.' },
 			background: { description: 'Optional. Run in background (true/false). Default: false.' },
+		},
+	},
+
+	fetch_rules: {
+		name: 'fetch_rules',
+		description: 'Fetch project rules from the .void/rules/ directory. When called without a rule_name, returns a list of all available rules with their names and descriptions. When called with a rule_name, returns the full content of that specific rule.',
+		params: {
+			rule_name: { description: 'Optional. The name of a specific rule to fetch. Leave empty to list all available rules.' },
+		},
+	},
+
+	codebase_search: {
+		name: 'codebase_search',
+		description: 'Search the codebase for code matching a natural language query. Returns the most relevant code chunks ranked by relevance. Use this to find functions, classes, patterns, or concepts across the entire codebase. More effective than search_for_files for conceptual queries.',
+		params: {
+			query: { description: 'Natural language description of what you\'re looking for. Be specific. E.g. "authentication middleware", "database connection setup", "error handling for API calls".' },
+			target_directory: { description: 'Optional. Relative path to restrict search to a specific directory. E.g. "src/services".' },
+			max_results: { description: 'Optional. Maximum number of results to return (default 10, max 25).' },
+		},
+	},
+
+	run_verification: {
+		name: 'run_verification',
+		description: 'Run the project verification pipeline (build, typecheck, lint, test) in sequence. Returns pass/fail for each step. Steps are auto-detected from the project config or can be configured in settings.',
+		params: {
+			cwd: { description: 'Optional. Working directory. Defaults to workspace root.' },
+			steps: { description: 'Optional. Comma-separated step names to run (e.g., "build,test"). Defaults to all configured steps.' },
 		},
 	},
 
@@ -465,7 +492,7 @@ export const chat_systemMessage = ({ workspaceFolders, openedURIs, activeURI, pe
 	const header = (`You are an expert coding ${mode === 'agent' || mode === 'debug' ? 'agent' : 'assistant'} whose job is \
 ${mode === 'agent' ? `to help the user develop, run, and make changes to their codebase. You have full tool access and can edit files, create files, run terminal commands, search the web, and spawn subagents for parallel work.`
 			: mode === 'ask' ? `to search, understand, and reference files in the user's codebase. You can search and read files but you MUST NEVER edit files or run terminal commands. Only provide analysis and answers.`
-				: mode === 'plan' ? `to research the user's codebase and create structured implementation plans. You can search and read files but MUST NOT edit them. Output structured Markdown plans with \`- [ ]\` checkboxes for each actionable step.`
+				: mode === 'plan' ? `to research the user's codebase and create structured, actionable implementation plans. You can search and read files but MUST NOT edit them or run terminal commands. Your plan will be executed by an agent later, so it must be precise and complete.`
 					: mode === 'debug' ? `to help the user debug issues in their codebase. You are a debugging specialist: hypothesize the root cause, instrument code to gather evidence, analyze results, and propose targeted fixes. You have full tool access.`
 						: ''}
 You will be given instructions to follow from the user, and you may also be given a list of files that the user has specifically selected for context, \`SELECTIONS\`.
@@ -511,24 +538,55 @@ ${directoryStr}
 	}
 
 	if (mode === 'agent') {
-		details.push('ALWAYS use tools (edit, terminal, etc) to take actions and implement changes. For example, if you would like to edit a file, you MUST use a tool.')
-		details.push('Prioritize taking as many steps as you need to complete your request over stopping early.')
-		details.push(`You will OFTEN need to gather context before making a change. Do not immediately make a change unless you have ALL relevant context.`)
-		details.push(`ALWAYS have maximal certainty in a change BEFORE you make it. If you need more information about a file, variable, function, or type, you should inspect it, search it, or take all required actions to maximize your certainty that your change is correct.`)
-		details.push(`NEVER modify a file outside the user's workspace without permission from the user.`)
+		details.push('ALWAYS use tools to take actions. NEVER just describe what you would do — actually do it using the available tools.')
+		details.push('Follow this workflow: 1) Gather context — read relevant files, search for definitions, understand the codebase structure. 2) Plan your approach. 3) Make changes one file at a time. 4) Verify — read the modified file or run lint/tests to confirm correctness. 5) Iterate if needed.')
+		details.push('Search strategy: Use search_for_files for text/regex matches across the codebase. Use codebase_search for semantic/conceptual queries (e.g. "where is authentication handled"). Use search_pathnames_only to find files by name. Use get_dir_tree to understand folder structure. Use ls_dir for a quick listing.')
+		details.push('When editing files: Read the file FIRST to understand its current structure. Use edit_file with precise search strings that exactly match the current content. If an edit fails because the search string was not found, re-read the file and retry with the correct content.')
+		details.push('Lint errors are automatically reported after edits. If lint errors appear in your edit result, fix them immediately before moving on.')
+		details.push('Take as many steps as needed to fully complete the task. Do not stop early or ask the user to "finish the rest." Complete the entire request.')
+		details.push(`NEVER modify a file outside the user's workspace without explicit permission.`)
+		details.push(`When a terminal command fails:
+1. Read and analyze the error output — classify as compile error, runtime error, test failure, dependency issue, or environment problem.
+2. For compile/type errors: Read the file at the error location, understand the context, fix the root cause.
+3. For dependency errors: Install the missing dependency first.
+4. For test failures: Read both the test file AND the source being tested.
+5. After fixing, ALWAYS re-run the failing command to verify.
+6. If the same error persists after 2-3 attempts, try a fundamentally different approach or ask the user.`)
 	}
 
 	if (mode === 'ask') {
-		details.push(`You are in Ask mode. Use tools to gather information, files, and context to help the user answer their query.`)
-		details.push(`You should extensively read files, types, content, etc, gathering full context to solve the problem.`)
-		details.push(`You MUST NOT edit files or run terminal commands. Only provide analysis and answers.`)
+		details.push('You are in Ask mode — act as a senior engineer advisor. Provide thorough, expert-level analysis.')
+		details.push('Use tools extensively to gather context before answering: read relevant files, search for definitions, trace call paths, and understand relationships between components. Do not guess — look it up.')
+		details.push('When explaining code, cite specific file paths and line numbers. Show relevant code snippets.')
+		details.push('When asked about architecture or design, explore the full dependency chain and explain how components interact.')
+		details.push('You MUST NOT edit files, create files, delete files, or run terminal commands. Only provide analysis and answers.')
+		details.push('If the user asks you to make changes, explain exactly what to change and where, using code blocks with full file paths. These suggestions can be applied by switching to Agent mode.')
 	}
 
 	if (mode === 'plan') {
-		details.push(`You are in Plan mode. Research the codebase thoroughly, then output a structured implementation plan.`)
-		details.push(`Your plan MUST use Markdown checkboxes (\`- [ ]\`) for each actionable step.`)
-		details.push(`Include file paths, function names, and specific changes needed for each step.`)
-		details.push(`You MUST NOT edit files or run terminal commands. Only research and plan.`)
+		details.push('You are in Plan mode. Research the codebase THOROUGHLY before creating a plan. Read every relevant file, trace dependencies, and understand the full scope of changes needed.')
+		details.push('You MUST NOT edit files, create files, delete files, or run terminal commands. Only research and create the plan.')
+		details.push(`Your plan output MUST follow this structure:
+
+## Overview
+A brief summary of the problem and proposed solution (2-3 sentences).
+
+## Tasks
+Use Markdown checkboxes. Prefix each with a size: \`**[S]**\` (<10 lines), \`**[M]**\` (10-50 lines), \`**[L]**\` (50+ lines).
+Include specific file paths in backticks. Group related tasks into phases when there are dependencies.
+
+### Phase 1: [phase description]
+- [ ] **[S]** Add \`status\` field to \`PlanItem\` type in \`src/types.ts\`
+- [ ] **[M]** Update \`parsePlanItems()\` in \`src/parser.ts\` to extract size labels
+
+### Phase 2: [phase description]
+- [ ] **[L]** Rewrite \`PlanMessageComponent\` in \`src/components/Plan.tsx\` with interactive task list
+
+## Verification
+Describe how to test the changes: commands to run, expected behavior, manual checks.
+
+## Risks
+Note potential issues, edge cases, breaking changes, or dependencies on external systems.`)
 	}
 
 	if (mode === 'debug') {

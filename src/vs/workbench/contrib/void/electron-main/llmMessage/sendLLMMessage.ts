@@ -3,7 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { SendLLMMessageParams, OnText, OnFinalMessage, OnError } from '../../common/sendLLMMessageTypes.js';
+import { SendLLMMessageParams, OnText, OnFinalMessage, OnError, LLMFIMMessage, LLMChatMessage } from '../../common/sendLLMMessageTypes.js';
 import { IMetricsService } from '../../common/metricsService.js';
 import { displayInfoOfProviderName } from '../../common/voidSettingsTypes.js';
 import { sendLLMMessageToProviderImplementation } from './sendLLMMessage.impl.js';
@@ -116,7 +116,28 @@ export const sendLLMMessage = async ({
 				await sendFIM({ messages: messages_, onText, onFinalMessage, onError, settingsOfProvider, modelSelectionOptions, overridesOfModel, modelName, _setAborter, providerName, separateSystemMessage })
 				return
 			}
-			onError({ message: `Error running Autocomplete with ${providerName} - ${modelName}.`, fullError: null })
+			// Fallback: simulate FIM using chat API for providers without native FIM
+			const fimMessages = messages_ as LLMFIMMessage
+			const chatMessages: LLMChatMessage[] = [{
+				role: 'user',
+				content: `Continue the code at <FILL_HERE>. Output ONLY the completion code. No explanation, no markdown fences, no extra text.\n\n${fimMessages.prefix}<FILL_HERE>${fimMessages.suffix}`
+			}]
+			const fimSystemMessage = 'You are a code completion engine. Output ONLY the raw code that should replace <FILL_HERE>. Do not include the surrounding code. No explanations, no markdown, no comments about what you did. Just the code completion, nothing else.'
+			await sendChat({
+				messages: chatMessages,
+				onText,
+				onFinalMessage,
+				onError,
+				settingsOfProvider,
+				modelSelectionOptions,
+				overridesOfModel,
+				modelName,
+				_setAborter,
+				providerName,
+				separateSystemMessage: fimSystemMessage,
+				chatMode: null,
+				mcpTools: undefined,
+			})
 			return
 		}
 		onError({ message: `Error: Message type "${messagesType}" not recognized.`, fullError: null })

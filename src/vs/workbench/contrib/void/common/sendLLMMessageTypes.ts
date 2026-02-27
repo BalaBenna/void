@@ -119,6 +119,11 @@ type SendLLMType = {
 	separateSystemMessage?: undefined;
 	chatMode?: undefined;
 }
+export type ProxyConfig = {
+	authToken: string;
+	backendUrl: string;
+}
+
 export type ServiceSendLLMMessageParams = {
 	onText: OnText;
 	onFinalMessage: OnFinalMessage;
@@ -128,6 +133,7 @@ export type ServiceSendLLMMessageParams = {
 	modelSelectionOptions: ModelSelectionOptions | undefined;
 	overridesOfModel: OverridesOfModel | undefined;
 	onAbort: OnAbort;
+	proxyConfig?: ProxyConfig;
 } & SendLLMType;
 
 // params to the true sendLLMMessage function
@@ -150,7 +156,7 @@ export type SendLLMMessageParams = {
 
 // can't send functions across a proxy, use listeners instead
 export type BlockedMainLLMMessageParams = 'onText' | 'onFinalMessage' | 'onError' | 'abortRef'
-export type MainSendLLMMessageParams = Omit<SendLLMMessageParams, BlockedMainLLMMessageParams> & { requestId: string } & SendLLMType
+export type MainSendLLMMessageParams = Omit<SendLLMMessageParams, BlockedMainLLMMessageParams> & { requestId: string; proxyConfig?: ProxyConfig } & SendLLMType
 
 export type MainLLMMessageAbortParams = { requestId: string }
 

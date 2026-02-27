@@ -11,7 +11,7 @@ import { ITerminalToolService } from './terminalToolService.js'
 import { LintErrorItem, BuiltinToolCallParams, BuiltinToolResultType, BuiltinToolName } from '../common/toolsServiceTypes.js'
 import { IVoidModelService } from '../common/voidModelService.js'
 import { EndOfLinePreference } from '../../../../editor/common/model.js'
-import { IVoidCommandBarService } from './voidCommandBarService.js'
+import { IVoidCommandBarService } from './voidCommandBarServiceInterface.js'
 import { computeDirectoryTree1Deep, IDirectoryStrService, stringifyDirectoryTree1Deep } from '../common/directoryStrService.js'
 import { IMarkerService, MarkerSeverity } from '../../../../platform/markers/common/markers.js'
 import { timeout } from '../../../../base/common/async.js'
@@ -19,7 +19,13 @@ import { RawToolParamsObj } from '../common/sendLLMMessageTypes.js'
 import { MAX_CHILDREN_URIs_PAGE, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_BG_COMMAND_TIME, MAX_TERMINAL_INACTIVE_TIME } from '../common/prompt/prompts.js'
 import { IVoidSettingsService } from '../common/voidSettingsService.js'
 import { generateUuid } from '../../../../base/common/uuid.js'
-import { ISubagentService } from './subagentService.js'
+import { ISubagentService } from './subagentServiceInterface.js'
+import { IRulesService } from './rulesService.js'
+import { redactSecrets } from '../common/secretDetection.js'
+import { IEmbeddingsService } from './embeddingsService.js'
+import { IAgentRegistryService } from './agentRegistryService.js'
+import { IErrorClassificationService } from './errorClassificationService.js'
+import { IVerificationPipelineService } from './verificationPipelineService.js'
 
 
 // tool use for AI
@@ -155,6 +161,11 @@ export class ToolsService implements IToolsService {
 		@IMarkerService private readonly markerService: IMarkerService,
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
 		@ISubagentService private readonly subagentService: ISubagentService,
+		@IRulesService private readonly rulesService: IRulesService,
+		@IEmbeddingsService private readonly embeddingsService: IEmbeddingsService,
+		@IAgentRegistryService private readonly agentRegistryService: IAgentRegistryService,
+		@IErrorClassificationService private readonly errorClassificationService: IErrorClassificationService,
+		@IVerificationPipelineService private readonly verificationPipelineService: IVerificationPipelineService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
 
@@ -302,12 +313,35 @@ export class ToolsService implements IToolsService {
 			spawn_subagent: (params: RawToolParamsObj) => {
 				const { type: typeUnknown, prompt: promptUnknown, background: backgroundUnknown } = params
 				const type = validateStr('type', typeUnknown)
-				if (!['explore', 'bash', 'browser'].includes(type)) {
-					throw new Error(`Invalid subagent type "${type}". Must be "explore", "bash", or "browser".`)
+				const agentDef = this.agentRegistryService.getAgent(type)
+				if (!agentDef) {
+					const validTypes = this.agentRegistryService.getAllAgents().map(a => a.id).join('", "')
+					throw new Error(`Invalid agent type "${type}". Available: "${validTypes}"`)
 				}
 				const prompt = validateStr('prompt', promptUnknown)
 				const background = validateBoolean(backgroundUnknown, { default: false })
 				return { type, prompt, background }
+			},
+
+			fetch_rules: (params: RawToolParamsObj) => {
+				const { rule_name: ruleNameUnknown } = params
+				const ruleName = validateOptionalStr('rule_name', ruleNameUnknown)
+				return { ruleName }
+			},
+
+			codebase_search: (params: RawToolParamsObj) => {
+				const { query: queryUnknown, target_directory: targetDirUnknown, max_results: maxResultsUnknown } = params
+				const query = validateStr('query', queryUnknown)
+				const targetDirectory = validateOptionalStr('target_directory', targetDirUnknown)
+				const maxResults = validateNumber(maxResultsUnknown, { default: 10 }) ?? 10
+				return { query, targetDirectory, maxResults: Math.min(maxResults, 25) }
+			},
+
+			run_verification: (params: RawToolParamsObj) => {
+				const { cwd: cwdUnknown, steps: stepsUnknown } = params
+				const cwd = validateOptionalStr('cwd', cwdUnknown)
+				const steps = validateOptionalStr('steps', stepsUnknown)
+				return { cwd, steps }
 			},
 
 		}
@@ -466,11 +500,19 @@ export class ToolsService implements IToolsService {
 			// ---
 			run_command: async ({ command, cwd, terminalId }) => {
 				const { resPromise, interrupt } = await this.terminalToolService.runCommand(command, { type: 'temporary', cwd, terminalId })
-				return { result: resPromise, interruptTool: interrupt }
+				const classifiedPromise = resPromise.then(res => {
+					const errorClassification = this.errorClassificationService.classifyOutput(res.result, command, res.resolveReason)
+					return { ...res, errorClassification }
+				})
+				return { result: classifiedPromise, interruptTool: interrupt }
 			},
 			run_persistent_command: async ({ command, persistentTerminalId }) => {
 				const { resPromise, interrupt } = await this.terminalToolService.runCommand(command, { type: 'persistent', persistentTerminalId })
-				return { result: resPromise, interruptTool: interrupt }
+				const classifiedPromise = resPromise.then(res => {
+					const errorClassification = this.errorClassificationService.classifyOutput(res.result, command, res.resolveReason)
+					return { ...res, errorClassification }
+				})
+				return { result: classifiedPromise, interruptTool: interrupt }
 			},
 			open_persistent_terminal: async ({ cwd }) => {
 				const persistentTerminalId = await this.terminalToolService.createPersistentTerminal({ cwd })
@@ -524,6 +566,49 @@ export class ToolsService implements IToolsService {
 						result: execution.result ?? 'Subagent is running in the background.',
 					}
 				}
+			},
+
+			fetch_rules: async ({ ruleName }) => {
+				if (ruleName) {
+					const rule = this.rulesService.getRuleByName(ruleName)
+					if (!rule) {
+						return { result: { rules: [] } }
+					}
+					return { result: { rules: [{ name: rule.name, description: rule.description, content: rule.content }] } }
+				}
+				// Return list of all rules (without content)
+				const allRules = this.rulesService.getAllRules()
+				return {
+					result: {
+						rules: allRules.map(r => ({ name: r.name, description: r.description }))
+					}
+				}
+			},
+
+			codebase_search: async ({ query, targetDirectory, maxResults }) => {
+				// Auto-index workspace on first search if not yet indexed
+				if (!this.embeddingsService.isIndexed()) {
+					await this.embeddingsService.indexWorkspace()
+				}
+
+				const searchResults = this.embeddingsService.search(query, targetDirectory, maxResults)
+				return {
+					result: {
+						results: searchResults.map(r => ({
+							uri: r.uri.toString(),
+							startLine: r.startLine,
+							endLine: r.endLine,
+							content: r.content,
+							score: r.score,
+							symbolName: r.symbolName,
+						}))
+					}
+				}
+			},
+
+			run_verification: async ({ cwd, steps }) => {
+				const pipelineResult = await this.verificationPipelineService.runPipeline(cwd, steps)
+				return { result: { pipelineResult } }
 			},
 		}
 
@@ -595,28 +680,40 @@ export class ToolsService implements IToolsService {
 				return `Change successfully made to ${params.uri.fsPath}.${lintErrsString}`
 			},
 			run_command: (params, result) => {
-				const { resolveReason, result: result_, } = result
+				const { resolveReason, result: result_, errorClassification } = result
+				const redact = this.voidSettingsService.state.globalSettings.secretDetectionEnabled
+				const output = redact ? redactSecrets(result_) : result_
+				let str: string
 				// success
 				if (resolveReason.type === 'done') {
-					return `${result_}\n(exit code ${resolveReason.exitCode})`
+					str = `${output}\n(exit code ${resolveReason.exitCode})`
 				}
 				// normal command
-				if (resolveReason.type === 'timeout') {
-					return `${result_}\nTerminal command ran, but was automatically killed by Void after ${MAX_TERMINAL_INACTIVE_TIME}s of inactivity and did not finish successfully. To try with more time, open a persistent terminal and run the command there.`
+				else if (resolveReason.type === 'timeout') {
+					str = `${output}\nTerminal command ran, but was automatically killed by Void after ${MAX_TERMINAL_INACTIVE_TIME}s of inactivity and did not finish successfully. To try with more time, open a persistent terminal and run the command there.`
 				}
-				throw new Error(`Unexpected internal error: Terminal command did not resolve with a valid reason.`)
+				else {
+					throw new Error(`Unexpected internal error: Terminal command did not resolve with a valid reason.`)
+				}
+				// Append classification warning when errors detected with exit code 0
+				if (errorClassification?.hasErrors && resolveReason.type === 'done' && resolveReason.exitCode === 0) {
+					str += `\n\n[Warning: errors detected in output despite exit code 0: ${errorClassification.summary}]`
+				}
+				return str
 			},
 
 			run_persistent_command: (params, result) => {
 				const { resolveReason, result: result_, } = result
 				const { persistentTerminalId } = params
+				const redact = this.voidSettingsService.state.globalSettings.secretDetectionEnabled
+				const output = redact ? redactSecrets(result_) : result_
 				// success
 				if (resolveReason.type === 'done') {
-					return `${result_}\n(exit code ${resolveReason.exitCode})`
+					return `${output}\n(exit code ${resolveReason.exitCode})`
 				}
 				// bg command
 				if (resolveReason.type === 'timeout') {
-					return `${result_}\nTerminal command is running in terminal ${persistentTerminalId}. The given outputs are the results after ${MAX_TERMINAL_BG_COMMAND_TIME} seconds.`
+					return `${output}\nTerminal command is running in terminal ${persistentTerminalId}. The given outputs are the results after ${MAX_TERMINAL_BG_COMMAND_TIME} seconds.`
 				}
 				throw new Error(`Unexpected internal error: Terminal command did not resolve with a valid reason.`)
 			},
@@ -640,6 +737,46 @@ export class ToolsService implements IToolsService {
 
 			spawn_subagent: (params, result) => {
 				return `Subagent (${params.type}) completed:\n${result.result}`
+			},
+
+			fetch_rules: (params, result) => {
+				if (result.rules.length === 0) {
+					return params.ruleName ? `No rule found with name "${params.ruleName}".` : 'No rules found in .void/rules/ directory.'
+				}
+				if (params.ruleName && result.rules[0].content) {
+					const r = result.rules[0]
+					return `Rule: ${r.name}\nDescription: ${r.description}\n\n${r.content}`
+				}
+				return `Available rules:\n${result.rules.map((r, i) => `${i + 1}. ${r.name} — ${r.description}`).join('\n')}`
+			},
+
+			codebase_search: (params, result) => {
+				if (result.results.length === 0) {
+					return `No results found for query: "${params.query}"`
+				}
+				return result.results.map((r, i) => {
+					const symbol = r.symbolName ? ` (${r.symbolName})` : ''
+					const truncatedContent = r.content.length > 500 ? r.content.substring(0, 500) + '...' : r.content
+					return `${i + 1}. ${r.uri}:${r.startLine}-${r.endLine}${symbol} [score: ${r.score.toFixed(2)}]\n${truncatedContent}`
+				}).join('\n\n')
+			},
+
+			run_verification: (_params, result) => {
+				const { pipelineResult } = result
+				const header = pipelineResult.allPassed ? 'All verification steps passed.' : 'Verification pipeline failed.'
+				const stepLines = pipelineResult.results.map(r => {
+					const status = r.passed ? 'PASS' : (r.step.optional ? 'FAIL (optional)' : 'FAIL')
+					const duration = `${(r.durationMs / 1000).toFixed(1)}s`
+					const exitInfo = r.exitCode !== null ? ` (exit code ${r.exitCode})` : ''
+					let line = `  ${status} - ${r.step.name}: ${r.step.command} [${duration}]${exitInfo}`
+					if (!r.passed && r.output) {
+						// Include last 500 chars of output for failed steps
+						const trimmedOutput = r.output.length > 500 ? '...' + r.output.slice(-500) : r.output
+						line += `\n    Output: ${trimmedOutput}`
+					}
+					return line
+				}).join('\n')
+				return `${header}\n${stepLines}`
 			},
 		}
 

@@ -48,6 +48,9 @@ export interface IEditCodeService {
 	startApplying(opts: StartApplyingOpts): [URI, Promise<void>] | null;
 	instantlyApplySearchReplaceBlocks(opts: { uri: URI; searchReplaceBlocks: string }): void;
 	instantlyRewriteFile(opts: { uri: URI; newContent: string }): void;
+
+	// Phase 4: Two-Model Apply - sends semantic diff to Apply model, gets SEARCH/REPLACE blocks, applies with retry+fallback
+	applyWithModel(opts: { uri: URI; semanticDiff: string }): Promise<{ success: boolean; error?: string }>;
 	addCtrlKZone(opts: AddCtrlKOpts): number | undefined;
 	removeCtrlKZone(opts: { diffareaid: number }): void;
 

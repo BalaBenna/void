@@ -38,11 +38,32 @@ import './convertToLLMMessageWorkbenchContrib.js'
 import './toolsService.js'
 import './terminalToolService.js'
 
+// Error Classification Service
+import './errorClassificationService.js'
+
+// Self-Healing Service
+import './selfHealingService.js'
+
+// Verification Pipeline Service
+import './verificationPipelineService.js'
+
+// register Command Bar Service
+import './voidCommandBarService.js'
+
 // register Thread History
 import './chatThreadService.js'
 
+// Plan file CodeLens
+import './planCodeLensService.js'
+
 // register Subagent service
 import './subagentService.js'
+
+// Agent Registry (custom agent definitions)
+import './agentRegistryService.js'
+
+// .env file support
+import './envFileService.js'
 
 // Phase 1: Agent Event Protocol
 import './agentEventService.js'
@@ -62,6 +83,15 @@ import './embeddingsService.js'
 // Phase 7: Model Router Service
 import './modelRouterService.js'
 
+// Phase 8: Memory Service
+import './memoryService.js'
+
+// Phase 9: Parallel Agent Service
+import './parallelAgentService.js'
+
+// Phase 10: Background Agent Service
+import './backgroundAgentService.js'
+
 // ping
 import './metricsPollService.js'
 
@@ -73,6 +103,15 @@ import './voidSelectionHelperWidget.js'
 
 // register tooltip service
 import './tooltipService.js'
+
+// register auth service
+import './voidAuthService.js'
+
+// register login screen
+import './voidLoginService.js'
+
+// register landing page
+import './voidLandingService.js'
 
 // register onboarding service
 import './voidOnboardingService.js'

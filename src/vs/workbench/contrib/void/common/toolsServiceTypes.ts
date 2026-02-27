@@ -2,6 +2,8 @@ import { URI } from '../../../../base/common/uri.js'
 import { RawMCPToolCall } from './mcpServiceTypes.js';
 import { builtinTools } from './prompt/prompts.js';
 import { RawToolParamsObj } from './sendLLMMessageTypes.js';
+import { ErrorClassificationResult } from './errorClassificationTypes.js';
+import { PipelineResult } from './verificationPipelineTypes.js';
 
 
 
@@ -27,6 +29,7 @@ export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: '
 	'run_persistent_command': 'terminal',
 	'open_persistent_terminal': 'terminal',
 	'kill_persistent_terminal': 'terminal',
+	'run_verification': 'terminal',
 }
 
 
@@ -64,9 +67,17 @@ export type BuiltinToolCallParams = {
 	'web_search': { query: string, maxResults: number },
 	// --- subagent ---
 	'spawn_subagent': { type: string, prompt: string, background: boolean },
+	// --- rules ---
+	'fetch_rules': { ruleName: string | null },
+	// --- codebase search ---
+	'codebase_search': { query: string, targetDirectory: string | null, maxResults: number },
+	// --- verification pipeline ---
+	'run_verification': { cwd: string | null, steps: string | null },
 }
 
 export type WebSearchResultItem = { title: string, url: string, content: string }
+
+export type CodebaseSearchResultItem = { uri: string, startLine: number, endLine: number, content: string, score: number, symbolName: string | null }
 
 // RESULT OF TOOL CALL
 export type BuiltinToolResultType = {
@@ -83,14 +94,20 @@ export type BuiltinToolResultType = {
 	'create_file_or_folder': {},
 	'delete_file_or_folder': {},
 	// ---
-	'run_command': { result: string; resolveReason: TerminalResolveReason; },
-	'run_persistent_command': { result: string; resolveReason: TerminalResolveReason; },
+	'run_command': { result: string; resolveReason: TerminalResolveReason; errorClassification?: ErrorClassificationResult },
+	'run_persistent_command': { result: string; resolveReason: TerminalResolveReason; errorClassification?: ErrorClassificationResult },
 	'open_persistent_terminal': { persistentTerminalId: string },
 	'kill_persistent_terminal': {},
 	// --- web search ---
 	'web_search': { results: WebSearchResultItem[], query: string },
 	// --- subagent ---
 	'spawn_subagent': { executionId: string, status: string, result: string },
+	// --- rules ---
+	'fetch_rules': { rules: { name: string, description: string, content?: string }[] },
+	// --- codebase search ---
+	'codebase_search': { results: CodebaseSearchResultItem[] },
+	// --- verification pipeline ---
+	'run_verification': { pipelineResult: PipelineResult },
 }
 
 
