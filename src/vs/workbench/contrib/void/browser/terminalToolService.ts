@@ -261,6 +261,11 @@ export class TerminalToolService extends Disposable implements ITerminalToolServ
 	}
 
 	runCommand: ITerminalToolService['runCommand'] = async (command, params) => {
+		// E2B cloud sandbox: route through backend instead of local terminal
+		if (this.sandboxService.getSandboxMode() === 'e2b') {
+			return this._runCommandViaE2B(command, params)
+		}
+
 		await this.terminalService.whenConnected;
 
 		const { type } = params
@@ -452,6 +457,48 @@ export class TerminalToolService extends Disposable implements ITerminalToolServ
 		}
 
 		return result
+	}
+
+	private async _runCommandViaE2B(
+		command: string,
+		params: { type: 'persistent', persistentTerminalId: string } | { type: 'temporary', cwd: string | null, terminalId: string }
+	): Promise<{ interrupt: () => void; resPromise: Promise<{ result: string, resolveReason: TerminalResolveReason }> }> {
+		let aborted = false
+		const interrupt = () => { aborted = true }
+
+		const resPromise = (async (): Promise<{ result: string, resolveReason: TerminalResolveReason }> => {
+			try {
+				// For persistent terminals, use workspace root as cwd since E2B doesn't maintain terminal state
+			const workspaceFolders = this.workspaceContextService.getWorkspace().folders
+			const workspaceRoot = workspaceFolders[0]?.uri.fsPath
+			const cwd = params.type === 'temporary' ? (params.cwd ?? workspaceRoot) : workspaceRoot
+				const e2bResult = await this.sandboxService.executeInE2B(command, cwd)
+
+				if (aborted) {
+					return { result: '', resolveReason: { type: 'timeout' } }
+				}
+
+				let result = `$ ${command}\n`
+				if (e2bResult.stdout) result += e2bResult.stdout
+				if (e2bResult.stderr) result += (e2bResult.stdout ? '\n' : '') + e2bResult.stderr
+
+				if (result.length > MAX_TERMINAL_CHARS) {
+					result = this._errorAwareTruncate(result, MAX_TERMINAL_CHARS)
+				}
+
+				return {
+					result,
+					resolveReason: { type: 'done', exitCode: e2bResult.exitCode },
+				}
+			} catch (e: any) {
+				return {
+					result: `$ ${command}\nE2B sandbox error: ${e?.message ?? String(e)}`,
+					resolveReason: { type: 'done', exitCode: 1 },
+				}
+			}
+		})()
+
+		return { interrupt, resPromise }
 	}
 
 }

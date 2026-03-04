@@ -5,6 +5,11 @@ import { env } from "./config/env";
 import authRoutes from "./routes/auth.routes";
 import completionRoutes from "./routes/completion.routes";
 import userRoutes from "./routes/user.routes";
+import sandboxRoutes from "./routes/sandbox.routes";
+import embeddingsRoutes from "./routes/embeddings.routes";
+import docsRoutes from "./routes/docs.routes";
+import webhookRoutes from "./routes/webhook.routes";
+import signalingRoutes from "./routes/signaling.routes";
 
 // ============================================================
 // App Setup
@@ -47,6 +52,11 @@ app.route("/auth", authRoutes);
 // API v1 routes (authenticated)
 app.route("/v1/completions", completionRoutes);
 app.route("/v1/user", userRoutes);
+app.route("/v1/sandbox", sandboxRoutes);
+app.route("/v1/embeddings", embeddingsRoutes);
+app.route("/v1/docs", docsRoutes);
+app.route("/v1/webhooks", webhookRoutes);
+app.route("/v1/signaling", signalingRoutes);
 
 // ============================================================
 // Error Handler

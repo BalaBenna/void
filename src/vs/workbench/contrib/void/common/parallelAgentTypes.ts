@@ -44,3 +44,24 @@ export const defaultParallelAgentConfig: ParallelAgentConfig = {
 	maxParallelAgents: 3,
 	cleanupAfterMerge: true,
 };
+
+// Best-of-N Judge evaluation types
+export interface JudgeCriterionScore {
+	criterion: string;
+	score: number; // 0-100
+	reasoning: string;
+}
+
+export interface JudgeEvaluation {
+	taskId: string;
+	overallScore: number; // weighted average
+	criteria: JudgeCriterionScore[];
+	recommendation: string;
+}
+
+export const judgeCriteria = [
+	{ name: 'correctness', weight: 0.40 },
+	{ name: 'code_quality', weight: 0.25 },
+	{ name: 'rules_adherence', weight: 0.20 },
+	{ name: 'efficiency', weight: 0.15 },
+] as const;

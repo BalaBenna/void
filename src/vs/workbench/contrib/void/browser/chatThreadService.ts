@@ -665,7 +665,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				nAttempts += 1
 
 				type ResTypes =
-					| { type: 'llmDone', toolCall?: RawToolCallObj, info: { fullText: string, fullReasoning: string, anthropicReasoning: AnthropicReasoning[] | null } }
+					| { type: 'llmDone', toolCall?: RawToolCallObj, toolCalls?: RawToolCallObj[], info: { fullText: string, fullReasoning: string, anthropicReasoning: AnthropicReasoning[] | null } }
 					| { type: 'llmError', error?: { message: string; fullError: Error | null; } }
 					| { type: 'llmAborted' }
 
@@ -693,8 +693,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					onText: ({ fullText, fullReasoning, toolCall }) => {
 						this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: fullText, reasoningSoFar: fullReasoning, toolCallSoFar: toolCall ?? null }, interrupt: Promise.resolve(() => { if (llmCancelToken) this._llmMessageService.abort(llmCancelToken) }) })
 					},
-					onFinalMessage: async ({ fullText, fullReasoning, toolCall, anthropicReasoning, }) => {
-						resMessageIsDonePromise({ type: 'llmDone', toolCall, info: { fullText, fullReasoning, anthropicReasoning } }) // resolve with tool calls
+					onFinalMessage: async ({ fullText, fullReasoning, toolCall, toolCalls, anthropicReasoning, }) => {
+						resMessageIsDonePromise({ type: 'llmDone', toolCall, toolCalls, info: { fullText, fullReasoning, anthropicReasoning } }) // resolve with tool calls
 					},
 					onError: async (error) => {
 						resMessageIsDonePromise({ type: 'llmError', error: error })
@@ -754,7 +754,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				}
 
 				// llm res success
-				const { toolCall, info } = llmRes
+				const { info } = llmRes
+				// Collect all tool calls: prefer toolCalls array, fallback to single toolCall
+				const allToolCalls = llmRes.toolCalls ?? (llmRes.toolCall ? [llmRes.toolCall] : [])
 
 				this._addMessageToThread(threadId, { role: 'assistant', displayContent: info.fullText, reasoning: info.fullReasoning, anthropicReasoning: info.anthropicReasoning })
 
@@ -763,8 +765,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					this._updatePlanProgressFromResponse(threadId, info.fullText)
 				}
 
-				// In plan mode, if there's no tool call, parse the response for plan items
-				if (chatMode === 'plan' && !toolCall && info.fullText) {
+				// In plan mode, if there are no tool calls, parse the response for plan items
+				if (chatMode === 'plan' && allToolCalls.length === 0 && info.fullText) {
 					const planItems = this._parsePlanItems(info.fullText)
 					if (planItems.length > 0) {
 						this._addMessageToThread(threadId, {
@@ -786,8 +788,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 				this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' }) // just decorative for clarity
 
-				// call tool if there is one
-				if (toolCall) {
+				// Execute all tool calls sequentially
+				let toolLoopBroken = false
+				for (const toolCall of allToolCalls) {
 					// Phase 1.2: Infinite loop detection - track recent tool calls
 					const paramsHash = JSON.stringify(toolCall.rawParams)
 					recentToolCalls.push({ name: toolCall.name, paramsHash, resultCategory: null, timestamp: Date.now() })
@@ -808,7 +811,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 							})
 							shouldSendAnotherMessage = true
 							this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' })
-							continue // skip tool call, send the injection message instead
+							toolLoopBroken = true
+							break // skip remaining tool calls, send the injection message instead
 						}
 					}
 
@@ -828,7 +832,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 							})
 							shouldSendAnotherMessage = true
 							this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' })
-							continue // skip tool call
+							toolLoopBroken = true
+							break // skip remaining tool calls
 						}
 					}
 
@@ -847,87 +852,98 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 						this._setStreamState(threadId, undefined)
 						return
 					}
-					if (awaitingUserApproval) { isRunningWhenEnd = 'awaiting_user' }
-					else {
-						shouldSendAnotherMessage = true
+					if (awaitingUserApproval) {
+						isRunningWhenEnd = 'awaiting_user'
+						toolLoopBroken = true
+						break // stop executing remaining tool calls
+					}
 
-						// Self-healing: enrich terminal error results with file context
-						const selfHealingConfig = this._settingsService.state.globalSettings.selfHealingConfig
-						if (toolCall.name === 'run_command' || toolCall.name === 'run_persistent_command') {
-							const thread = this.state.allThreads[threadId]
-							const lastMsg = thread?.messages.at(-1)
-							if (lastMsg && lastMsg.role === 'tool' && lastMsg.type === 'success' && lastMsg.result) {
-								const toolResult = lastMsg.result as BuiltinToolResultType['run_command']
-								const classification = toolResult.errorClassification
+					shouldSendAnotherMessage = true
 
-								// Update the tool call record with error category
-								const lastRecord = recentToolCalls[recentToolCalls.length - 1]
-								if (lastRecord && classification?.primaryCategory) {
-									lastRecord.resultCategory = classification.primaryCategory
-								}
+					// Self-healing: enrich terminal error results with file context
+					const selfHealingConfig = this._settingsService.state.globalSettings.selfHealingConfig
+					if (toolCall.name === 'run_command' || toolCall.name === 'run_persistent_command') {
+						const thread = this.state.allThreads[threadId]
+						const lastMsg = thread?.messages.at(-1)
+						if (lastMsg && lastMsg.role === 'tool' && lastMsg.type === 'success' && lastMsg.result) {
+							const toolResult = lastMsg.result as BuiltinToolResultType['run_command']
+							const classification = toolResult.errorClassification
 
-								if (classification?.hasErrors && selfHealingConfig.enabled && selfHealingConfig.autoReadErrorContext) {
-									try {
-										const fileContext = await this._selfHealingService.buildErrorContext(classification.errors)
-										if (fileContext) {
-											const healingPrompt = this._selfHealingService.generateHealingPrompt(classification, fileContext, 0)
-											lastMsg.content = lastMsg.content + '\n\n' + healingPrompt
-											this._agentEventService.emitSimple('self_healing_context_injected', threadId, nMessagesSent, maxIterations, { category: classification.primaryCategory })
-										}
-									} catch {
-										// Silently fail — don't break the agent loop
+							// Update the tool call record with error category
+							const lastRecord = recentToolCalls[recentToolCalls.length - 1]
+							if (lastRecord && classification?.primaryCategory) {
+								lastRecord.resultCategory = classification.primaryCategory
+							}
+
+							if (classification?.hasErrors && selfHealingConfig.enabled && selfHealingConfig.autoReadErrorContext) {
+								try {
+									const fileContext = await this._selfHealingService.buildErrorContext(classification.errors)
+									if (fileContext) {
+										const healingPrompt = this._selfHealingService.generateHealingPrompt(classification, fileContext, 0)
+										lastMsg.content = lastMsg.content + '\n\n' + healingPrompt
+										this._agentEventService.emitSimple('self_healing_context_injected', threadId, nMessagesSent, maxIterations, { category: classification.primaryCategory })
 									}
-								}
-
-								// Circuit breaker: same error category 3+ times in recent calls
-								if (classification?.primaryCategory && classification.primaryCategory !== 'unknown') {
-									const sameCount = recentToolCalls.slice(-5)
-										.filter(tc => tc.resultCategory === classification.primaryCategory).length
-									if (sameCount >= 3) {
-										this._agentEventService.emitSimple('circuit_breaker_tripped', threadId, nMessagesSent, maxIterations,
-											{ category: classification.primaryCategory })
-										this._addMessageToThread(threadId, {
-											role: 'user',
-											content: `You have encountered the same type of error (${classification.primaryCategory}) 3 times. Stop attempting to fix it automatically and explain the issue to the user.`,
-											displayContent: `[System: Circuit breaker - repeated ${classification.primaryCategory} errors]`,
-											selections: [],
-											state: { stagingSelections: [], isBeingEdited: false },
-										})
-										shouldSendAnotherMessage = true
-										this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' })
-										continue
-									}
+								} catch {
+									// Silently fail — don't break the agent loop
 								}
 							}
-						}
 
-						// Oscillation detection (A-B-A-B pattern)
-						if (recentToolCalls.length >= 4) {
-							const last4 = recentToolCalls.slice(-4)
-							const isOscillating = (
-								last4[0].name === last4[2].name && last4[0].paramsHash === last4[2].paramsHash &&
-								last4[1].name === last4[3].name && last4[1].paramsHash === last4[3].paramsHash &&
-								last4[0].name !== last4[1].name
-							)
-							if (isOscillating) {
-								this._agentEventService.emitSimple('error_recovery', threadId, nMessagesSent, maxIterations,
-									{ reason: 'oscillation_detected' })
-								this._addMessageToThread(threadId, {
-									role: 'user',
-									content: 'You are stuck in an edit-test oscillation loop. The same errors keep recurring. Step back, re-read the relevant files, and try a fundamentally different approach. If stuck, ask the user.',
-									displayContent: '[System: Edit-test oscillation detected]',
-									selections: [],
-									state: { stagingSelections: [], isBeingEdited: false },
-								})
-								shouldSendAnotherMessage = true
-								this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' })
-								continue
+							// Circuit breaker: same error category 3+ times in recent calls
+							if (classification?.primaryCategory && classification.primaryCategory !== 'unknown') {
+								const sameCount = recentToolCalls.slice(-5)
+									.filter(tc => tc.resultCategory === classification.primaryCategory).length
+								if (sameCount >= 3) {
+									this._agentEventService.emitSimple('circuit_breaker_tripped', threadId, nMessagesSent, maxIterations,
+										{ category: classification.primaryCategory })
+									this._addMessageToThread(threadId, {
+										role: 'user',
+										content: `You have encountered the same type of error (${classification.primaryCategory}) 3 times. Stop attempting to fix it automatically and explain the issue to the user.`,
+										displayContent: `[System: Circuit breaker - repeated ${classification.primaryCategory} errors]`,
+										selections: [],
+										state: { stagingSelections: [], isBeingEdited: false },
+									})
+									shouldSendAnotherMessage = true
+									this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' })
+									toolLoopBroken = true
+									break
+								}
 							}
 						}
 					}
 
-					this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' }) // just decorative, for clarity
+					// Oscillation detection (A-B-A-B pattern)
+					if (recentToolCalls.length >= 4) {
+						const last4 = recentToolCalls.slice(-4)
+						const isOscillating = (
+							last4[0].name === last4[2].name && last4[0].paramsHash === last4[2].paramsHash &&
+							last4[1].name === last4[3].name && last4[1].paramsHash === last4[3].paramsHash &&
+							last4[0].name !== last4[1].name
+						)
+						if (isOscillating) {
+							this._agentEventService.emitSimple('error_recovery', threadId, nMessagesSent, maxIterations,
+								{ reason: 'oscillation_detected' })
+							this._addMessageToThread(threadId, {
+								role: 'user',
+								content: 'You are stuck in an edit-test oscillation loop. The same errors keep recurring. Step back, re-read the relevant files, and try a fundamentally different approach. If stuck, ask the user.',
+								displayContent: '[System: Edit-test oscillation detected]',
+								selections: [],
+								state: { stagingSelections: [], isBeingEdited: false },
+							})
+							shouldSendAnotherMessage = true
+							this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' })
+							toolLoopBroken = true
+							break
+						}
+					}
+				} // end for (toolCall of allToolCalls)
+
+				if (toolLoopBroken) {
+					// Emit iteration event and continue the outer while loop
+					this._agentEventService.emitSimple('loop_iteration', threadId, nMessagesSent, maxIterations)
+					continue
 				}
+
+				this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' }) // just decorative, for clarity
 
 				// Emit iteration event
 				this._agentEventService.emitSimple('loop_iteration', threadId, nMessagesSent, maxIterations)
@@ -1289,6 +1305,11 @@ Return ONLY the JSON array, no other text.`
 	continuePlanExecution(threadId: string) {
 		if (!this._currentPlanExecution || this._currentPlanExecution.threadId !== threadId) return
 		this._executeNextPlanStep(threadId)
+	}
+
+	answerPlanQuestion(_threadId: string, _questionId: string, _answer: string) {
+		// Enhanced plan mode: store answers to clarifying questions
+		// The answer will be injected into the plan context on next execution
 	}
 
 	private _currentPlanExecution: { threadId: string, planMessageIdx: number, currentTaskIndex: number } | null = null

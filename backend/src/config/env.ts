@@ -7,30 +7,25 @@ const envSchema = z.object({
     .enum(["development", "production", "test"])
     .default("development"),
 
-  // Database
-  DATABASE_URL: z
-    .string()
-    .default("postgresql://postgres:postgres@localhost:5432/void_dev"),
+  // Supabase
+  SUPABASE_URL: z.string().url(),
+  SUPABASE_ANON_KEY: z.string().min(1),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
 
-  // Redis
+  // Backend URL (for constructing OAuth callback URL)
+  BACKEND_URL: z.string().default("http://localhost:3456"),
+
+  // Redis (rate limiting + caching)
   REDIS_URL: z.string().default("redis://localhost:6379"),
-
-  // Auth
-  GOOGLE_CLIENT_ID: z.string(),
-  GOOGLE_CLIENT_SECRET: z.string(),
-  GOOGLE_REDIRECT_URI: z
-    .string()
-    .default("http://localhost:3456/auth/google/callback"),
-
-  // JWT
-  JWT_SECRET: z.string().min(32),
-  JWT_REFRESH_SECRET: z.string().min(32),
-  JWT_EXPIRY: z.string().default("1h"),
-  JWT_REFRESH_EXPIRY: z.string().default("30d"),
 
   // AI Providers
   ANTHROPIC_API_KEY: z.string(),
+  OPENAI_API_KEY: z.string().optional(),
   GOOGLE_AI_API_KEY: z.string().optional(),
+  GROQ_API_KEY: z.string().optional(),
+
+  // E2B Cloud Sandbox
+  E2B_API_KEY: z.string().optional(),
 
   // Stripe
   STRIPE_SECRET_KEY: z.string().optional(),
@@ -39,8 +34,18 @@ const envSchema = z.object({
   // Desktop app deep link protocol
   DESKTOP_PROTOCOL: z.string().default("void"),
 
-  // Frontend URL (for CORS)
+  // Frontend URL (for CORS + web flow redirect)
   FRONTEND_URL: z.string().default("http://localhost:5173"),
+
+  // GitHub Integration (BugBot, @PR, @issue)
+  GITHUB_TOKEN: z.string().optional(),
+  GITHUB_WEBHOOK_SECRET: z.string().optional(),
+
+  // Linear Integration (optional, for @issue)
+  LINEAR_API_KEY: z.string().optional(),
+
+  // Code Embeddings (optional, falls back to OPENAI_API_KEY)
+  VOYAGE_API_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

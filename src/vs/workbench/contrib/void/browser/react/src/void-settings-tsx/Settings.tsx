@@ -1801,21 +1801,53 @@ export const Settings = () => {
 								<SettingCard>
 									<SettingRow title="Sandbox Mode" description="Control command execution sandboxing">
 										<VoidCustomDropdownBox
-											options={['off', 'auto_run', 'strict'] as SandboxMode[]}
+											options={['off', 'auto_run', 'strict', 'e2b'] as SandboxMode[]}
 											selectedOption={settingsState.globalSettings.sandboxMode}
 											onChangeOption={(newVal) => voidSettingsService.setGlobalSetting('sandboxMode', newVal as SandboxMode)}
 											getOptionDisplayName={(opt: string) => {
-												const names: Record<string, string> = { off: 'Off', auto_run: 'Auto Run', strict: 'Strict' }
+												const names: Record<string, string> = { off: 'Off', auto_run: 'Auto Run', strict: 'Strict', e2b: 'E2B Cloud' }
 												return names[opt] ?? opt
 											}}
 											getOptionDropdownName={(opt: string) => {
-												const names: Record<string, string> = { off: 'Off', auto_run: 'Auto Run', strict: 'Strict' }
+												const names: Record<string, string> = { off: 'Off', auto_run: 'Auto Run', strict: 'Strict', e2b: 'E2B Cloud' }
 												return names[opt] ?? opt
 											}}
 											getOptionsEqual={(a, b) => a === b}
 											className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-1 rounded p-0.5 px-1'
 										/>
 									</SettingRow>
+									{settingsState.globalSettings.sandboxMode === 'e2b' && (<>
+										<SettingRow title="E2B Template" description="Optional custom sandbox template ID">
+											<VoidSimpleInputBox
+												className='w-40 text-xs'
+												placeholder='default'
+												value={settingsState.globalSettings.e2bConfig?.template ?? ''}
+												onChangeValue={(newVal) => {
+													voidSettingsService.setGlobalSetting('e2bConfig', {
+														...settingsState.globalSettings.e2bConfig,
+														template: newVal || undefined,
+													})
+												}}
+											/>
+										</SettingRow>
+										<SettingRow title="Timeout (seconds)" description="Max execution time per command (60-600)">
+											<VoidSimpleInputBox
+												className='w-16 text-xs text-center'
+												placeholder='300'
+												value={String((settingsState.globalSettings.e2bConfig?.timeoutMs ?? 300000) / 1000)}
+												onChangeValue={(newVal) => {
+													const secs = Math.max(60, Math.min(600, parseInt(newVal) || 300))
+													voidSettingsService.setGlobalSetting('e2bConfig', {
+														...settingsState.globalSettings.e2bConfig,
+														timeoutMs: secs * 1000,
+													})
+												}}
+											/>
+										</SettingRow>
+										<div className='px-3 py-1 text-xs text-void-fg-3 opacity-75'>
+											E2B API key is configured on the backend server via the E2B_API_KEY environment variable.
+										</div>
+									</>)}
 									<SettingRow title="Secret Detection" description="Scan for accidentally exposed secrets in tool output" noBorder>
 										<VoidSwitch size='sm' value={settingsState.globalSettings.secretDetectionEnabled ?? true} onChange={(newVal) => voidSettingsService.setGlobalSetting('secretDetectionEnabled', newVal)} />
 									</SettingRow>

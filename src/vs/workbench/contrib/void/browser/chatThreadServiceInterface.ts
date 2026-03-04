@@ -161,6 +161,7 @@ export interface IChatThreadService {
 	executePlan(threadId: string, planMessageIdx: number): void;
 	executePlanStepByStep(threadId: string, planMessageIdx: number): void;
 	continuePlanExecution(threadId: string): void;
+	answerPlanQuestion(threadId: string, questionId: string, answer: string): void;
 
 	getPlanFileMapping(uri: URI): { threadId: string; planMessageIdx: number } | undefined;
 

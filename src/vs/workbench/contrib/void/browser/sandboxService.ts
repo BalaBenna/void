@@ -8,9 +8,16 @@ import { registerSingleton, InstantiationType } from '../../../../platform/insta
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
-import { SandboxMode, CommandRiskLevel, SandboxPolicy } from '../common/sandboxTypes.js';
+import { SandboxMode, CommandRiskLevel, SandboxPolicy, defaultE2BSandboxConfig } from '../common/sandboxTypes.js';
 import { IAgentEventService } from './agentEventService.js';
+import { IVoidAuthService } from './voidAuthService.js';
 import { os } from '../common/helpers/systemInfo.js';
+
+export interface E2BExecutionResult {
+	stdout: string;
+	stderr: string;
+	exitCode: number;
+}
 
 export interface ISandboxService {
 	readonly _serviceBrand: undefined;
@@ -18,6 +25,8 @@ export interface ISandboxService {
 	classifyRisk(command: string): CommandRiskLevel;
 	isSandboxAvailable(): boolean;
 	getSandboxMode(): SandboxMode;
+	executeInE2B(command: string, cwd?: string): Promise<E2BExecutionResult>;
+	isE2BAvailable(): Promise<boolean>;
 }
 
 export const ISandboxService = createDecorator<ISandboxService>('voidSandboxService');
@@ -29,16 +38,67 @@ class SandboxService extends Disposable implements ISandboxService {
 		@IVoidSettingsService private readonly _settingsService: IVoidSettingsService,
 		@IWorkspaceContextService private readonly _workspaceContextService: IWorkspaceContextService,
 		@IAgentEventService _agentEventService: IAgentEventService,
+		@IVoidAuthService private readonly _authService: IVoidAuthService,
 	) {
 		super();
 	}
 
 	isSandboxAvailable(): boolean {
+		const mode = this.getSandboxMode();
+		if (mode === 'e2b') return true; // E2B is cloud-based, no local requirements
 		return os === 'mac'; // sandbox-exec is macOS only
 	}
 
 	getSandboxMode(): SandboxMode {
 		return this._settingsService.state.globalSettings.sandboxMode;
+	}
+
+	async isE2BAvailable(): Promise<boolean> {
+		const authState = this._authService.state;
+		if (!authState.isAuthenticated || !authState.session) return false;
+
+		try {
+			const backendUrl = this._settingsService.state.globalSettings.backendUrl || 'http://localhost:3456';
+			const res = await fetch(`${backendUrl}/v1/sandbox/status`, {
+				headers: { Authorization: `Bearer ${authState.session.accessToken}` },
+			});
+			if (!res.ok) return false;
+			const data = await res.json();
+			return !!data.e2bConfigured;
+		} catch {
+			return false;
+		}
+	}
+
+	async executeInE2B(command: string, cwd?: string): Promise<E2BExecutionResult> {
+		const authState = this._authService.state;
+		if (!authState.isAuthenticated || !authState.session) {
+			throw new Error('Authentication required for E2B sandbox');
+		}
+
+		const backendUrl = this._settingsService.state.globalSettings.backendUrl || 'http://localhost:3456';
+		const e2bConfig = this._settingsService.state.globalSettings.e2bConfig ?? defaultE2BSandboxConfig;
+
+		const res = await fetch(`${backendUrl}/v1/sandbox/execute`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				Authorization: `Bearer ${authState.session.accessToken}`,
+			},
+			body: JSON.stringify({
+				command,
+				cwd,
+				timeoutMs: e2bConfig.timeoutMs,
+				template: e2bConfig.template,
+			}),
+		});
+
+		if (!res.ok) {
+			const err = await res.json().catch(() => ({ error: 'E2B request failed' }));
+			throw new Error(err.error || `E2B sandbox error: ${res.status}`);
+		}
+
+		return await res.json() as E2BExecutionResult;
 	}
 
 	classifyRisk(command: string): CommandRiskLevel {

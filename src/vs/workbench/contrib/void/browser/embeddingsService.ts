@@ -12,9 +12,10 @@ import { IWorkspaceContextService } from '../../../../platform/workspace/common/
 import { URI } from '../../../../base/common/uri.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 
-import { CodeChunk, IndexStatus, SearchResult } from '../common/embeddingsTypes.js';
+import { CodeChunk, IndexStatus, SearchResult, EmbeddingChunkPayload } from '../common/embeddingsTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { matchGlob } from '../common/frontmatterParser.js';
+import { IVoidAuthService } from './voidAuthService.js';
 
 
 // Chunk size limits
@@ -91,15 +92,25 @@ class EmbeddingsService extends Disposable implements IEmbeddingsService {
 	// .voidignore patterns
 	private _voidignorePatterns: string[] = [];
 
+	// Merkle tree: file content hashes for change detection
+	private _fileHashes: Map<string, { contentHash: string; lastIndexed: number }> = new Map();
+
 	// Progress tracking
 	private _indexState: IndexStatus['state'] = 'idle';
 	private _totalFiles = 0;
 	private _indexedFiles = 0;
 
+	// Pending sync buffer
+	private _pendingSyncChunks: EmbeddingChunkPayload[] = [];
+	private _syncTimer: ReturnType<typeof setTimeout> | null = null;
+	private static readonly SYNC_BATCH_SIZE = 50;
+	private static readonly SYNC_DEBOUNCE_MS = 5000;
+
 	constructor(
 		@IFileService private readonly _fileService: IFileService,
 		@IWorkspaceContextService private readonly _workspaceContextService: IWorkspaceContextService,
 		@IVoidSettingsService private readonly _settingsService: IVoidSettingsService,
+		@IVoidAuthService private readonly _authService: IVoidAuthService,
 	) {
 		super();
 
@@ -212,6 +223,9 @@ class EmbeddingsService extends Disposable implements IEmbeddingsService {
 		this._chunksByUri.clear()
 		this._invertedIndex.clear()
 
+		// Try hydrating from backend first (pre-loads persisted chunks)
+		await this._hydrateFromBackend()
+
 		this._indexState = 'indexing'
 		this._indexedFiles = 0
 
@@ -275,14 +289,33 @@ class EmbeddingsService extends Disposable implements IEmbeddingsService {
 		}
 	}
 
-	async indexFile(uri: URI): Promise<void> {
-		// Remove old chunks for this file
-		this.removeFile(uri)
+	private _simpleHash(text: string): string {
+		// Simple string hash for change detection (DJB2)
+		let hash = 5381;
+		for (let i = 0; i < text.length; i++) {
+			hash = ((hash << 5) + hash) + text.charCodeAt(i);
+			hash = hash & hash; // Convert to 32bit integer
+		}
+		return hash.toString(36);
+	}
 
+	async indexFile(uri: URI): Promise<void> {
 		try {
 			const content = await this._fileService.readFile(uri)
 			const text = content.value.toString()
 			if (text.length === 0) return
+
+			// Merkle tree change detection: skip if content hash matches
+			const uriStr = uri.toString();
+			const contentHash = this._simpleHash(text);
+			const existing = this._fileHashes.get(uriStr);
+			if (existing && existing.contentHash === contentHash) {
+				return; // File unchanged, skip re-indexing
+			}
+			this._fileHashes.set(uriStr, { contentHash, lastIndexed: Date.now() });
+
+			// Remove old chunks for this file
+			this.removeFile(uri)
 
 			const path = uri.path
 			const ext = path.substring(path.lastIndexOf('.'))
@@ -313,6 +346,9 @@ class EmbeddingsService extends Disposable implements IEmbeddingsService {
 
 			this._chunksByUri.set(uri.toString(), chunkIds)
 			this._rebuildStats()
+
+			// Queue chunks for background sync to backend
+			this._queueSyncChunks(chunks)
 		} catch {
 			// Skip files we can't read
 		}
@@ -320,6 +356,7 @@ class EmbeddingsService extends Disposable implements IEmbeddingsService {
 
 	removeFile(uri: URI): void {
 		const uriStr = uri.toString()
+		this._fileHashes.delete(uriStr)
 		const chunkIds = this._chunksByUri.get(uriStr)
 		if (!chunkIds) return
 
@@ -606,6 +643,170 @@ class EmbeddingsService extends Disposable implements IEmbeddingsService {
 		}
 
 		return results
+	}
+
+	// ── Backend Sync Layer ──────────────────────────────────────
+
+	private _getWorkspaceId(): string | null {
+		const folders = this._workspaceContextService.getWorkspace().folders
+		if (folders.length === 0) return null
+		// Use the first workspace folder's URI as a stable workspace ID
+		return folders[0].uri.toString()
+	}
+
+	private _canSync(): boolean {
+		const authState = this._authService.state
+		if (!authState.isAuthenticated || !authState.session) return false
+		const globalSettings = this._settingsService.state.globalSettings
+		if (globalSettings.useSelfHostedMode) return false
+		return true
+	}
+
+	private _getBackendUrl(): string {
+		return this._settingsService.state.globalSettings.backendUrl || 'http://localhost:3456'
+	}
+
+	private _getAccessToken(): string | null {
+		return this._authService.state.session?.accessToken ?? null
+	}
+
+	/**
+	 * Queue chunks for background sync to the backend.
+	 * Batches and debounces to avoid excessive network calls.
+	 */
+	private _queueSyncChunks(chunks: CodeChunk[]): void {
+		if (!this._canSync()) return
+
+		for (const chunk of chunks) {
+			this._pendingSyncChunks.push({
+				chunkId: chunk.id,
+				fileUri: chunk.uri.toString(),
+				content: chunk.content,
+				symbolName: chunk.symbolName ?? undefined,
+				language: chunk.language,
+				startLine: chunk.startLine,
+				endLine: chunk.endLine,
+			})
+		}
+
+		// Flush immediately if we have enough
+		if (this._pendingSyncChunks.length >= EmbeddingsService.SYNC_BATCH_SIZE) {
+			this._flushSyncBuffer()
+			return
+		}
+
+		// Otherwise debounce
+		if (this._syncTimer) clearTimeout(this._syncTimer)
+		this._syncTimer = setTimeout(() => this._flushSyncBuffer(), EmbeddingsService.SYNC_DEBOUNCE_MS)
+	}
+
+	private _flushSyncBuffer(): void {
+		if (this._pendingSyncChunks.length === 0) return
+		if (!this._canSync()) {
+			this._pendingSyncChunks = []
+			return
+		}
+
+		const workspaceId = this._getWorkspaceId()
+		if (!workspaceId) return
+
+		const token = this._getAccessToken()
+		if (!token) return
+
+		const backendUrl = this._getBackendUrl()
+		const chunksToSync = this._pendingSyncChunks.splice(0, EmbeddingsService.SYNC_BATCH_SIZE)
+
+		// Fire-and-forget
+		fetch(`${backendUrl}/v1/embeddings/upsert`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				'Authorization': `Bearer ${token}`,
+			},
+			body: JSON.stringify({
+				workspaceId,
+				chunks: chunksToSync,
+			}),
+		}).catch(err => {
+			console.warn('Embeddings sync failed:', err)
+		})
+
+		// If more pending, schedule another flush
+		if (this._pendingSyncChunks.length > 0) {
+			this._syncTimer = setTimeout(() => this._flushSyncBuffer(), 1000)
+		}
+	}
+
+	/**
+	 * Pre-hydrate the BM25 index from previously persisted chunks.
+	 * Called at the start of indexWorkspace if the user is authenticated.
+	 */
+	private async _hydrateFromBackend(): Promise<void> {
+		if (!this._canSync()) return
+
+		const workspaceId = this._getWorkspaceId()
+		if (!workspaceId) return
+
+		const token = this._getAccessToken()
+		if (!token) return
+
+		const backendUrl = this._getBackendUrl()
+
+		try {
+			const response = await fetch(
+				`${backendUrl}/v1/embeddings/workspace/${encodeURIComponent(workspaceId)}`,
+				{
+					headers: { 'Authorization': `Bearer ${token}` },
+				}
+			)
+
+			if (!response.ok) return
+
+			const data = await response.json()
+			if (!data.chunks || data.chunks.length === 0) return
+
+			for (const stored of data.chunks) {
+				const chunk: CodeChunk = {
+					id: stored.chunk_id,
+					uri: URI.parse(stored.file_uri),
+					startLine: stored.start_line ?? 0,
+					endLine: stored.end_line ?? 0,
+					content: stored.content,
+					symbolName: stored.symbol_name,
+					language: stored.language ?? 'unknown',
+					mtime: 0,
+				}
+
+				this._chunks.set(chunk.id, chunk)
+
+				// Add to inverted index
+				const tokens = tokenize(chunk.content)
+				const seen = new Set<string>()
+				for (const token of tokens) {
+					if (seen.has(token)) continue
+					seen.add(token)
+					let postings = this._invertedIndex.get(token)
+					if (!postings) {
+						postings = new Set()
+						this._invertedIndex.set(token, postings)
+					}
+					postings.add(chunk.id)
+				}
+
+				// Track by URI
+				const uriStr = chunk.uri.toString()
+				let uriChunks = this._chunksByUri.get(uriStr)
+				if (!uriChunks) {
+					uriChunks = new Set()
+					this._chunksByUri.set(uriStr, uriChunks)
+				}
+				uriChunks.add(chunk.id)
+			}
+
+			this._rebuildStats()
+		} catch {
+			// Hydration failure is non-fatal — we'll just re-index from disk
+		}
 	}
 }
 

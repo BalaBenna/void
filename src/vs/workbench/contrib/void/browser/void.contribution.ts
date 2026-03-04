@@ -89,6 +89,23 @@ import './memoryService.js'
 // Phase 9: Parallel Agent Service
 import './parallelAgentService.js'
 
+// Grace Code Features
+import './scratchpadService.js'
+import './debugService.js'
+import './dagSchedulerService.js'
+import './mentionResolverService.js'
+import './agentCheckpointService.js'
+import './speculativeEditService.js'
+import './cursorPredictionService.js'
+import './missionControlService.js'
+import './ambientAgentService.js'
+import './nlGitService.js'
+import './timeTravelService.js'
+import './pluginService.js'
+import './visualEditorService.js'
+import './pairProgrammingService.js'
+import './docIndexService.js'
+
 // Phase 10: Background Agent Service
 import './backgroundAgentService.js'
 

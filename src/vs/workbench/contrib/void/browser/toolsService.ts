@@ -26,6 +26,9 @@ import { IEmbeddingsService } from './embeddingsService.js'
 import { IAgentRegistryService } from './agentRegistryService.js'
 import { IErrorClassificationService } from './errorClassificationService.js'
 import { IVerificationPipelineService } from './verificationPipelineService.js'
+import { IScratchpadService } from './scratchpadService.js'
+import { IDAGSchedulerService } from './dagSchedulerService.js'
+import { INLGitService } from './nlGitService.js'
 
 
 // tool use for AI
@@ -166,6 +169,9 @@ export class ToolsService implements IToolsService {
 		@IAgentRegistryService private readonly agentRegistryService: IAgentRegistryService,
 		@IErrorClassificationService private readonly errorClassificationService: IErrorClassificationService,
 		@IVerificationPipelineService private readonly verificationPipelineService: IVerificationPipelineService,
+		@IScratchpadService private readonly scratchpadService: IScratchpadService,
+		@IDAGSchedulerService private readonly dagSchedulerService: IDAGSchedulerService,
+		@INLGitService private readonly nlGitService: INLGitService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
 
@@ -342,6 +348,33 @@ export class ToolsService implements IToolsService {
 				const cwd = validateOptionalStr('cwd', cwdUnknown)
 				const steps = validateOptionalStr('steps', stepsUnknown)
 				return { cwd, steps }
+			},
+
+			scratchpad_read: (params: RawToolParamsObj) => {
+				const { session_id: sessionIdUnknown, key: keyUnknown } = params
+				const sessionId = validateStr('session_id', sessionIdUnknown)
+				const key = validateStr('key', keyUnknown)
+				return { sessionId, key }
+			},
+
+			scratchpad_write: (params: RawToolParamsObj) => {
+				const { session_id: sessionIdUnknown, key: keyUnknown, value: valueUnknown } = params
+				const sessionId = validateStr('session_id', sessionIdUnknown)
+				const key = validateStr('key', keyUnknown)
+				const value = validateStr('value', valueUnknown)
+				return { sessionId, key, value }
+			},
+
+			schedule_dag: (params: RawToolParamsObj) => {
+				const { nodes: nodesUnknown } = params
+				const nodes = validateStr('nodes', nodesUnknown)
+				return { nodes }
+			},
+
+			nl_git: (params: RawToolParamsObj) => {
+				const { command: commandUnknown } = params
+				const command = validateStr('command', commandUnknown)
+				return { command }
 			},
 
 		}
@@ -610,6 +643,74 @@ export class ToolsService implements IToolsService {
 				const pipelineResult = await this.verificationPipelineService.runPipeline(cwd, steps)
 				return { result: { pipelineResult } }
 			},
+
+			scratchpad_read: async ({ sessionId, key }) => {
+				const entry = this.scratchpadService.get(sessionId, key);
+				return {
+					result: {
+						value: entry?.value ?? null,
+						source: entry?.source ?? null,
+					}
+				}
+			},
+
+			scratchpad_write: async ({ sessionId, key, value }) => {
+				this.scratchpadService.set(sessionId, key, value, 'agent');
+				return { result: { success: true } }
+			},
+
+			schedule_dag: async ({ nodes: nodesStr }) => {
+				let parsedNodes;
+				try {
+					parsedNodes = JSON.parse(nodesStr);
+				} catch {
+					throw new Error('Invalid JSON for DAG nodes. Expected an array of { id, prompt, dependencies, targetFiles }.');
+				}
+				if (!Array.isArray(parsedNodes)) throw new Error('DAG nodes must be an array.');
+
+				const dagNodes = parsedNodes.map((n: any) => ({
+					id: validateStr('id', n.id),
+					prompt: validateStr('prompt', n.prompt),
+					dependencies: Array.isArray(n.dependencies) ? n.dependencies : [],
+					targetFiles: Array.isArray(n.targetFiles) ? n.targetFiles : undefined,
+				}));
+
+				const execution = this.dagSchedulerService.createDAG(dagNodes);
+				const result = await this.dagSchedulerService.executeDAG(execution.id);
+
+				const summary = result.nodes.map(n =>
+					`${n.id}: ${n.status}${n.error ? ` (${n.error})` : ''}`
+				).join('\n');
+
+				return {
+					result: {
+						executionId: result.id,
+						status: result.status,
+						summary,
+					}
+				}
+			},
+
+			nl_git: async ({ command }) => {
+				const translation = this.nlGitService.translateToGitCommand(command);
+				let output = '';
+
+				if (!translation.requiresConfirmation || translation.riskLevel === 'safe') {
+					const execResult = await this.nlGitService.executeWithConfirmation(translation);
+					output = execResult.output;
+				} else {
+					output = `Command requires confirmation (risk: ${translation.riskLevel}). Translated command: ${translation.gitCommand}`;
+				}
+
+				return {
+					result: {
+						gitCommand: translation.gitCommand,
+						explanation: translation.explanation,
+						riskLevel: translation.riskLevel,
+						output,
+					}
+				}
+			},
 		}
 
 
@@ -770,13 +871,29 @@ export class ToolsService implements IToolsService {
 					const exitInfo = r.exitCode !== null ? ` (exit code ${r.exitCode})` : ''
 					let line = `  ${status} - ${r.step.name}: ${r.step.command} [${duration}]${exitInfo}`
 					if (!r.passed && r.output) {
-						// Include last 500 chars of output for failed steps
 						const trimmedOutput = r.output.length > 500 ? '...' + r.output.slice(-500) : r.output
 						line += `\n    Output: ${trimmedOutput}`
 					}
 					return line
 				}).join('\n')
 				return `${header}\n${stepLines}`
+			},
+
+			scratchpad_read: (params, result) => {
+				if (result.value === null) return `No value found for key "${params.key}".`
+				return `Key "${params.key}" = "${result.value}" (written by ${result.source})`
+			},
+
+			scratchpad_write: (params, _result) => {
+				return `Successfully wrote key "${params.key}" to scratchpad.`
+			},
+
+			schedule_dag: (_params, result) => {
+				return `DAG execution ${result.executionId} ${result.status}:\n${result.summary}`
+			},
+
+			nl_git: (_params, result) => {
+				return `Git command: ${result.gitCommand}\nExplanation: ${result.explanation}\nRisk: ${result.riskLevel}\n\nOutput:\n${result.output}`
 			},
 		}
 

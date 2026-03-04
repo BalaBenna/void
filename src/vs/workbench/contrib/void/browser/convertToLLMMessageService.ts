@@ -85,20 +85,24 @@ const prepareMessages_openai_tools = (messages: SimpleLLMMessage[]): AnthropicOr
 			continue
 		}
 
-		// edit previous assistant message to have called the tool
-		const prevMsg = 0 <= i - 1 && i - 1 <= newMessages.length ? newMessages[i - 1] : undefined
-		if (prevMsg?.role === 'assistant') {
-			prevMsg.tool_calls = [{
-				type: 'function',
-				id: currMsg.id,
-				function: {
-					name: currMsg.name,
-					arguments: JSON.stringify(currMsg.rawParams)
-				}
-			}]
+		// Find the most recent assistant message in newMessages to attach tool_calls
+		const lastAssistantIdx = findLastAssistantIdx(newMessages)
+		if (lastAssistantIdx !== -1) {
+			const prevMsg = newMessages[lastAssistantIdx]
+			if (prevMsg.role === 'assistant') {
+				if (!prevMsg.tool_calls) prevMsg.tool_calls = []
+				prevMsg.tool_calls.push({
+					type: 'function',
+					id: currMsg.id,
+					function: {
+						name: currMsg.name,
+						arguments: JSON.stringify(currMsg.rawParams)
+					}
+				})
+			}
 		}
 
-		// add the tool
+		// add the tool result
 		newMessages.push({
 			role: 'tool',
 			tool_call_id: currMsg.id,
@@ -107,6 +111,15 @@ const prepareMessages_openai_tools = (messages: SimpleLLMMessage[]): AnthropicOr
 	}
 	return newMessages
 
+}
+
+const findLastAssistantIdx = (messages: OpenAILLMChatMessage[]): number => {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		if (messages[i].role === 'assistant') return i
+		// stop looking if we hit a non-tool, non-assistant message
+		if (messages[i].role !== 'tool') return -1
+	}
+	return -1
 }
 
 
@@ -176,27 +189,48 @@ const prepareMessages_anthropic_tools = (messages: SimpleLLMMessage[], supportsA
 		}
 
 		if (currMsg.role === 'tool') {
-			// add anthropic tools
-			const prevMsg = 0 <= i - 1 && i - 1 <= newMessages.length ? newMessages[i - 1] : undefined
-
-			// make it so the assistant called the tool
-			if (prevMsg?.role === 'assistant') {
-				if (typeof prevMsg.content === 'string') prevMsg.content = [{ type: 'text', text: prevMsg.content }]
-				prevMsg.content.push({ type: 'tool_use', id: currMsg.id, name: currMsg.name, input: currMsg.rawParams })
+			// Find the most recent assistant message (looking back through tool messages)
+			let assistantMsg: AnthropicLLMChatMessage | undefined
+			for (let j = i - 1; j >= 0; j--) {
+				const prevMsg = newMessages[j]
+				if (prevMsg.role === 'assistant') { assistantMsg = prevMsg as AnthropicLLMChatMessage & { role: 'assistant' }; break }
+				if ((prevMsg as SimpleLLMMessage).role !== 'tool') break
 			}
 
-			// turn each tool into a user message with tool results at the end
-			newMessages[i] = {
-				role: 'user',
-				content: [{ type: 'tool_result', tool_use_id: currMsg.id, content: currMsg.content }]
+			// make it so the assistant called the tool
+			if (assistantMsg?.role === 'assistant') {
+				if (typeof assistantMsg.content === 'string') assistantMsg.content = [{ type: 'text', text: assistantMsg.content }]
+				assistantMsg.content.push({ type: 'tool_use', id: currMsg.id, name: currMsg.name, input: currMsg.rawParams })
+			}
+
+			// Merge consecutive tool results into a single user message
+			const prevOut = newMessages[i - 1]
+			if (prevOut && 'role' in prevOut && prevOut.role === 'user' && Array.isArray(prevOut.content) &&
+				prevOut.content.length > 0 && (prevOut.content[0] as any).type === 'tool_result') {
+				// Append to existing tool result user message
+				(prevOut.content as any[]).push({ type: 'tool_result', tool_use_id: currMsg.id, content: currMsg.content })
+				// Mark this slot as merged (will be filtered out)
+				newMessages[i] = prevOut
+			} else {
+				// turn tool into a user message with tool result
+				newMessages[i] = {
+					role: 'user',
+					content: [{ type: 'tool_result', tool_use_id: currMsg.id, content: currMsg.content }]
+				}
 			}
 			continue
 		}
 
 	}
 
-	// we just removed the tools
-	return newMessages as AnthropicLLMChatMessage[]
+	// Deduplicate merged messages (consecutive tool results get merged into one user message)
+	const deduped: AnthropicLLMChatMessage[] = []
+	for (const msg of newMessages as AnthropicLLMChatMessage[]) {
+		if (deduped.length === 0 || deduped[deduped.length - 1] !== msg) {
+			deduped.push(msg)
+		}
+	}
+	return deduped
 }
 
 
@@ -206,14 +240,15 @@ const prepareMessages_XML_tools = (messages: SimpleLLMMessage[], supportsAnthrop
 	for (let i = 0; i < messages.length; i += 1) {
 
 		const c = messages[i]
-		const next = 0 <= i + 1 && i + 1 <= messages.length - 1 ? messages[i + 1] : null
 
 		if (c.role === 'assistant') {
-			// if called a tool (message after it), re-add its XML to the message
-			// alternatively, could just hold onto the original output, but this way requires less piping raw strings everywhere
+			// Collect all consecutive tool messages after this assistant message
 			let content: AnthropicOrOpenAILLMMessage['content'] = c.content
-			if (next?.role === 'tool') {
-				content = `${content}\n\n${reParsedToolXMLString(next.name, next.rawParams)}`
+			let j = i + 1
+			while (j < messages.length && messages[j].role === 'tool') {
+				const toolMsg = messages[j] as SimpleLLMMessage & { role: 'tool' }
+				content = `${content}\n\n${reParsedToolXMLString(toolMsg.name, toolMsg.rawParams)}`
+				j++
 			}
 
 			// anthropic reasoning

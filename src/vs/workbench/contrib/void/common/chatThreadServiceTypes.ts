@@ -56,6 +56,8 @@ export type PlanItem = {
 	status?: PlanItemStatus;
 	files?: string[];
 	size?: 'S' | 'M' | 'L';
+	dependencies?: string[]; // ids of plan items this depends on
+	mermaidNodeId?: string; // id for Mermaid diagram rendering
 }
 
 // Image attachment for user messages

@@ -5,10 +5,13 @@ import { checkUsageLimits, recordUsage } from "../services/usage.service";
 import {
   createCompletion,
   streamCompletion,
+  isProviderConfigured,
 } from "../services/ai.service";
+import { ERROR_CODES } from "../shared/types";
 import type { CompletionRequest } from "../shared/types";
+import type { AppEnv } from "../shared/hono-env";
 
-const completions = new Hono();
+const completions = new Hono<AppEnv>();
 
 // All routes require authentication
 completions.use("/*", authMiddleware);
@@ -22,6 +25,14 @@ completions.post("/", async (c) => {
   const userId = c.get("userId");
   const plan = c.get("plan");
   const body: CompletionRequest = await c.req.json();
+
+  const { configured, provider } = isProviderConfigured(body.model);
+  if (!configured) {
+    return c.json(
+      { error: `Provider "${provider}" is not configured on this server. Missing API key.`, code: ERROR_CODES.PROVIDER_NOT_CONFIGURED },
+      503
+    );
+  }
 
   const { allowed, reason, code } = await checkUsageLimits(
     userId,
@@ -63,6 +74,14 @@ completions.post("/stream", async (c) => {
   const userId = c.get("userId");
   const plan = c.get("plan");
   const body: CompletionRequest = await c.req.json();
+
+  const { configured, provider } = isProviderConfigured(body.model);
+  if (!configured) {
+    return c.json(
+      { error: `Provider "${provider}" is not configured on this server. Missing API key.`, code: ERROR_CODES.PROVIDER_NOT_CONFIGURED },
+      503
+    );
+  }
 
   const { allowed, reason, code } = await checkUsageLimits(
     userId,

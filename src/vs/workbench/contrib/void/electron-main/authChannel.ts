@@ -13,6 +13,7 @@ import * as path from 'path';
 export type OAuthCallbackParams = {
 	token: string
 	refreshToken: string
+	expiresAt: number
 	user: AuthUser
 }
 
@@ -55,10 +56,7 @@ export class AuthChannel implements IServerChannel {
 
 	// Called by the protocol handler when void://auth/callback is received
 	handleOAuthCallback(params: OAuthCallbackParams) {
-		const { token, refreshToken, user } = params
-
-		// Compute expiresAt (1 hour from now)
-		const expiresAt = Math.floor(Date.now() / 1000) + 3600
+		const { token, refreshToken, expiresAt, user } = params
 
 		const session: AuthSession = {
 			accessToken: token,
@@ -97,12 +95,10 @@ export class AuthChannel implements IServerChannel {
 			const data = await response.json()
 			if (!response.ok) return { error: data.error || 'Token refresh failed' }
 
-			const expiresAt = Math.floor(Date.now() / 1000) + 3600
-
 			const session: AuthSession = {
 				accessToken: data.token,
 				refreshToken: data.refreshToken,
-				expiresAt,
+				expiresAt: data.expiresAt ?? Math.floor(Date.now() / 1000) + 3600,
 				user: data.user as AuthUser,
 			}
 

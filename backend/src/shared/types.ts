@@ -16,17 +16,10 @@ export interface User {
 
 export type PlanType = "free" | "pro" | "team" | "enterprise";
 
-export interface AuthTokenPayload {
-  userId: string;
-  email: string;
-  plan: PlanType;
-  iat: number;
-  exp: number;
-}
-
 export interface AuthResponse {
   token: string;
   refreshToken: string;
+  expiresAt: number;
   user: User;
 }
 
@@ -47,7 +40,7 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
   free: {
     messagesPerDay: 50,
     maxTokensPerRequest: 4096,
-    allowedModels: ["claude-haiku-4-5", "gemini-flash"],
+    allowedModels: ["claude-haiku-4-5", "gemini-flash", "llama-3.1-8b-instant"],
     agenticEnabled: false,
     maxProjects: 3,
     maxFileUploads: 10,
@@ -60,6 +53,11 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
       "claude-haiku-4-5",
       "gemini-pro",
       "gemini-flash",
+      "gpt-4.1-mini",
+      "o4-mini",
+      "llama-3.3-70b-versatile",
+      "llama-3.1-8b-instant",
+      "qwen-qwq-32b",
     ],
     agenticEnabled: true,
     maxProjects: 50,
@@ -74,6 +72,14 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
       "claude-haiku-4-5",
       "gemini-pro",
       "gemini-flash",
+      "gpt-4.1",
+      "gpt-4.1-mini",
+      "o3",
+      "o4-mini",
+      "llama-3.3-70b-versatile",
+      "llama-3.1-8b-instant",
+      "qwen-qwq-32b",
+      "mixtral-8x7b-32768",
     ],
     agenticEnabled: true,
     maxProjects: -1,
@@ -143,5 +149,6 @@ export const ERROR_CODES = {
   MODEL_NOT_ALLOWED: "MODEL_NOT_ALLOWED",
   RATE_LIMITED: "RATE_LIMITED",
   INVALID_REQUEST: "INVALID_REQUEST",
+  PROVIDER_NOT_CONFIGURED: "PROVIDER_NOT_CONFIGURED",
   INTERNAL_ERROR: "INTERNAL_ERROR",
 } as const;

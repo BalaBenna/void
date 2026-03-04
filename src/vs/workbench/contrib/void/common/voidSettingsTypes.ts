@@ -7,7 +7,7 @@
 import { defaultModelsOfProvider, defaultProviderSettings, ModelOverrides } from './modelCapabilities.js';
 import { ToolApprovalType } from './toolsServiceTypes.js';
 import { VoidSettingsState } from './voidSettingsService.js'
-import { SandboxMode, SandboxPolicy, YoloConfig, defaultSandboxPolicy, defaultYoloConfig } from './sandboxTypes.js';
+import { SandboxMode, SandboxPolicy, YoloConfig, defaultSandboxPolicy, defaultYoloConfig, E2BSandboxConfig, defaultE2BSandboxConfig } from './sandboxTypes.js';
 import { RouterConfig, defaultRouterConfig } from './modelRouterTypes.js';
 import { MemoryConfig, defaultMemoryConfig } from './memoryTypes.js';
 import { ParallelAgentConfig, defaultParallelAgentConfig } from './parallelAgentTypes.js';
@@ -440,6 +440,8 @@ export type GlobalSettings = {
 	sandboxPolicy: SandboxPolicy;
 	yoloConfig: YoloConfig;
 	secretDetectionEnabled: boolean;
+	// E2B Cloud Sandbox
+	e2bConfig: E2BSandboxConfig;
 	// Phase 4: Two-Model Apply
 	applyModelRetries: number;
 	applyFallbackToDirect: boolean;
@@ -462,6 +464,14 @@ export type GlobalSettings = {
 	// Auth / Backend Proxy
 	useSelfHostedMode: boolean;
 	backendUrl: string;
+	// Grace Code Features
+	speculativeEditsEnabled: boolean;
+	ambientAgentEnabled: boolean;
+	cursorPredictionEnabled: boolean;
+	visualEditorEnabled: boolean;
+	bestOfNEnabled: boolean;
+	bestOfNCount: number;
+	dagMaxConcurrentSubagents: number;
 }
 
 export const defaultGlobalSettings: GlobalSettings = {
@@ -487,6 +497,8 @@ export const defaultGlobalSettings: GlobalSettings = {
 	sandboxPolicy: defaultSandboxPolicy,
 	yoloConfig: defaultYoloConfig,
 	secretDetectionEnabled: true,
+	// E2B Cloud Sandbox
+	e2bConfig: defaultE2BSandboxConfig,
 	// Phase 4: Two-Model Apply
 	applyModelRetries: 2,
 	applyFallbackToDirect: true,
@@ -509,6 +521,14 @@ export const defaultGlobalSettings: GlobalSettings = {
 	// Auth / Backend Proxy
 	useSelfHostedMode: false,
 	backendUrl: 'http://localhost:3456',
+	// Grace Code Features
+	speculativeEditsEnabled: false,
+	ambientAgentEnabled: false,
+	cursorPredictionEnabled: false,
+	visualEditorEnabled: false,
+	bestOfNEnabled: false,
+	bestOfNCount: 3,
+	dagMaxConcurrentSubagents: 5,
 }
 
 export type GlobalSettingName = keyof GlobalSettings

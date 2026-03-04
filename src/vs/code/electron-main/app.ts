@@ -134,6 +134,7 @@ import { VoidSCMService } from '../../workbench/contrib/void/electron-main/voidS
 import { IVoidSCMService } from '../../workbench/contrib/void/common/voidSCMTypes.js';
 import { MCPChannel } from '../../workbench/contrib/void/electron-main/mcpChannel.js';
 import { AuthChannel } from '../../workbench/contrib/void/electron-main/authChannel.js';
+import { TreeSitterChannel } from '../../workbench/contrib/void/electron-main/treeSitterChannel.js';
 /**
  * The main VS Code application. There will only ever be one instance,
  * even if the user starts many instances (e.g. from the command line).
@@ -880,6 +881,7 @@ export class CodeApplication extends Disposable {
 			const params = new URLSearchParams(uri.query);
 			const token = params.get('token');
 			const refreshToken = params.get('refreshToken');
+			const expiresAt = parseInt(params.get('expiresAt') ?? '0', 10) || Math.floor(Date.now() / 1000) + 3600;
 			const userJson = params.get('user');
 
 			if (token && refreshToken && userJson) {
@@ -890,6 +892,7 @@ export class CodeApplication extends Disposable {
 						authChannel.handleOAuthCallback({
 							token,
 							refreshToken,
+							expiresAt,
 							user,
 						});
 					}
@@ -1286,6 +1289,10 @@ export class CodeApplication extends Disposable {
 
 		// Store authChannel on the app instance for OAuth callback handling
 		(this as any)._voidAuthChannel = authChannel;
+
+		// Void Tree-Sitter chunking channel
+		const treeSitterChannel = new TreeSitterChannel();
+		mainProcessElectronServer.registerChannel('void-channel-treeSitter', treeSitterChannel);
 
 		// Extension Host Debug Broadcasting
 		const electronExtensionHostDebugBroadcastChannel = new ElectronExtensionHostDebugBroadcastChannel(accessor.get(IWindowsMainService));

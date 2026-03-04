@@ -9,7 +9,7 @@ import { createDecorator } from '../../../../platform/instantiation/common/insta
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 
-import { ParallelAgentExecution, ParallelAgentMode, ParallelAgentTask } from '../common/parallelAgentTypes.js';
+import { ParallelAgentExecution, ParallelAgentMode, ParallelAgentTask, JudgeEvaluation, judgeCriteria } from '../common/parallelAgentTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
 import { ISubagentService } from './subagentServiceInterface.js';
 import { ITerminalToolService } from './terminalToolService.js';
@@ -55,6 +55,12 @@ export interface IParallelAgentService {
 
 	getExecution(executionId: string): ParallelAgentExecution | undefined;
 	getActiveExecutions(): ParallelAgentExecution[];
+
+	/**
+	 * Evaluate all completed results using a structured rubric.
+	 * Returns scores per criterion and a recommendation.
+	 */
+	evaluateResults(executionId: string): JudgeEvaluation[];
 }
 
 export const IParallelAgentService = createDecorator<IParallelAgentService>('voidParallelAgentService');
@@ -313,6 +319,50 @@ class ParallelAgentService extends Disposable implements IParallelAgentService {
 
 	getActiveExecutions(): ParallelAgentExecution[] {
 		return Array.from(this._executions.values()).filter(e => e.status === 'running');
+	}
+
+	evaluateResults(executionId: string): JudgeEvaluation[] {
+		const execution = this._executions.get(executionId);
+		if (!execution) return [];
+
+		const completedTasks = execution.tasks.filter(t => t.status === 'completed' && t.result);
+
+		// Rule-based evaluation (in production, this would use an LLM judge)
+		return completedTasks.map(task => {
+			const resultLength = task.result?.length ?? 0;
+
+			const criteria = judgeCriteria.map(c => {
+				let score = 50; // base score
+				if (c.name === 'correctness') {
+					score = task.status === 'completed' ? 75 : 25;
+				} else if (c.name === 'code_quality') {
+					score = Math.min(100, 50 + resultLength / 100);
+				} else if (c.name === 'rules_adherence') {
+					score = 70; // default — LLM judge would assess this
+				} else if (c.name === 'efficiency') {
+					const duration = (task.completedAt ?? 0) - (task.startedAt ?? 0);
+					score = duration < 30000 ? 90 : duration < 60000 ? 70 : 50;
+				}
+
+				return {
+					criterion: c.name,
+					score,
+					reasoning: `Rule-based score for ${c.name}`,
+				};
+			});
+
+			const overallScore = criteria.reduce((sum, c) => {
+				const weight = judgeCriteria.find(jc => jc.name === c.criterion)?.weight ?? 0.25;
+				return sum + c.score * weight;
+			}, 0);
+
+			return {
+				taskId: task.id,
+				overallScore,
+				criteria,
+				recommendation: overallScore >= 70 ? 'Accept' : 'Review needed',
+			};
+		});
 	}
 }
 

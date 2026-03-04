@@ -31,6 +31,34 @@ export interface IVoidSCMService {
 	 * @param path Path to the git repository
 	 */
 	gitLog(path: string): Promise<string>
+
+	/**
+	 * Get git blame for a specific line in a file
+	 *
+	 * @param repoPath Path to the git repository
+	 * @param file Path to the file (relative to repo)
+	 * @param line Line number to blame
+	 */
+	gitBlame(repoPath: string, file: string, line: number): Promise<string>
+
+	/**
+	 * Get file contents at a specific commit
+	 *
+	 * @param repoPath Path to the git repository
+	 * @param commit Commit hash or ref
+	 * @param file Path to the file (relative to repo)
+	 */
+	gitShowAtCommit(repoPath: string, commit: string, file: string): Promise<string>
+
+	/**
+	 * Get diff between two commits
+	 *
+	 * @param repoPath Path to the git repository
+	 * @param commitA First commit hash or ref
+	 * @param commitB Second commit hash or ref
+	 * @param file Optional file path to scope the diff
+	 */
+	gitDiffBetweenCommits(repoPath: string, commitA: string, commitB: string, file?: string): Promise<string>
 }
 
 export const IVoidSCMService = createDecorator<IVoidSCMService>('voidSCMService')

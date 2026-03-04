@@ -1,10 +1,6 @@
-import { eq, and } from "drizzle-orm";
-import { db, schema } from "../db";
+import { supabaseAdmin } from "../lib/supabase";
 import { redis } from "../config/redis";
-import {
-  PLAN_LIMITS,
-  ERROR_CODES,
-} from "../shared/types";
+import { PLAN_LIMITS, ERROR_CODES } from "../shared/types";
 import type { PlanType, UsageStats } from "../shared/types";
 
 /**
@@ -30,23 +26,20 @@ export async function getUsageStats(
     return JSON.parse(cached);
   }
 
-  // Query DB
-  const [usage] = await db
-    .select()
-    .from(schema.dailyUsage)
-    .where(
-      and(
-        eq(schema.dailyUsage.userId, userId),
-        eq(schema.dailyUsage.date, today)
-      )
-    )
-    .limit(1);
+  // Query Supabase
+  const { data: usage } = await supabaseAdmin
+    .from("daily_usage")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("date", today)
+    .single();
 
   const limits = PLAN_LIMITS[plan];
   const stats: UsageStats = {
-    messagesUsedToday: usage?.messagesCount || 0,
+    messagesUsedToday: usage?.messages_count || 0,
     messagesLimit: limits.messagesPerDay,
-    tokensUsedToday: (usage?.inputTokens || 0) + (usage?.outputTokens || 0),
+    tokensUsedToday:
+      (usage?.input_tokens || 0) + (usage?.output_tokens || 0),
     plan,
   };
 
@@ -67,7 +60,10 @@ export async function checkUsageLimits(
   const limits = PLAN_LIMITS[plan];
 
   // Check model access
-  if (!limits.allowedModels.includes("*") && !limits.allowedModels.includes(model)) {
+  if (
+    !limits.allowedModels.includes("*") &&
+    !limits.allowedModels.includes(model)
+  ) {
     return {
       allowed: false,
       reason: `Model ${model} is not available on the ${plan} plan. Upgrade to access this model.`,
@@ -118,44 +114,40 @@ export async function recordUsage(
   const today = getTodayString();
 
   // Upsert daily usage
-  const [existing] = await db
-    .select()
-    .from(schema.dailyUsage)
-    .where(
-      and(
-        eq(schema.dailyUsage.userId, userId),
-        eq(schema.dailyUsage.date, today)
-      )
-    )
-    .limit(1);
+  const { data: existing } = await supabaseAdmin
+    .from("daily_usage")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("date", today)
+    .single();
 
   if (existing) {
-    await db
-      .update(schema.dailyUsage)
-      .set({
-        messagesCount: existing.messagesCount + 1,
-        inputTokens: existing.inputTokens + inputTokens,
-        outputTokens: existing.outputTokens + outputTokens,
-        updatedAt: new Date(),
+    await supabaseAdmin
+      .from("daily_usage")
+      .update({
+        messages_count: existing.messages_count + 1,
+        input_tokens: existing.input_tokens + inputTokens,
+        output_tokens: existing.output_tokens + outputTokens,
+        updated_at: new Date().toISOString(),
       })
-      .where(eq(schema.dailyUsage.id, existing.id));
+      .eq("id", existing.id);
   } else {
-    await db.insert(schema.dailyUsage).values({
-      userId,
+    await supabaseAdmin.from("daily_usage").insert({
+      user_id: userId,
       date: today,
-      messagesCount: 1,
-      inputTokens,
-      outputTokens,
+      messages_count: 1,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
     });
   }
 
   // Log the request
-  await db.insert(schema.requestLogs).values({
-    userId,
+  await supabaseAdmin.from("request_logs").insert({
+    user_id: userId,
     model,
-    inputTokens,
-    outputTokens,
-    durationMs,
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    duration_ms: durationMs,
     status: "success",
   });
 

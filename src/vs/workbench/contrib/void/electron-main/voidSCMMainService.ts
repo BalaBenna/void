@@ -79,4 +79,17 @@ export class VoidSCMService implements IVoidSCMService {
 	gitLog(path: string): Promise<string> {
 		return git('git log --pretty=format:"%h|%s|%ad" --date=short --no-merges -n 5', path)
 	}
+
+	async gitBlame(repoPath: string, file: string, line: number): Promise<string> {
+		return git(`git blame -L ${line},${line} -- "${file}"`, repoPath)
+	}
+
+	async gitShowAtCommit(repoPath: string, commit: string, file: string): Promise<string> {
+		return git(`git show ${commit}:"${file}"`, repoPath)
+	}
+
+	async gitDiffBetweenCommits(repoPath: string, commitA: string, commitB: string, file?: string): Promise<string> {
+		const fileArg = file ? ` -- "${file}"` : ''
+		return git(`git diff ${commitA}..${commitB}${fileArg}`, repoPath)
+	}
 }

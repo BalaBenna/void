@@ -73,6 +73,13 @@ export type BuiltinToolCallParams = {
 	'codebase_search': { query: string, targetDirectory: string | null, maxResults: number },
 	// --- verification pipeline ---
 	'run_verification': { cwd: string | null, steps: string | null },
+	// --- scratchpad ---
+	'scratchpad_read': { sessionId: string, key: string },
+	'scratchpad_write': { sessionId: string, key: string, value: string },
+	// --- DAG scheduler ---
+	'schedule_dag': { nodes: string },
+	// --- natural language git ---
+	'nl_git': { command: string },
 }
 
 export type WebSearchResultItem = { title: string, url: string, content: string }
@@ -108,6 +115,13 @@ export type BuiltinToolResultType = {
 	'codebase_search': { results: CodebaseSearchResultItem[] },
 	// --- verification pipeline ---
 	'run_verification': { pipelineResult: PipelineResult },
+	// --- scratchpad ---
+	'scratchpad_read': { value: string | null, source: string | null },
+	'scratchpad_write': { success: boolean },
+	// --- DAG scheduler ---
+	'schedule_dag': { executionId: string, status: string, summary: string },
+	// --- natural language git ---
+	'nl_git': { gitCommand: string, explanation: string, riskLevel: string, output: string },
 }
 
 

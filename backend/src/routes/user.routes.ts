@@ -1,11 +1,12 @@
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
 import { authMiddleware } from "../middleware/auth.middleware";
 import { getUsageStats } from "../services/usage.service";
-import { db, schema } from "../db";
+import { supabaseAdmin } from "../lib/supabase";
 import { PLAN_LIMITS } from "../shared/types";
+import { env } from "../config/env";
+import type { AppEnv } from "../shared/hono-env";
 
-const users = new Hono();
+const users = new Hono<AppEnv>();
 
 // All routes require authentication
 users.use("/*", authMiddleware);
@@ -18,13 +19,13 @@ users.use("/*", authMiddleware);
 users.get("/me", async (c) => {
   const userId = c.get("userId");
 
-  const [user] = await db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.id, userId))
-    .limit(1);
+  const { data: user, error } = await supabaseAdmin
+    .from("users")
+    .select("id, email, name, avatar_url, plan, created_at")
+    .eq("id", userId)
+    .single();
 
-  if (!user) {
+  if (error || !user) {
     return c.json({ error: "User not found" }, 404);
   }
 
@@ -32,9 +33,9 @@ users.get("/me", async (c) => {
     id: user.id,
     email: user.email,
     name: user.name,
-    avatarUrl: user.avatarUrl,
+    avatarUrl: user.avatar_url,
     plan: user.plan,
-    createdAt: user.createdAt,
+    createdAt: user.created_at,
   });
 });
 
@@ -62,7 +63,7 @@ users.get("/plan", async (c) => {
   return c.json({
     currentPlan: plan,
     limits: PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS],
-    upgradeUrl: `${process.env.FRONTEND_URL}/pricing`,
+    upgradeUrl: `${env.FRONTEND_URL}/pricing`,
   });
 });
 

@@ -1,58 +1,54 @@
 import { Hono } from "hono";
 import {
-  getGoogleAuthUrl,
-  handleGoogleCallback,
-  refreshAccessToken,
-  revokeAllTokens,
+  getSupabaseOAuthUrl,
+  handleOAuthCallback,
+  refreshSession,
 } from "../services/auth.service";
 import { env } from "../config/env";
+import { redis } from "../config/redis";
 import { authMiddleware } from "../middleware/auth.middleware";
+import type { AppEnv } from "../shared/hono-env";
 
-const auth = new Hono();
+const auth = new Hono<AppEnv>();
 
 // ============================================================
 // GET /auth/google
-// Desktop app opens this URL in the system browser
+// Desktop app opens this URL in the system browser.
+// Redirects to Supabase's Google OAuth consent screen.
 // ============================================================
 
-auth.get("/google", (c) => {
+auth.get("/google", async (c) => {
   const source = c.req.query("source") || "desktop";
-  const state = JSON.stringify({ source });
-  const url = getGoogleAuthUrl(state);
+  const url = await getSupabaseOAuthUrl(source);
   return c.redirect(url);
 });
 
 // ============================================================
 // GET /auth/google/callback
-// Google redirects here after consent
+// Supabase redirects here after Google consent.
+// Exchanges the authorization code for a Supabase session.
 // ============================================================
 
 auth.get("/google/callback", async (c) => {
   const code = c.req.query("code");
-  const stateStr = c.req.query("state");
+  const state = c.req.query("state");
 
-  if (!code) {
-    return c.json({ error: "No authorization code received" }, 400);
+  if (!code || !state) {
+    return c.json({ error: "Missing authorization code or state" }, 400);
   }
 
   try {
-    const authResponse = await handleGoogleCallback(code);
-
-    // Parse state to determine redirect target
-    let source = "desktop";
-    try {
-      const state = JSON.parse(stateStr || "{}");
-      source = state.source || "desktop";
-    } catch {}
+    const { accessToken, refreshToken, expiresAt, user, source } =
+      await handleOAuthCallback(code, state);
 
     if (source === "desktop") {
-      // DESKTOP FLOW: Redirect to custom protocol
-      // The Electron app registers void:// as a protocol handler
+      // DESKTOP FLOW: Redirect to custom protocol deep link
       const deepLink =
         `${env.DESKTOP_PROTOCOL}://auth/callback` +
-        `?token=${encodeURIComponent(authResponse.token)}` +
-        `&refreshToken=${encodeURIComponent(authResponse.refreshToken)}` +
-        `&user=${encodeURIComponent(JSON.stringify(authResponse.user))}`;
+        `?token=${encodeURIComponent(accessToken)}` +
+        `&refreshToken=${encodeURIComponent(refreshToken)}` +
+        `&expiresAt=${expiresAt}` +
+        `&user=${encodeURIComponent(JSON.stringify(user))}`;
 
       return c.html(`
         <!DOCTYPE html>
@@ -76,19 +72,23 @@ auth.get("/google/callback", async (c) => {
       // WEB FLOW: Redirect to frontend with tokens
       const webRedirect =
         `${env.FRONTEND_URL}/auth/callback` +
-        `?token=${encodeURIComponent(authResponse.token)}` +
-        `&refreshToken=${encodeURIComponent(authResponse.refreshToken)}`;
+        `?token=${encodeURIComponent(accessToken)}` +
+        `&refreshToken=${encodeURIComponent(refreshToken)}` +
+        `&expiresAt=${expiresAt}`;
       return c.redirect(webRedirect);
     }
   } catch (error: any) {
-    console.error("Google OAuth error:", error);
-    return c.json({ error: "Authentication failed", details: error.message }, 500);
+    console.error("OAuth callback error:", error);
+    return c.json(
+      { error: "Authentication failed", details: error.message },
+      500
+    );
   }
 });
 
 // ============================================================
 // POST /auth/refresh
-// Exchange a refresh token for a new access token
+// Exchange a Supabase refresh token for a new session
 // ============================================================
 
 auth.post("/refresh", async (c) => {
@@ -100,8 +100,13 @@ auth.post("/refresh", async (c) => {
   }
 
   try {
-    const authResponse = await refreshAccessToken(refreshToken);
-    return c.json(authResponse);
+    const session = await refreshSession(refreshToken);
+    return c.json({
+      token: session.accessToken,
+      refreshToken: session.refreshToken,
+      expiresAt: session.expiresAt,
+      user: session.user,
+    });
   } catch (error: any) {
     return c.json(
       { error: "Invalid refresh token", details: error.message },
@@ -112,12 +117,13 @@ auth.post("/refresh", async (c) => {
 
 // ============================================================
 // POST /auth/logout
-// Revoke all tokens for the authenticated user
+// Clear cached auth state (Supabase handles token invalidation)
 // ============================================================
 
 auth.post("/logout", authMiddleware, async (c) => {
   const userId = c.get("userId");
-  await revokeAllTokens(userId);
+  // Clear any cached auth/session data in Redis
+  await redis.del(`session:${userId}`);
   return c.json({ message: "Logged out successfully" });
 });
 

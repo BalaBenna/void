@@ -316,9 +316,8 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 	let fullReasoningSoFar = ''
 	let fullTextSoFar = ''
 
-	let toolName = ''
-	let toolId = ''
-	let toolParamsStr = ''
+	// Multi-tool support: collect tool calls by index
+	const toolCallsByIndex: Map<number, { name: string; paramsStr: string; id: string }> = new Map()
 
 	openai.chat.completions
 		.create(options)
@@ -330,14 +329,16 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 				const newText = chunk.choices[0]?.delta?.content ?? ''
 				fullTextSoFar += newText
 
-				// tool call
+				// tool calls - collect all indices
 				for (const tool of chunk.choices[0]?.delta?.tool_calls ?? []) {
 					const index = tool.index
-					if (index !== 0) continue
-
-					toolName += tool.function?.name ?? ''
-					toolParamsStr += tool.function?.arguments ?? '';
-					toolId += tool.id ?? ''
+					if (!toolCallsByIndex.has(index)) {
+						toolCallsByIndex.set(index, { name: '', paramsStr: '', id: '' })
+					}
+					const tc = toolCallsByIndex.get(index)!
+					tc.name += tool.function?.name ?? ''
+					tc.paramsStr += tool.function?.arguments ?? ''
+					tc.id += tool.id ?? ''
 				}
 
 
@@ -349,21 +350,31 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 					fullReasoningSoFar += newReasoning
 				}
 
-				// call onText
+				// call onText with first tool call for compat
+				const firstTc = toolCallsByIndex.get(0)
 				onText({
 					fullText: fullTextSoFar,
 					fullReasoning: fullReasoningSoFar,
-					toolCall: !toolName ? undefined : { name: toolName, rawParams: {}, isDone: false, doneParams: [], id: toolId },
+					toolCall: !firstTc?.name ? undefined : { name: firstTc.name, rawParams: {}, isDone: false, doneParams: [], id: firstTc.id },
 				})
 
 			}
 			// on final
-			if (!fullTextSoFar && !fullReasoningSoFar && !toolName) {
+			const firstTc = toolCallsByIndex.get(0)
+			if (!fullTextSoFar && !fullReasoningSoFar && !firstTc?.name) {
 				onError({ message: 'Void: Response from model was empty.', fullError: null })
 			}
 			else {
-				const toolCall = rawToolCallObjOfParamsStr(toolName, toolParamsStr, toolId)
-				const toolCallObj = toolCall ? { toolCall } : {}
+				// Build all tool calls array
+				const allToolCalls: RawToolCallObj[] = []
+				const sortedIndices = [...toolCallsByIndex.keys()].sort((a, b) => a - b)
+				for (const idx of sortedIndices) {
+					const tc = toolCallsByIndex.get(idx)!
+					const parsed = rawToolCallObjOfParamsStr(tc.name, tc.paramsStr, tc.id)
+					if (parsed) allToolCalls.push(parsed)
+				}
+				const toolCall = allToolCalls[0]
+				const toolCallObj = toolCall ? { toolCall, toolCalls: allToolCalls } : {}
 				onFinalMessage({ fullText: fullTextSoFar, fullReasoning: fullReasoningSoFar, anthropicReasoning: null, ...toolCallObj });
 			}
 		})
@@ -518,10 +529,12 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 	stream.on('finalMessage', (response) => {
 		const anthropicReasoning = response.content.filter(c => c.type === 'thinking' || c.type === 'redacted_thinking')
 		const tools = response.content.filter(c => c.type === 'tool_use')
-		// console.log('TOOLS!!!!!!', JSON.stringify(tools, null, 2))
-		// console.log('TOOLS!!!!!!', JSON.stringify(response, null, 2))
-		const toolCall = tools[0] && rawToolCallObjOfAnthropicParams(tools[0])
-		const toolCallObj = toolCall ? { toolCall } : {}
+		// Collect all tool calls from the response
+		const allToolCalls: RawToolCallObj[] = tools
+			.map(t => rawToolCallObjOfAnthropicParams(t))
+			.filter((tc): tc is RawToolCallObj => tc !== null && tc !== undefined)
+		const toolCall = allToolCalls[0]
+		const toolCallObj = toolCall ? { toolCall, toolCalls: allToolCalls } : {}
 
 		onFinalMessage({ fullText, fullReasoning, anthropicReasoning, ...toolCallObj })
 	})
@@ -666,9 +679,8 @@ const sendGeminiChat = async ({
 	let fullReasoningSoFar = ''
 	let fullTextSoFar = ''
 
-	let toolName = ''
-	let toolParamsStr = ''
-	let toolId = ''
+	// Multi-tool support: collect all function calls from Gemini
+	const geminiToolCalls: { name: string; paramsStr: string; id: string }[] = []
 
 
 	genAI.models.generateContentStream({
@@ -689,32 +701,43 @@ const sendGeminiChat = async ({
 				const newText = chunk.text ?? ''
 				fullTextSoFar += newText
 
-				// tool call
+				// tool calls - accumulate all from chunk
 				const functionCalls = chunk.functionCalls
 				if (functionCalls && functionCalls.length > 0) {
-					const functionCall = functionCalls[0] // Get the first function call
-					toolName = functionCall.name ?? ''
-					toolParamsStr = JSON.stringify(functionCall.args ?? {})
-					toolId = functionCall.id ?? ''
+					for (const fc of functionCalls) {
+						geminiToolCalls.push({
+							name: fc.name ?? '',
+							paramsStr: JSON.stringify(fc.args ?? {}),
+							id: fc.id ?? '',
+						})
+					}
 				}
 
 				// (do not handle reasoning yet)
 
-				// call onText
+				// call onText with first tool call for compat
+				const firstTc = geminiToolCalls[0]
 				onText({
 					fullText: fullTextSoFar,
 					fullReasoning: fullReasoningSoFar,
-					toolCall: !toolName ? undefined : { name: toolName, rawParams: {}, isDone: false, doneParams: [], id: toolId },
+					toolCall: !firstTc?.name ? undefined : { name: firstTc.name, rawParams: {}, isDone: false, doneParams: [], id: firstTc.id },
 				})
 			}
 
 			// on final
-			if (!fullTextSoFar && !fullReasoningSoFar && !toolName) {
+			const firstTc = geminiToolCalls[0]
+			if (!fullTextSoFar && !fullReasoningSoFar && !firstTc?.name) {
 				onError({ message: 'Void: Response from model was empty.', fullError: null })
 			} else {
-				if (!toolId) toolId = generateUuid() // ids are empty, but other providers might expect an id
-				const toolCall = rawToolCallObjOfParamsStr(toolName, toolParamsStr, toolId)
-				const toolCallObj = toolCall ? { toolCall } : {}
+				// Build all tool calls array
+				const allToolCalls: RawToolCallObj[] = []
+				for (const tc of geminiToolCalls) {
+					if (!tc.id) tc.id = generateUuid()
+					const parsed = rawToolCallObjOfParamsStr(tc.name, tc.paramsStr, tc.id)
+					if (parsed) allToolCalls.push(parsed)
+				}
+				const toolCall = allToolCalls[0]
+				const toolCallObj = toolCall ? { toolCall, toolCalls: allToolCalls } : {}
 				onFinalMessage({ fullText: fullTextSoFar, fullReasoning: fullReasoningSoFar, anthropicReasoning: null, ...toolCallObj });
 			}
 		})
