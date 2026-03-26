@@ -6,7 +6,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { MCPUserState, RefreshableProviderName, SettingsOfProvider } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js'
 import { DisposableStore, IDisposable } from '../../../../../../../base/common/lifecycle.js'
-import { VoidSettingsState } from '../../../../../../../workbench/contrib/void/common/voidSettingsService.js'
+import { voidSettingsState } from '../../../../../../../workbench/contrib/void/common/voidSettingsService.js'
 import { ColorScheme } from '../../../../../../../platform/theme/common/theme.js'
 import { RefreshModelStateOfProvider } from '../../../../../../../workbench/contrib/void/common/refreshModelService.js'
 
@@ -20,7 +20,7 @@ import { IHoverService } from '../../../../../../../platform/hover/browser/hover
 import { IThemeService } from '../../../../../../../platform/theme/common/themeService.js';
 import { ILLMMessageService } from '../../../../common/sendLLMMessageService.js';
 import { IRefreshModelService } from '../../../../../../../workbench/contrib/void/common/refreshModelService.js';
-import { IVoidSettingsService } from '../../../../../../../workbench/contrib/void/common/voidSettingsService.js';
+import { IvoidSettingsService } from '../../../../../../../workbench/contrib/void/common/voidSettingsService.js';
 import { IExtensionTransferService } from '../../../../../../../workbench/contrib/void/browser/extensionTransferService.js'
 
 import { IInstantiationService } from '../../../../../../../platform/instantiation/common/instantiation.js'
@@ -41,9 +41,9 @@ import { URI } from '../../../../../../../base/common/uri.js'
 import { IChatThreadService, ThreadsState, ThreadStreamState } from '../../../chatThreadServiceInterface.js'
 import { ITerminalToolService } from '../../../terminalToolService.js'
 import { ILanguageService } from '../../../../../../../editor/common/languages/language.js'
-import { IVoidModelService } from '../../../../common/voidModelService.js'
+import { IvoidModelService } from '../../../../common/voidModelService.js'
 import { IWorkspaceContextService } from '../../../../../../../platform/workspace/common/workspace.js'
-import { IVoidCommandBarService } from '../../../voidCommandBarServiceInterface.js'
+import { IvoidCommandBarService } from '../../../voidCommandBarServiceInterface.js'
 import { INativeHostService } from '../../../../../../../platform/native/common/native.js';
 import { IEditCodeService } from '../../../editCodeServiceInterface.js'
 import { IToolsService } from '../../../toolsService.js'
@@ -59,10 +59,10 @@ import { IAgentRegistryService } from '../../../agentRegistryService.js'
 import { IRulesService } from '../../../rulesService.js'
 import { IEmbeddingsService } from '../../../embeddingsService.js'
 import { IEnvFileService } from '../../../envFileService.js'
-import { VoidAgentDefinition } from '../../../../common/agentRegistryTypes.js'
-import { VoidRule } from '../../../../common/rulesTypes.js'
+import { voidAgentDefinition } from '../../../../common/agentRegistryTypes.js'
+import { voidRule } from '../../../../common/rulesTypes.js'
 import { IndexStatus } from '../../../../common/embeddingsTypes.js'
-import { IVoidAuthService } from '../../../voidAuthService.js'
+import { IvoidAuthService } from '../../../voidAuthService.js'
 import { AuthState } from '../../../../common/authTypes.js'
 
 
@@ -77,8 +77,8 @@ const chatThreadsStateListeners: Set<(s: ThreadsState) => void> = new Set()
 let chatThreadsStreamState: ThreadStreamState
 const chatThreadsStreamStateListeners: Set<(threadId: string) => void> = new Set()
 
-let settingsState: VoidSettingsState
-const settingsStateListeners: Set<(s: VoidSettingsState) => void> = new Set()
+let settingsState: voidSettingsState
+const settingsStateListeners: Set<(s: voidSettingsState) => void> = new Set()
 
 let refreshModelState: RefreshModelStateOfProvider
 const refreshModelStateListeners: Set<(s: RefreshModelStateOfProvider) => void> = new Set()
@@ -94,11 +94,11 @@ const activeURIListeners: Set<(uri: URI | null) => void> = new Set();
 const mcpListeners: Set<() => void> = new Set()
 
 // Agent registry, rules, embeddings, env
-let agentRegistryAgents: VoidAgentDefinition[] = []
-const agentRegistryListeners: Set<(agents: VoidAgentDefinition[]) => void> = new Set()
+let agentRegistryAgents: voidAgentDefinition[] = []
+const agentRegistryListeners: Set<(agents: voidAgentDefinition[]) => void> = new Set()
 
-let rulesState: VoidRule[] = []
-const rulesListeners: Set<(rules: VoidRule[]) => void> = new Set()
+let rulesState: voidRule[] = []
+const rulesListeners: Set<(rules: voidRule[]) => void> = new Set()
 
 let indexStatus: IndexStatus = { state: 'idle', totalFiles: 0, indexedFiles: 0, progress: 0 }
 const indexStatusListeners: Set<(s: IndexStatus) => void> = new Set()
@@ -119,11 +119,11 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 
 	const stateServices = {
 		chatThreadsStateService: accessor.get(IChatThreadService),
-		settingsStateService: accessor.get(IVoidSettingsService),
+		settingsStateService: accessor.get(IvoidSettingsService),
 		refreshModelService: accessor.get(IRefreshModelService),
 		themeService: accessor.get(IThemeService),
 		editCodeService: accessor.get(IEditCodeService),
-		voidCommandBarService: accessor.get(IVoidCommandBarService),
+		voidCommandBarService: accessor.get(IvoidCommandBarService),
 		modelService: accessor.get(IModelService),
 		mcpService: accessor.get(IMCPService),
 	}
@@ -240,7 +240,7 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 	)
 
 	// Auth
-	const voidAuthService = accessor.get(IVoidAuthService)
+	const voidAuthService = accessor.get(IvoidAuthService)
 	authState = voidAuthService.state
 	disposables.push(
 		voidAuthService.onDidChangeAuthState((state) => {
@@ -266,7 +266,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IThemeService: accessor.get(IThemeService),
 		ILLMMessageService: accessor.get(ILLMMessageService),
 		IRefreshModelService: accessor.get(IRefreshModelService),
-		IVoidSettingsService: accessor.get(IVoidSettingsService),
+		IvoidSettingsService: accessor.get(IvoidSettingsService),
 		IEditCodeService: accessor.get(IEditCodeService),
 		IChatThreadService: accessor.get(IChatThreadService),
 
@@ -289,10 +289,10 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IMetricsService: accessor.get(IMetricsService),
 		ITerminalToolService: accessor.get(ITerminalToolService),
 		ILanguageService: accessor.get(ILanguageService),
-		IVoidModelService: accessor.get(IVoidModelService),
+		IvoidModelService: accessor.get(IvoidModelService),
 		IWorkspaceContextService: accessor.get(IWorkspaceContextService),
 
-		IVoidCommandBarService: accessor.get(IVoidCommandBarService),
+		IvoidCommandBarService: accessor.get(IvoidCommandBarService),
 		INativeHostService: accessor.get(INativeHostService),
 		IToolsService: accessor.get(IToolsService),
 		IConvertToLLMMessageService: accessor.get(IConvertToLLMMessageService),
@@ -307,7 +307,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IEnvFileService: accessor.get(IEnvFileService),
 
 		IStorageService: accessor.get(IStorageService),
-		IVoidAuthService: accessor.get(IVoidAuthService),
+		IvoidAuthService: accessor.get(IvoidAuthService),
 
 	} as const
 	return reactAccessor
@@ -325,7 +325,7 @@ const _registerAccessor = (accessor: ServicesAccessor) => {
 // -- services --
 export const useAccessor = () => {
 	if (!reactAccessor_) {
-		throw new Error(`⚠️ Void useAccessor was called before _registerServices!`)
+		throw new Error(`⚠️ void useAccessor was called before _registerServices!`)
 	}
 
 	return { get: <S extends keyof ReactAccessor,>(service: S): ReactAccessor[S] => reactAccessor_![service] }
@@ -442,7 +442,7 @@ export const useCommandBarURIListener = (listener: (uri: URI) => void) => {
 };
 export const useCommandBarState = () => {
 	const accessor = useAccessor()
-	const commandBarService = accessor.get('IVoidCommandBarService')
+	const commandBarService = accessor.get('IvoidCommandBarService')
 	const [s, ss] = useState({ stateOfURI: commandBarService.stateOfURI, sortedURIs: commandBarService.sortedURIs });
 	const listener = useCallback(() => {
 		ss({ stateOfURI: commandBarService.stateOfURI, sortedURIs: commandBarService.sortedURIs });
@@ -457,7 +457,7 @@ export const useCommandBarState = () => {
 // roughly gets the active URI - this is used to get the history of recent URIs
 export const useActiveURI = () => {
 	const accessor = useAccessor()
-	const commandBarService = accessor.get('IVoidCommandBarService')
+	const commandBarService = accessor.get('IvoidCommandBarService')
 	const [s, ss] = useState(commandBarService.activeURI)
 	useEffect(() => {
 		const listener = () => { ss(commandBarService.activeURI) }

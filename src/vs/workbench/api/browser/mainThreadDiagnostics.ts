@@ -41,9 +41,9 @@ export class MainThreadDiagnostics implements MainThreadDiagnosticsShape {
 			if (allMarkerData.length === 0) {
 				data.push([resource, []]);
 			} else {
-				const forgeinMarkerData = allMarkerData.filter(marker => !this._activeOwners.has(marker.owner));
-				if (forgeinMarkerData.length > 0) {
-					data.push([resource, forgeinMarkerData]);
+				const voidinMarkerData = allMarkerData.filter(marker => !this._activeOwners.has(marker.owner));
+				if (voidinMarkerData.length > 0) {
+					data.push([resource, voidinMarkerData]);
 				}
 			}
 		}

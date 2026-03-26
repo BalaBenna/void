@@ -15,14 +15,13 @@ import { isLinux } from '../../../../../../../base/common/platform.js';
 
 const OVERRIDE_VALUE = false
 
-export const VoidOnboarding = () => {
+export const voidOnboarding = () => {
 
 	const voidSettingsState = useSettingsState()
 	const authState = useAuthState()
-	const useSelfHostedMode = voidSettingsState.globalSettings.useSelfHostedMode
 	const isOnboardingComplete = voidSettingsState.globalSettings.isOnboardingComplete
 		|| OVERRIDE_VALUE
-		|| (authState.isAuthenticated && !useSelfHostedMode)
+		|| authState.isAuthenticated
 
 	const isDark = useIsDark()
 
@@ -36,14 +35,14 @@ export const VoidOnboarding = () => {
 				style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
 			>
 				<ErrorBoundary>
-					<VoidOnboardingContent />
+					<voidOnboardingContent />
 				</ErrorBoundary>
 			</div>
 		</div>
 	)
 }
 
-const VoidIcon = () => {
+const voidIcon = () => {
 	const accessor = useAccessor()
 	const themeService = accessor.get('IThemeService')
 
@@ -270,7 +269,7 @@ const AddProvidersPage = ({ pageIndex, setPageIndex }: { pageIndex: number, setP
 // 	OnboardingPage
 // 		title:
 // 			div
-// 				"Welcome to Void"
+// 				"Welcome to void"
 // 			image
 // 		content:<></>
 // 		title
@@ -280,7 +279,7 @@ const AddProvidersPage = ({ pageIndex, setPageIndex }: { pageIndex: number, setP
 // 	OnboardingPage
 // 		title:
 // 			div
-// 				"How would you like to use Void?"
+// 				"How would you like to use void?"
 // 		content:
 // 			ModelQuestionContent
 // 				|
@@ -462,17 +461,16 @@ const PrimaryActionButton = ({ children, className, ringSize, ...props }: { chil
 
 type WantToUseOption = 'smart' | 'cheap' | 'all'
 
-const VoidOnboardingContent = () => {
+const voidOnboardingContent = () => {
 
 
 	const accessor = useAccessor()
-	const voidSettingsService = accessor.get('IVoidSettingsService')
+	const voidSettingsService = accessor.get('IvoidSettingsService')
 	const voidMetricsService = accessor.get('IMetricsService')
 
 	const voidSettingsState = useSettingsState()
 	const authState = useAuthState()
-	const useSelfHostedMode = voidSettingsState.globalSettings.useSelfHostedMode || false
-	const skipProviderSetup = authState.isAuthenticated && !useSelfHostedMode
+	const skipProviderSetup = authState.isAuthenticated
 
 	const [pageIndex, setPageIndex] = useState(0)
 
@@ -542,7 +540,7 @@ const VoidOnboardingContent = () => {
 					voidMetricsService.capture('Completed Onboarding', { selectedProviderName, wantToUseOption })
 				}}
 				ringSize={voidSettingsState.globalSettings.isOnboardingComplete ? 'screen' : undefined}
-			>Enter the Void</PrimaryActionButton>
+			>Enter the void</PrimaryActionButton>
 		</div>
 	</div>
 
@@ -585,11 +583,11 @@ const VoidOnboardingContent = () => {
 	const welcomePage = <OnboardingPageShell
 		content={
 			<div className='flex flex-col items-center gap-8'>
-				<div className="text-5xl font-light text-center">Welcome to Void</div>
+				<div className="text-5xl font-light text-center">Welcome to void</div>
 
-				{/* Slice of Void image */}
+				{/* Slice of void image */}
 				<div className='max-w-md w-full h-[30vh] mx-auto flex items-center justify-center'>
-					{!isLinux && <VoidIcon />}
+					{!isLinux && <voidIcon />}
 				</div>
 
 

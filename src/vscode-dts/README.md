@@ -1,4 +1,3 @@
-
 # vscode-dts
 
 This is the place for the stable API and for API proposals.
@@ -8,7 +7,7 @@ This is the place for the stable API and for API proposals.
 1. find a proposal you are interested in
 1. add its name to your extensions `package.json#enabledApiProposals` property
 1. run `npx vscode-dts dev` to download the `d.ts` files into your project
-1. don't forget that extension using proposed API cannot be published
+1. don't voidt that extension using proposed API cannot be published
 1. learn more here: <https://code.visualstudio.com/api/advanced-topics/using-proposed-api>
 
 ## Add a new proposal

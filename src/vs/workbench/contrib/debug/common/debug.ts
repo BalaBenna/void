@@ -565,7 +565,7 @@ export interface IStackFrame extends ITreeElement {
 	readonly instructionPointerReference?: string;
 	getScopes(): Promise<IScope[]>;
 	getMostSpecificScopes(range: IRange): Promise<ReadonlyArray<IScope>>;
-	forgetScopes(): void;
+	voidtScopes(): void;
 	restart(): Promise<any>;
 	toString(): string;
 	openInEditor(editorService: IEditorService, preserveFocus?: boolean, sideBySide?: boolean, pinned?: boolean): Promise<IEditorPane | undefined>;

@@ -5,7 +5,7 @@
 
 export type AgentSource = 'builtin' | 'project' | 'user'
 
-export interface VoidAgentDefinition {
+export interface voidAgentDefinition {
 	id: string;              // slug, e.g. "explore", "security-auditor"
 	name: string;
 	description: string;

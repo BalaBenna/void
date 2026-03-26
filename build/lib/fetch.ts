@@ -31,7 +31,7 @@ export function fetchUrls(urls: string[] | string, options: IFetchOptions): es.T
 		urls = [urls];
 	}
 
-	return es.readArray(urls).pipe(es.map<string, VinylFile | void>((data: string, cb) => {
+	return es.readArray(urls).pipe(es.map<string, VinylFile | forge>((data: string, cb) => {
 		const url = [options.base, data].join('');
 		fetchUrl(url, options).then(file => {
 			cb(undefined, file);

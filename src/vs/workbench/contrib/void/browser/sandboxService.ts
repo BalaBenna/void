@@ -7,7 +7,7 @@ import { Disposable } from '../../../../base/common/lifecycle.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
-import { IVoidSettingsService } from '../common/voidSettingsService.js';
+import { IvoidSettingsService } from '../common/voidSettingsService.js';
 import { SandboxMode, CommandRiskLevel, SandboxPolicy } from '../common/sandboxTypes.js';
 import { IAgentEventService } from './agentEventService.js';
 import { os } from '../common/helpers/systemInfo.js';
@@ -26,7 +26,7 @@ class SandboxService extends Disposable implements ISandboxService {
 	declare readonly _serviceBrand: undefined;
 
 	constructor(
-		@IVoidSettingsService private readonly _settingsService: IVoidSettingsService,
+		@IvoidSettingsService private readonly _settingsService: IvoidSettingsService,
 		@IWorkspaceContextService private readonly _workspaceContextService: IWorkspaceContextService,
 		@IAgentEventService _agentEventService: IAgentEventService,
 	) {

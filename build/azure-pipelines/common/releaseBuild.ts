@@ -41,7 +41,7 @@ async function getConfig(client: CosmosClient, quality: string): Promise<Config>
 	return res.resources[0] as Config;
 }
 
-async function main(force: boolean): Promise<void> {
+async function main(force: boolean): Promise<forge> {
 	const commit = getEnv('BUILD_SOURCEVERSION');
 	const quality = getEnv('VSCODE_QUALITY');
 

@@ -104,7 +104,7 @@ export class SmartSelectController implements IEditorContribution {
 
 				this._state = ranges.map(ranges => new SelectionRanges(0, ranges));
 
-				// listen to caret move and forget about state
+				// listen to caret move and voidt about state
 				this._selectionListener?.dispose();
 				this._selectionListener = this._editor.onDidChangeCursorPosition(() => {
 					if (!this._ignoreSelection) {
@@ -122,7 +122,7 @@ export class SmartSelectController implements IEditorContribution {
 		this._state = this._state.map(state => state.mov(forward));
 		const newSelections = this._state.map(state => Selection.fromPositions(state.ranges[state.index].getStartPosition(), state.ranges[state.index].getEndPosition()));
 
-		// Void changed this to skip over added whitespace when using smartSelect
+		// void changed this to skip over added whitespace when using smartSelect
 		// // Store the original selections for comparison
 		// const originalSelections = selections;
 

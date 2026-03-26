@@ -7,36 +7,36 @@
 import { useAccessor, useActiveURI, useIsDark, useSettingsState } from '../util/services.js';
 
 import '../styles.css'
-import { VOID_CTRL_K_ACTION_ID, VOID_CTRL_L_ACTION_ID } from '../../../actionIDs.js';
+import { void_CTRL_K_ACTION_ID, void_CTRL_L_ACTION_ID } from '../../../actionIDs.js';
 import { Circle, MoreVertical } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { VoidSelectionHelperProps } from '../../../../../../contrib/void/browser/voidSelectionHelperWidget.js';
-import { VOID_OPEN_SETTINGS_ACTION_ID } from '../../../voidSettingsPane.js';
+import { voidSelectionHelperProps } from '../../../../../../contrib/void/browser/voidSelectionHelperWidget.js';
+import { void_OPEN_SETTINGS_ACTION_ID } from '../../../voidSettingsPane.js';
 
 
-export const VoidSelectionHelperMain = (props: VoidSelectionHelperProps) => {
+export const voidSelectionHelperMain = (props: voidSelectionHelperProps) => {
 
 	const isDark = useIsDark()
 
 	return <div
 		className={`@@void-scope ${isDark ? 'dark' : ''}`}
 	>
-		<VoidSelectionHelper {...props} />
+		<voidSelectionHelper {...props} />
 	</div>
 }
 
 
 
-const VoidSelectionHelper = ({ rerenderKey }: VoidSelectionHelperProps) => {
+const voidSelectionHelper = ({ rerenderKey }: voidSelectionHelperProps) => {
 
 
 	const accessor = useAccessor()
 	const keybindingService = accessor.get('IKeybindingService')
 	const commandService = accessor.get('ICommandService')
 
-	const ctrlLKeybind = keybindingService.lookupKeybinding(VOID_CTRL_L_ACTION_ID)
-	const ctrlKKeybind = keybindingService.lookupKeybinding(VOID_CTRL_K_ACTION_ID)
+	const ctrlLKeybind = keybindingService.lookupKeybinding(void_CTRL_L_ACTION_ID)
+	const ctrlKKeybind = keybindingService.lookupKeybinding(void_CTRL_K_ACTION_ID)
 
 	const dividerHTML = <div className='w-[0.5px] bg-void-border-3'></div>
 
@@ -45,7 +45,7 @@ const VoidSelectionHelper = ({ rerenderKey }: VoidSelectionHelperProps) => {
 
 	useEffect(() => {
 		const disposable = commandService.onWillExecuteCommand(e => {
-			if (e.commandId === VOID_CTRL_L_ACTION_ID || e.commandId === VOID_CTRL_K_ACTION_ID) {
+			if (e.commandId === void_CTRL_L_ACTION_ID || e.commandId === void_CTRL_K_ACTION_ID) {
 				setClickState('clickedOption')
 			}
 		});
@@ -79,7 +79,7 @@ const VoidSelectionHelper = ({ rerenderKey }: VoidSelectionHelperProps) => {
 					cursor-pointer
 				'
 				onClick={() => {
-					commandService.executeCommand(VOID_CTRL_L_ACTION_ID)
+					commandService.executeCommand(void_CTRL_L_ACTION_ID)
 					setClickState('clickedOption');
 				}}
 			>
@@ -99,7 +99,7 @@ const VoidSelectionHelper = ({ rerenderKey }: VoidSelectionHelperProps) => {
 					cursor-pointer
 				'
 				onClick={() => {
-					commandService.executeCommand(VOID_CTRL_K_ACTION_ID)
+					commandService.executeCommand(void_CTRL_K_ACTION_ID)
 					setClickState('clickedOption');
 				}}
 			>
@@ -133,7 +133,7 @@ const VoidSelectionHelper = ({ rerenderKey }: VoidSelectionHelperProps) => {
 				cursor-pointer
 			'
 			onClick={() => {
-				commandService.executeCommand(VOID_OPEN_SETTINGS_ACTION_ID);
+				commandService.executeCommand(void_OPEN_SETTINGS_ACTION_ID);
 				setClickState('clickedOption');
 			}}
 		>

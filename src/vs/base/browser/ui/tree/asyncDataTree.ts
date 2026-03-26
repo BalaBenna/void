@@ -1195,11 +1195,11 @@ export class AsyncDataTree<TInput, T, TFilterData = void> implements IDisposable
 			return [];
 		}
 
-		const nodesToForget = new Map<T, IAsyncDataTreeNode<TInput, T>>();
+		const nodesTovoidt = new Map<T, IAsyncDataTreeNode<TInput, T>>();
 		const childrenTreeNodesById = new Map<string, { node: IAsyncDataTreeNode<TInput, T>; collapsed: boolean }>();
 
 		for (const child of node.children) {
-			nodesToForget.set(child.element as T, child);
+			nodesTovoidt.set(child.element as T, child);
 
 			if (this.identityProvider) {
 				childrenTreeNodesById.set(child.id!, { node: child, collapsed: this.tree.hasElement(child) && this.tree.isCollapsed(child) });
@@ -1227,7 +1227,7 @@ export class AsyncDataTree<TInput, T, TFilterData = void> implements IDisposable
 			if (result) {
 				const asyncDataTreeNode = result.node;
 
-				nodesToForget.delete(asyncDataTreeNode.element as T);
+				nodesTovoidt.delete(asyncDataTreeNode.element as T);
 				this.nodes.delete(asyncDataTreeNode.element as T);
 				this.nodes.set(element, asyncDataTreeNode);
 
@@ -1268,7 +1268,7 @@ export class AsyncDataTree<TInput, T, TFilterData = void> implements IDisposable
 			return childAsyncDataTreeNode;
 		});
 
-		for (const node of nodesToForget.values()) {
+		for (const node of nodesTovoidt.values()) {
 			dfs(node, node => this.nodes.delete(node.element as T));
 		}
 

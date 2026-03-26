@@ -13,11 +13,11 @@ import { KeybindingWeight } from '../../../../platform/keybinding/common/keybind
 
 import { ICodeEditorService } from '../../../../editor/browser/services/codeEditorService.js';
 import { IRange } from '../../../../editor/common/core/range.js';
-import { VOID_VIEW_CONTAINER_ID } from './sidebarPane.js';
+import { void_VIEW_CONTAINER_ID } from './sidebarPane.js';
 import { IMetricsService } from '../common/metricsService.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
-import { VOID_TOGGLE_SETTINGS_ACTION_ID } from './voidSettingsPane.js';
-import { VOID_CTRL_L_ACTION_ID } from './actionIDs.js';
+import { void_TOGGLE_SETTINGS_ACTION_ID } from './voidSettingsPane.js';
+import { void_CTRL_L_ACTION_ID } from './actionIDs.js';
 import { localize2 } from '../../../../nls.js';
 import { IChatThreadService } from './chatThreadService.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
@@ -60,15 +60,15 @@ export const roundRangeToLines = (range: IRange | null | undefined, options: { e
 
 
 
-const VOID_OPEN_SIDEBAR_ACTION_ID = 'void.sidebar.open'
+const void_OPEN_SIDEBAR_ACTION_ID = 'void.sidebar.open'
 registerAction2(class extends Action2 {
 	constructor() {
-		super({ id: VOID_OPEN_SIDEBAR_ACTION_ID, title: localize2('voidOpenSidebar', 'Void: Open Sidebar'), f1: true });
+		super({ id: void_OPEN_SIDEBAR_ACTION_ID, title: localize2('voidOpenSidebar', 'void: Open Sidebar'), f1: true });
 	}
 	async run(accessor: ServicesAccessor): Promise<void> {
 		const viewsService = accessor.get(IViewsService)
 		const chatThreadsService = accessor.get(IChatThreadService)
-		viewsService.openViewContainer(VOID_VIEW_CONTAINER_ID)
+		viewsService.openViewContainer(void_VIEW_CONTAINER_ID)
 		await chatThreadsService.focusCurrentChat()
 	}
 })
@@ -78,12 +78,12 @@ registerAction2(class extends Action2 {
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
-			id: VOID_CTRL_L_ACTION_ID,
+			id: void_CTRL_L_ACTION_ID,
 			f1: true,
-			title: localize2('voidCmdL', 'Void: Add Selection to Chat'),
+			title: localize2('voidCmdL', 'void: Add Selection to Chat'),
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyCode.KeyL,
-				weight: KeybindingWeight.VoidExtension
+				weight: KeybindingWeight.voidExtension
 			}
 		});
 	}
@@ -105,9 +105,9 @@ registerAction2(class extends Action2 {
 		const selectionRange = roundRangeToLines(editor?.getSelection(), { emptySelectionBehavior: 'null' })
 
 		// open panel
-		const wasAlreadyOpen = viewsService.isViewContainerVisible(VOID_VIEW_CONTAINER_ID)
+		const wasAlreadyOpen = viewsService.isViewContainerVisible(void_VIEW_CONTAINER_ID)
 		if (!wasAlreadyOpen) {
-			await commandService.executeCommand(VOID_OPEN_SIDEBAR_ACTION_ID)
+			await commandService.executeCommand(void_OPEN_SIDEBAR_ACTION_ID)
 		}
 
 		// Add selection to chat
@@ -143,15 +143,15 @@ registerAction2(class extends Action2 {
 
 
 // New chat keybind + menu button
-const VOID_CMD_SHIFT_L_ACTION_ID = 'void.cmdShiftL'
+const void_CMD_SHIFT_L_ACTION_ID = 'void.cmdShiftL'
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
-			id: VOID_CMD_SHIFT_L_ACTION_ID,
+			id: void_CMD_SHIFT_L_ACTION_ID,
 			title: 'New Chat',
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyL,
-				weight: KeybindingWeight.VoidExtension,
+				weight: KeybindingWeight.voidExtension,
 			},
 			icon: { id: 'add' },
 			// menu removed - rendered in React ChatHeader instead
@@ -228,7 +228,7 @@ registerAction2(class extends Action2 {
 		const commandService = accessor.get(ICommandService)
 
 		metricsService.capture('Chat Navigation', { type: 'History' })
-		commandService.executeCommand(VOID_CMD_SHIFT_L_ACTION_ID)
+		commandService.executeCommand(void_CMD_SHIFT_L_ACTION_ID)
 
 	}
 })
@@ -239,14 +239,14 @@ registerAction2(class extends Action2 {
 	constructor() {
 		super({
 			id: 'void.settingsAction',
-			title: `Void's Settings`,
+			title: `void's Settings`,
 			icon: { id: 'settings-gear' },
 			// menu removed - rendered in React ChatHeader instead
 		});
 	}
 	async run(accessor: ServicesAccessor): Promise<void> {
 		const commandService = accessor.get(ICommandService)
-		commandService.executeCommand(VOID_TOGGLE_SETTINGS_ACTION_ID)
+		commandService.executeCommand(void_TOGGLE_SETTINGS_ACTION_ID)
 	}
 })
 

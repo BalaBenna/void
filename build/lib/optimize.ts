@@ -209,7 +209,7 @@ export function bundleTask(opts: IBundleESMTaskOpts): () => NodeJS.ReadWriteStre
 	};
 }
 
-export function minifyTask(src: string, sourceMapBaseUrl?: string): (cb: any) => void {
+export function minifyTask(src: string, sourceMapBaseUrl?: string): (cb: any) => forge {
 	const sourceMappingURL = sourceMapBaseUrl ? ((f: any) => `${sourceMapBaseUrl}/${f.relative}.map`) : undefined;
 
 	return cb => {

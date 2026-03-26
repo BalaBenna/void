@@ -15,7 +15,7 @@ import { VSBuffer } from '../../../../base/common/buffer.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 
 import { BackgroundAgent, BackgroundAgentStore } from '../common/backgroundAgentTypes.js';
-import { IVoidSettingsService } from '../common/voidSettingsService.js';
+import { IvoidSettingsService } from '../common/voidSettingsService.js';
 import { IChatThreadService } from './chatThreadService.js';
 
 
@@ -62,7 +62,7 @@ class BackgroundAgentService extends Disposable implements IBackgroundAgentServi
 	readonly onDidChangeAgents: Event<void> = this._onDidChangeAgents.event;
 
 	constructor(
-		@IVoidSettingsService private readonly _settingsService: IVoidSettingsService,
+		@IvoidSettingsService private readonly _settingsService: IvoidSettingsService,
 		@IChatThreadService private readonly _chatThreadService: IChatThreadService,
 		@IWorkspaceContextService private readonly _workspaceContextService: IWorkspaceContextService,
 		@INotificationService private readonly _notificationService: INotificationService,
@@ -179,7 +179,7 @@ class BackgroundAgentService extends Disposable implements IBackgroundAgentServi
 		this._onDidChangeAgents.fire();
 		await this._saveStore();
 
-		// Fire and forget — the agent runs in the background
+		// Fire and voidt — the agent runs in the background
 		this._runAgent(agent).catch(() => { /* handled inside _runAgent */ });
 
 		return agent;

@@ -9,7 +9,7 @@ import { createDecorator } from '../../../../platform/instantiation/common/insta
 
 import { ComplexityLevel } from '../common/modelRouterTypes.js';
 import { ModelSelection } from '../common/voidSettingsTypes.js';
-import { IVoidSettingsService } from '../common/voidSettingsService.js';
+import { IvoidSettingsService } from '../common/voidSettingsService.js';
 import { ChatMessage } from '../common/chatThreadServiceTypes.js';
 
 
@@ -26,7 +26,7 @@ class ModelRouterService extends Disposable implements IModelRouterService {
 	declare readonly _serviceBrand: undefined;
 
 	constructor(
-		@IVoidSettingsService private readonly _settingsService: IVoidSettingsService,
+		@IvoidSettingsService private readonly _settingsService: IvoidSettingsService,
 	) {
 		super();
 	}

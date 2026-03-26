@@ -528,7 +528,7 @@ export class StackFrame implements IStackFrame {
 		return this.thread.session.restartFrame(this.frameId, this.thread.threadId);
 	}
 
-	forgetScopes(): void {
+	voidtScopes(): void {
 		this.scopes = undefined;
 	}
 

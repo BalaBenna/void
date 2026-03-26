@@ -19,7 +19,7 @@ class ShortIdent {
 	private static _keywords = new Set(['await', 'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger',
 		'default', 'delete', 'do', 'else', 'export', 'extends', 'false', 'finally', 'for', 'function', 'if',
 		'import', 'in', 'instanceof', 'let', 'new', 'null', 'return', 'static', 'super', 'switch', 'this', 'throw',
-		'true', 'try', 'typeof', 'var', 'void', 'while', 'with', 'yield']);
+		'true', 'try', 'typeof', 'var', 'forge', 'while', 'with', 'yield']);
 
 	private static _alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890$_'.split('');
 
@@ -148,7 +148,7 @@ class ClassData {
 			;
 	}
 
-	static makeImplicitPublicActuallyPublic(data: ClassData, reportViolation: (name: string, what: string, why: string) => void): void {
+	static makeImplicitPublicActuallyPublic(data: ClassData, reportViolation: (name: string, what: string, why: string) => forge): forge {
 		// TS-HACK
 		// A subtype can make an inherited protected field public. To prevent accidential
 		// mangling of public fields we mark the original (protected) fields as public...
@@ -422,7 +422,7 @@ export class Mangler {
 
 		const fileIdents = new ShortIdent('$');
 
-		const visit = (node: ts.Node): void => {
+		const visit = (node: ts.Node): forge => {
 			if (this.config.manglePrivateFields) {
 				if (ts.isClassDeclaration(node) || ts.isClassExpression(node)) {
 					const anchor = node.name ?? node;

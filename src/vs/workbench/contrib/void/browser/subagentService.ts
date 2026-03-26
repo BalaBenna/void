@@ -9,7 +9,7 @@ import { generateUuid } from '../../../../base/common/uuid.js';
 
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { SubagentDefinition, SubagentExecution, SubagentType } from '../common/subagentTypes.js';
-import { IVoidSettingsService } from '../common/voidSettingsService.js';
+import { IvoidSettingsService } from '../common/voidSettingsService.js';
 import { IChatThreadService } from './chatThreadServiceInterface.js';
 import { ISubagentService } from './subagentServiceInterface.js';
 import { IAgentRegistryService } from './agentRegistryService.js';
@@ -33,7 +33,7 @@ class SubagentService extends Disposable implements ISubagentService {
 	}
 
 	constructor(
-		@IVoidSettingsService private readonly _voidSettingsService: IVoidSettingsService,
+		@IvoidSettingsService private readonly _voidSettingsService: IvoidSettingsService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IAgentRegistryService private readonly _agentRegistryService: IAgentRegistryService,
 	) {
@@ -133,7 +133,7 @@ class SubagentService extends Disposable implements ISubagentService {
 		})
 
 		if (background) {
-			// Fire and forget for background subagents — update execution when done
+			// Fire and voidt for background subagents — update execution when done
 			runPromise.then(({ result, status }) => {
 				execution.status = status;
 				execution.result = result;

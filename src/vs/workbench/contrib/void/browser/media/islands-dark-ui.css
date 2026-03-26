@@ -1,5 +1,5 @@
 /*--------------------------------------------------------------------------------------
- *  Void UI Fixes
+ *  void UI Fixes
  *--------------------------------------------------------------------------------------*/
 
 /* Hide horizontal scrollbar in auxiliarybar */
@@ -9,6 +9,8 @@
 
 /* Hide xterm decoration overview ruler in terminal */
 .monaco-workbench .terminal-editor .xterm-decoration-overview-ruler,
-.monaco-workbench .pane-body.integrated-terminal .xterm-decoration-overview-ruler {
+.monaco-workbench
+	.pane-body.integrated-terminal
+	.xterm-decoration-overview-ruler {
 	display: none !important;
 }

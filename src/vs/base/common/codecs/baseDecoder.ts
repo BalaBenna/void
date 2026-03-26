@@ -81,7 +81,7 @@ export abstract class BaseDecoder<
 	 */
 	public get settled(): Promise<void> {
 		// if the stream has not started yet, the promise might
-		// block the consumer calls indefinitely if they forget
+		// block the consumer calls indefinitely if they voidt
 		// to call the `start()` method, or if the call happens
 		// after await on the `settled` promise; to forbid this
 		// confusion, we require the stream to be started first

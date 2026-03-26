@@ -87,7 +87,7 @@ class RunCommands extends Action2 {
 		}
 
 		if (args.commands.length === 0) {
-			notificationService.warn(nls.localize('runCommands.noCommandsToRun', "'runCommands' has not received commands to run. Did you forget to pass commands in the 'runCommands' argument?"));
+			notificationService.warn(nls.localize('runCommands.noCommandsToRun', "'runCommands' has not received commands to run. Did you voidt to pass commands in the 'runCommands' argument?"));
 			return;
 		}
 

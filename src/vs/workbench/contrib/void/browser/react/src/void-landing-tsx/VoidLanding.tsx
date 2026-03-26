@@ -9,7 +9,7 @@ import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { FolderOpen, GitBranch, Monitor } from 'lucide-react'
 import { UsageStats } from '../../../../common/authTypes.js'
 
-const VoidIcon = () => {
+const voidIcon = () => {
 	const isDark = useIsDark()
 	return (
 		<div
@@ -107,14 +107,14 @@ const planLabels: Record<string, string> = {
 	enterprise: 'Enterprise',
 }
 
-export const VoidLanding = () => {
+export const voidLanding = () => {
 	const authState = useAuthState()
 	const settingsState = useSettingsState()
 	const isDark = useIsDark()
 	const accessor = useAccessor()
 	const commandService = accessor.get('ICommandService')
 	const workspaceService = accessor.get('IWorkspaceContextService')
-	const authService = accessor.get('IVoidAuthService')
+	const authService = accessor.get('IvoidAuthService')
 
 	const [showCloneDialog, setShowCloneDialog] = useState(false)
 	const [hasWorkspace, setHasWorkspace] = useState(false)
@@ -150,7 +150,7 @@ export const VoidLanding = () => {
 				<ErrorBoundary>
 					<div className="flex flex-col items-center gap-8">
 						{/* Logo */}
-						<VoidIcon />
+						<voidIcon />
 
 						{/* Plan info + usage */}
 						<div className="flex flex-col items-center gap-2">

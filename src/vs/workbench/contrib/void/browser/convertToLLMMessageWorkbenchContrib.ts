@@ -8,14 +8,14 @@ import { URI } from '../../../../base/common/uri.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
-import { IVoidModelService } from '../common/voidModelService.js';
+import { IvoidModelService } from '../common/voidModelService.js';
 
 class ConvertContribWorkbenchContribution extends Disposable implements IWorkbenchContribution {
 	static readonly ID = 'workbench.contrib.void.convertcontrib'
 	_serviceBrand: undefined;
 
 	constructor(
-		@IVoidModelService private readonly voidModelService: IVoidModelService,
+		@IvoidModelService private readonly voidModelService: IvoidModelService,
 		@IWorkspaceContextService private readonly workspaceContext: IWorkspaceContextService,
 		@IFileService private readonly fileService: IFileService,
 	) {

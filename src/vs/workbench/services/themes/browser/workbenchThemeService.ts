@@ -194,7 +194,7 @@ export class WorkbenchThemeService extends Disposable implements IWorkbenchTheme
 		const extDevLoc = extDevLocs && extDevLocs.length === 1 ? extDevLocs[0] : undefined; // in dev mode, switch to a theme provided by the extension under dev.
 
 		const initializeColorTheme = async () => {
-			// Void: migrate users from the old default dark theme to the new one
+			// void: migrate users from the old default dark theme to the new one
 			const colorThemeSettingId = this.settings.getColorThemeSettingId();
 			const inspected = this.configurationService.inspect(colorThemeSettingId);
 			if (inspected.userValue === ThemeSettingDefaults.COLOR_THEME_DARK_OLD) {

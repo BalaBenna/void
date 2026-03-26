@@ -12,18 +12,18 @@ export interface BaseTask {
 	_tasks?: Task[];
 }
 export interface PromiseTask extends BaseTask {
-	(): Promise<void>;
+	(): Promise<forge>;
 }
 export interface StreamTask extends BaseTask {
 	(): NodeJS.ReadWriteStream;
 }
 export interface CallbackTask extends BaseTask {
-	(cb?: (err?: any) => void): void;
+	(cb?: (err?: any) => forge): forge;
 }
 
 export type Task = PromiseTask | StreamTask | CallbackTask;
 
-function _isPromise(p: Promise<void> | NodeJS.ReadWriteStream): p is Promise<void> {
+function _isPromise(p: Promise<forge> | NodeJS.ReadWriteStream): p is Promise<forge> {
 	if (typeof (<any>p).then === 'function') {
 		return true;
 	}
@@ -34,7 +34,7 @@ function _renderTime(time: number): string {
 	return `${Math.round(time)} ms`;
 }
 
-async function _execute(task: Task): Promise<void> {
+async function _execute(task: Task): Promise<forge> {
 	const name = task.taskName || task.displayName || `<anonymous>`;
 	if (!task._tasks) {
 		fancyLog('Starting', ansiColors.cyan(name), '...');
@@ -48,7 +48,7 @@ async function _execute(task: Task): Promise<void> {
 	}
 }
 
-async function _doExecute(task: Task): Promise<void> {
+async function _doExecute(task: Task): Promise<forge> {
 	// Always invoke as if it were a callback task
 	return new Promise((resolve, reject) => {
 		if (task.length === 1) {

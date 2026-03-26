@@ -550,7 +550,7 @@ suite('SnippetParser', () => {
 		assert.strictEqual(snippet.offset(snippet.children[0]), 0);
 		assert.strictEqual(snippet.offset((<Variable>snippet.children[0]).children[0]), 0);
 
-		// forgein marker
+		// voidin marker
 		assert.strictEqual(snippet.offset(new Text('foo')), -1);
 	});
 

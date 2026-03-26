@@ -13,7 +13,7 @@ import { URI } from '../../../../base/common/uri.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 
 import { CodeChunk, IndexStatus, SearchResult } from '../common/embeddingsTypes.js';
-import { IVoidSettingsService } from '../common/voidSettingsService.js';
+import { IvoidSettingsService } from '../common/voidSettingsService.js';
 import { matchGlob } from '../common/frontmatterParser.js';
 
 
@@ -99,19 +99,19 @@ class EmbeddingsService extends Disposable implements IEmbeddingsService {
 	constructor(
 		@IFileService private readonly _fileService: IFileService,
 		@IWorkspaceContextService private readonly _workspaceContextService: IWorkspaceContextService,
-		@IVoidSettingsService private readonly _settingsService: IVoidSettingsService,
+		@IvoidSettingsService private readonly _settingsService: IvoidSettingsService,
 	) {
 		super();
 
 		// Load .voidignore
-		this._loadVoidignore();
+		this._loadvoidignore();
 
 		// Watch for file changes and re-index
 		this._register(this._fileService.onDidFilesChange(e => {
 			// Watch for .voidignore changes
 			const allChanged = [...e.rawAdded, ...e.rawUpdated, ...e.rawDeleted]
 			if (allChanged.some(uri => uri.path.endsWith('.voidignore'))) {
-				this._loadVoidignore()
+				this._loadvoidignore()
 			}
 
 			if (!this._indexed) return
@@ -129,7 +129,7 @@ class EmbeddingsService extends Disposable implements IEmbeddingsService {
 		}))
 	}
 
-	private async _loadVoidignore(): Promise<void> {
+	private async _loadvoidignore(): Promise<void> {
 		const patterns: string[] = []
 		const folders = this._workspaceContextService.getWorkspace().folders
 		for (const folder of folders) {
@@ -199,7 +199,7 @@ class EmbeddingsService extends Disposable implements IEmbeddingsService {
 		this._totalFiles = 0
 		this._indexedFiles = 0
 		this._emitStatus()
-		await this._loadVoidignore()
+		await this._loadvoidignore()
 		await this.indexWorkspace()
 	}
 

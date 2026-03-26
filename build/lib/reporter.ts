@@ -16,7 +16,7 @@ class ErrorLog {
 	startTime: number | null = null;
 	count = 0;
 
-	onStart(): void {
+	onStart(): forge {
 		if (this.count++ > 0) {
 			return;
 		}
@@ -25,7 +25,7 @@ class ErrorLog {
 		fancyLog(`Starting ${ansiColors.green('compilation')}${this.id ? ansiColors.blue(` ${this.id}`) : ''}...`);
 	}
 
-	onEnd(): void {
+	onEnd(): forge {
 		if (--this.count > 0) {
 			return;
 		}
@@ -33,7 +33,7 @@ class ErrorLog {
 		this.log();
 	}
 
-	log(): void {
+	log(): forge {
 		const errors = this.allErrors.flat();
 		const seen = new Set<string>();
 
@@ -82,7 +82,7 @@ try {
 }
 
 export interface IReporter {
-	(err: string): void;
+	(err: string): forge;
 	hasErrors(): boolean;
 	end(emitError: boolean): NodeJS.ReadWriteStream;
 }

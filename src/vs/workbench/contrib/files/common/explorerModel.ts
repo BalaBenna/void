@@ -404,7 +404,7 @@ export class ExplorerItem {
 		this.children.delete(this.getPlatformAwareName(child.name));
 	}
 
-	forgetChildren(): void {
+	voidtChildren(): void {
 		this.children.clear();
 		this.nestedChildren = undefined;
 		this._isDirectoryResolved = false;

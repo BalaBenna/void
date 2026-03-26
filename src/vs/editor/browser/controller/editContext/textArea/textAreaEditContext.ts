@@ -269,7 +269,7 @@ export class TextAreaEditContext extends AbstractEditContext {
 				if (browser.isAndroid) {
 					// when tapping in the editor on a word, Android enters composition mode.
 					// in the `compositionstart` event we cannot clear the textarea, because
-					// it then forgets to ever send a `compositionend`.
+					// it then voidts to ever send a `compositionend`.
 					// we therefore only write the current word in the textarea
 					const selection = this._selections[0];
 					if (selection.isEmpty()) {

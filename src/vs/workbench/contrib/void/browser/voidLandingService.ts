@@ -7,7 +7,7 @@ import { Disposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
-import { mountVoidLanding } from './react/out/void-landing-tsx/index.js';
+import { mountvoidLanding } from './react/out/void-landing-tsx/index.js';
 import { h, getActiveWindow } from '../../../../base/browser/dom.js';
 
 export class LandingContribution extends Disposable implements IWorkbenchContribution {
@@ -28,7 +28,7 @@ export class LandingContribution extends Disposable implements IWorkbenchContrib
 			const landingContainer = h('div.void-landing-container').root;
 			workbench.appendChild(landingContainer);
 			this.instantiationService.invokeFunction((accessor: ServicesAccessor) => {
-				const result = mountVoidLanding(landingContainer, accessor);
+				const result = mountvoidLanding(landingContainer, accessor);
 				if (result && typeof result.dispose === 'function') {
 					this._register(toDisposable(result.dispose));
 				}

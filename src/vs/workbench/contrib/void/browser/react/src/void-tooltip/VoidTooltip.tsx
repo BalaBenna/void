@@ -14,7 +14,7 @@ import { useIsDark } from '../util/services.js';
  * 1. Mount a Tooltip with some id eg id='void-tooltip'
  * 2. Add data-tooltip-id="void-tooltip" and data-tooltip-content="Your tooltip text" to any element
  */
-export const VoidTooltip = () => {
+export const voidTooltip = () => {
 
 
 	const isDark = useIsDark()

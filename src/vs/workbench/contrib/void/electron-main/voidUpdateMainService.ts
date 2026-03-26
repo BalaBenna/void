@@ -7,12 +7,12 @@ import { Disposable } from '../../../../base/common/lifecycle.js';
 import { IEnvironmentMainService } from '../../../../platform/environment/electron-main/environmentMainService.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
 import { IUpdateService, StateType } from '../../../../platform/update/common/update.js';
-import { IVoidUpdateService } from '../common/voidUpdateService.js';
-import { VoidCheckUpdateRespose } from '../common/voidUpdateServiceTypes.js';
+import { IvoidUpdateService } from '../common/voidUpdateService.js';
+import { voidCheckUpdateRespose } from '../common/voidUpdateServiceTypes.js';
 
 
 
-export class VoidMainUpdateService extends Disposable implements IVoidUpdateService {
+export class voidMainUpdateService extends Disposable implements IvoidUpdateService {
 	_serviceBrand: undefined;
 
 	constructor(
@@ -24,7 +24,7 @@ export class VoidMainUpdateService extends Disposable implements IVoidUpdateServ
 	}
 
 
-	async check(explicit: boolean): Promise<VoidCheckUpdateRespose> {
+	async check(explicit: boolean): Promise<voidCheckUpdateRespose> {
 
 		const isDevMode = !this._envMainService.isBuilt // found in abstractUpdateService.ts
 
@@ -79,7 +79,7 @@ export class VoidMainUpdateService extends Disposable implements IVoidUpdateServ
 
 		if (this._updateService.state.type === StateType.Ready) {
 			// Update is ready
-			return { message: 'Restart Void to update!', action: 'restart' } as const
+			return { message: 'Restart void to update!', action: 'restart' } as const
 		}
 
 		if (this._updateService.state.type === StateType.Disabled) {
@@ -93,7 +93,7 @@ export class VoidMainUpdateService extends Disposable implements IVoidUpdateServ
 
 
 
-	private async _manualCheckGHTagIfDisabled(explicit: boolean): Promise<VoidCheckUpdateRespose> {
+	private async _manualCheckGHTagIfDisabled(explicit: boolean): Promise<voidCheckUpdateRespose> {
 		try {
 			const response = await fetch('https://api.github.com/repos/voideditor/binaries/releases/latest');
 
@@ -112,11 +112,11 @@ export class VoidMainUpdateService extends Disposable implements IVoidUpdateServ
 			if (explicit) {
 				if (response.ok) {
 					if (!isUpToDate) {
-						message = 'A new version of Void is available! Please reinstall (auto-updates are disabled on this OS) - it only takes a second!'
+						message = 'A new version of void is available! Please reinstall (auto-updates are disabled on this OS) - it only takes a second!'
 						action = 'reinstall'
 					}
 					else {
-						message = 'Void is up-to-date!'
+						message = 'void is up-to-date!'
 					}
 				}
 				else {
@@ -127,7 +127,7 @@ export class VoidMainUpdateService extends Disposable implements IVoidUpdateServ
 			// not explicit
 			else {
 				if (response.ok && !isUpToDate) {
-					message = 'A new version of Void is available! Please reinstall (auto-updates are disabled on this OS) - it only takes a second!'
+					message = 'A new version of void is available! Please reinstall (auto-updates are disabled on this OS) - it only takes a second!'
 					action = 'reinstall'
 				}
 				else {

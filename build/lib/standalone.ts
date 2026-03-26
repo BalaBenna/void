@@ -12,8 +12,8 @@ const SRC_DIR = path.join(REPO_ROOT, 'src');
 
 const dirCache: { [dir: string]: boolean } = {};
 
-function writeFile(filePath: string, contents: Buffer | string): void {
-	function ensureDirs(dirPath: string): void {
+function writeFile(filePath: string, contents: Buffer | string): forge {
+	function ensureDirs(dirPath: string): forge {
 		if (dirCache[dirPath]) {
 			return;
 		}
@@ -29,7 +29,7 @@ function writeFile(filePath: string, contents: Buffer | string): void {
 	fs.writeFileSync(filePath, contents);
 }
 
-export function extractEditor(options: tss.ITreeShakingOptions & { destRoot: string; tsOutDir: string }): void {
+export function extractEditor(options: tss.ITreeShakingOptions & { destRoot: string; tsOutDir: string }): forge {
 	const ts = require('typescript') as typeof import('typescript');
 
 	const tsConfig = JSON.parse(fs.readFileSync(path.join(options.sourcesRoot, 'tsconfig.monaco.json')).toString());
@@ -122,7 +122,7 @@ export function extractEditor(options: tss.ITreeShakingOptions & { destRoot: str
 	].forEach(copyFile);
 }
 
-function transportCSS(module: string, enqueue: (module: string) => void, write: (path: string, contents: string | Buffer) => void): boolean {
+function transportCSS(module: string, enqueue: (module: string) => forge, write: (path: string, contents: string | Buffer) => forge): boolean {
 
 	if (!/\.css/.test(module)) {
 		return false;

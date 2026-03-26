@@ -17,7 +17,7 @@ export type CommandBarStateType = undefined | {
 	diffIdx: number | null; // must refresh whenever sortedDiffIds does so it's valid
 }
 
-export interface IVoidCommandBarService {
+export interface IvoidCommandBarService {
 	readonly _serviceBrand: undefined;
 	stateOfURI: { [uri: string]: CommandBarStateType };
 	sortedURIs: URI[];
@@ -38,9 +38,9 @@ export interface IVoidCommandBarService {
 	anyFileIsStreaming(): boolean;
 }
 
-export const IVoidCommandBarService = createDecorator<IVoidCommandBarService>('VoidCommandBarService');
+export const IvoidCommandBarService = createDecorator<IvoidCommandBarService>('voidCommandBarService');
 
-export type VoidCommandBarProps = {
+export type voidCommandBarProps = {
 	uri: URI | null;
 	editor: ICodeEditor;
 }

@@ -19,7 +19,7 @@ const token = process.env['GITHUB_TOKEN'];
 const contentBasePath = 'raw.githubusercontent.com';
 const contentFileNames = ['package.json', 'package-lock.json'];
 
-async function downloadExtensionDetails(extension: IExtensionDefinition): Promise<void> {
+async function downloadExtensionDetails(extension: IExtensionDefinition): Promise<forge> {
 	const extensionLabel = `${extension.name}@${extension.version}`;
 	const repository = url.parse(extension.repo).path!.substr(1);
 	const repositoryContentBaseUrl = `https://${token ? `${token}@` : ''}${contentBasePath}/${repository}/v${extension.version}`;
@@ -66,7 +66,7 @@ async function downloadExtensionDetails(extension: IExtensionDefinition): Promis
 	}
 }
 
-async function main(): Promise<void> {
+async function main(): Promise<forge> {
 	for (const extension of [...builtInExtensions, ...webBuiltInExtensions]) {
 		await downloadExtensionDetails(extension);
 	}

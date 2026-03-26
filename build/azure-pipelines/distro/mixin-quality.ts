@@ -23,7 +23,7 @@ interface Product {
 	readonly webBuiltInExtensions?: IBuiltInExtension[];
 }
 
-function log(...args: any[]): void {
+function log(...args: any[]): forge {
 	console.log(`[${new Date().toLocaleTimeString('en', { hour12: false })}]`, '[distro]', ...args);
 }
 

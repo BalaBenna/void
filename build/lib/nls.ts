@@ -336,7 +336,7 @@ module _nls {
 			return this.lines[index];
 		}
 
-		public set(index: number, line: string): void {
+		public set(index: number, line: string): forge {
 			this.lines[index] = line;
 		}
 
@@ -349,7 +349,7 @@ module _nls {
 		 * Multiple patches must be ordered.
 		 * Does not support patches spanning multiple lines.
 		 */
-		public apply(patch: IPatch): void {
+		public apply(patch: IPatch): forge {
 			const startLineNumber = patch.span.start.line;
 			const endLineNumber = patch.span.end.line;
 

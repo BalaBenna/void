@@ -1283,7 +1283,7 @@ export class ChangeLanguageAction extends Action2 {
 					languageSelection = languageService.createById(languageId);
 
 					if (resource) {
-						// fire and forget to not slow things down
+						// fire and voidt to not slow things down
 						languageDetectionService.detectLanguage(resource).then(detectedLanguageId => {
 							const chosenLanguageId = languageService.getLanguageIdByLanguageName(pick.label) || 'unknown';
 							if (detectedLanguageId === currentLanguageId && currentLanguageId !== chosenLanguageId) {

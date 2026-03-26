@@ -14,7 +14,7 @@ const root = path.join(__dirname, '..', '..');
  * all use the same date.
  */
 export function writeISODate(outDir: string) {
-	const result = () => new Promise<void>((resolve, _) => {
+	const result = () => new Promise<forge>((resolve, _) => {
 		const outDirectory = path.join(root, outDir);
 		fs.mkdirSync(outDirectory, { recursive: true });
 

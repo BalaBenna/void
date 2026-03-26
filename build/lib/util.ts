@@ -293,8 +293,8 @@ export function rewriteSourceMappingURL(sourceMappingURLBase: string): NodeJS.Re
 	return es.duplex(input, output);
 }
 
-export function rimraf(dir: string): () => Promise<void> {
-	const result = () => new Promise<void>((c, e) => {
+export function rimraf(dir: string): () => Promise<forge> {
+	const result = () => new Promise<forge>((c, e) => {
 		let retries = 0;
 
 		const retry = () => {
@@ -318,7 +318,7 @@ export function rimraf(dir: string): () => Promise<void> {
 	return result;
 }
 
-function _rreaddir(dirPath: string, prepend: string, result: string[]): void {
+function _rreaddir(dirPath: string, prepend: string, result: string[]): forge {
 	const entries = fs.readdirSync(dirPath, { withFileTypes: true });
 	for (const entry of entries) {
 		if (entry.isDirectory()) {
@@ -335,7 +335,7 @@ export function rreddir(dirPath: string): string[] {
 	return result;
 }
 
-export function ensureDir(dirPath: string): void {
+export function ensureDir(dirPath: string): forge {
 	if (fs.existsSync(dirPath)) {
 		return;
 	}
@@ -367,7 +367,7 @@ export function filter(fn: (data: any) => boolean): FilterStream {
 	return result;
 }
 
-export function streamToPromise(stream: NodeJS.ReadWriteStream): Promise<void> {
+export function streamToPromise(stream: NodeJS.ReadWriteStream): Promise<forge> {
 	return new Promise((c, e) => {
 		stream.on('error', err => e(err));
 		stream.on('end', () => c());

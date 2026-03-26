@@ -84,7 +84,7 @@ export class LLMMessageChannel implements IServerChannel {
 				this._callOpenAICompatibleList(params)
 			}
 			else {
-				throw new Error(`Void sendLLM: command "${command}" not recognized.`)
+				throw new Error(`void sendLLM: command "${command}" not recognized.`)
 			}
 		}
 		catch (e) {
@@ -126,8 +126,23 @@ export class LLMMessageChannel implements IServerChannel {
 			return;
 		}
 
-		if (messagesType !== 'chatMessages') {
-			this.llmMessageEmitters.onError.fire({ requestId, message: 'FIM messages not supported via proxy', fullError: null });
+		let chatMessages: import('../common/sendLLMMessageTypes.js').LLMChatMessage[];
+		if (messagesType === 'chatMessages') {
+			chatMessages = messages as import('../common/sendLLMMessageTypes.js').LLMChatMessage[];
+		} else if (messagesType === 'FIMMessage') {
+			const fimMessages = messages as import('../common/sendLLMMessageTypes.js').LLMFIMMessage;
+			chatMessages = [
+				{
+					role: 'system',
+					content: 'You are a code completion engine. Output ONLY the raw code that should replace <FILL_HERE>. Do not include the surrounding code. No explanations, no markdown, no comments about what you did. Just the code completion, nothing else.'
+				},
+				{
+					role: 'user',
+					content: `Continue the code at <FILL_HERE>. Output ONLY the completion code. No explanation, no markdown fences, no extra text.\n\n${fimMessages.prefix}<FILL_HERE>${fimMessages.suffix}`
+				}
+			];
+		} else {
+			this.llmMessageEmitters.onError.fire({ requestId, message: 'Message type not supported via proxy', fullError: null });
 			return;
 		}
 
@@ -141,7 +156,6 @@ export class LLMMessageChannel implements IServerChannel {
 			try {
 				// Format messages for the backend completion API
 				// LLMChatMessage is a union (Anthropic/OpenAI/Gemini), so we pass them as-is to the backend
-				const chatMessages = messages as import('../common/sendLLMMessageTypes.js').LLMChatMessage[];
 
 				const response = await fetch(`${proxyConfig.backendUrl}/v1/completions/stream`, {
 					method: 'POST',

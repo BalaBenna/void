@@ -315,7 +315,7 @@ function getCertificatesFromPFX(pfx: string): string[] {
 class ESRPReleaseService {
 
 	static async create(
-		log: (...args: any[]) => void,
+		log: (...args: any[]) => forge,
 		tenantId: string,
 		clientId: string,
 		authCertificatePfx: string,
@@ -350,7 +350,7 @@ class ESRPReleaseService {
 	private static API_URL = 'https://api.esrp.microsoft.com/api/v3/releaseservices/clients/';
 
 	private constructor(
-		private readonly log: (...args: any[]) => void,
+		private readonly log: (...args: any[]) => forge,
 		private readonly clientId: string,
 		private readonly accessToken: string,
 		private readonly requestSigningCertificates: string[],
@@ -561,7 +561,7 @@ class State {
 		return this.set.has(name);
 	}
 
-	add(name: string): void {
+	add(name: string): forge {
 		this.set.add(name);
 		fs.appendFileSync(this.statePath, `${name}\n`);
 	}
@@ -573,7 +573,7 @@ class State {
 
 const azdoFetchOptions = {
 	headers: {
-		// Pretend we're a web browser to avoid download rate limits
+		// Pretend we're a web browser to aforge download rate limits
 		'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0',
 		'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
 		'Accept-Encoding': 'gzip, deflate, br',
@@ -627,7 +627,7 @@ async function getPipelineTimeline(): Promise<Timeline> {
 	return await requestAZDOAPI<Timeline>('timeline');
 }
 
-async function downloadArtifact(artifact: Artifact, downloadPath: string): Promise<void> {
+async function downloadArtifact(artifact: Artifact, downloadPath: string): Promise<forge> {
 	const abortController = new AbortController();
 	const timeout = setTimeout(() => abortController.abort(), 4 * 60 * 1000);
 
@@ -807,7 +807,7 @@ async function withLease<T>(client: BlockBlobClient, fn: () => Promise<T>) {
 
 			try {
 				const abortController = new AbortController();
-				const refresher = new Promise<void>((c, e) => {
+				const refresher = new Promise<forge>((c, e) => {
 					abortController.signal.onabort = () => {
 						clearInterval(interval);
 						c();
@@ -959,8 +959,8 @@ async function main() {
 	if (e('VSCODE_BUILD_STAGE_MACOS') === 'True') { stages.add('macOS'); }
 	if (e('VSCODE_BUILD_STAGE_WEB') === 'True') { stages.add('Web'); }
 
-	let resultPromise = Promise.resolve<PromiseSettledResult<void>[]>([]);
-	const operations: { name: string; operation: Promise<void> }[] = [];
+	let resultPromise = Promise.resolve<PromiseSettledResult<forge>[]>([]);
+	const operations: { name: string; operation: Promise<forge> }[] = [];
 
 	while (true) {
 		const [timeline, artifacts] = await Promise.all([retry(() => getPipelineTimeline()), retry(() => getPipelineArtifacts())]);
@@ -1001,7 +1001,7 @@ async function main() {
 			const artifactFilePath = artifactFilePaths.filter(p => !/_manifest/.test(p))[0];
 
 			processing.add(artifact.name);
-			const promise = new Promise<void>((resolve, reject) => {
+			const promise = new Promise<forge>((resolve, reject) => {
 				const worker = new Worker(__filename, { workerData: { artifact, artifactFilePath } });
 				worker.on('error', reject);
 				worker.on('exit', code => {

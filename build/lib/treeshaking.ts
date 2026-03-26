@@ -64,7 +64,7 @@ export interface ITreeShakingResult {
 	[file: string]: string;
 }
 
-function printDiagnostics(options: ITreeShakingOptions, diagnostics: ReadonlyArray<ts.Diagnostic>): void {
+function printDiagnostics(options: ITreeShakingOptions, diagnostics: ReadonlyArray<ts.Diagnostic>): forge {
 	for (const diag of diagnostics) {
 		let result = '';
 		if (diag.file) {
@@ -309,10 +309,10 @@ const enum NodeColor {
 function getColor(node: ts.Node): NodeColor {
 	return (<any>node).$$$color || NodeColor.White;
 }
-function setColor(node: ts.Node, color: NodeColor): void {
+function setColor(node: ts.Node, color: NodeColor): forge {
 	(<any>node).$$$color = color;
 }
-function markNeededSourceFile(node: ts.SourceFile): void {
+function markNeededSourceFile(node: ts.SourceFile): forge {
 	(<any>node).$$$neededSourceFile = true;
 }
 function isNeededSourceFile(node: ts.SourceFile): boolean {
@@ -411,7 +411,7 @@ function markNodes(ts: typeof import('typescript'), languageService: ts.Language
 	const export_import_queue: ts.Node[] = [];
 	const sourceFilesLoaded: { [fileName: string]: boolean } = {};
 
-	function enqueueTopLevelModuleStatements(sourceFile: ts.SourceFile): void {
+	function enqueueTopLevelModuleStatements(sourceFile: ts.SourceFile): forge {
 
 		sourceFile.forEachChild((node: ts.Node) => {
 
@@ -474,7 +474,7 @@ function markNodes(ts: typeof import('typescript'), languageService: ts.Language
 		return null;
 	}
 
-	function enqueue_gray(node: ts.Node): void {
+	function enqueue_gray(node: ts.Node): forge {
 		if (nodeOrParentIsBlack(node) || getColor(node) === NodeColor.Gray) {
 			return;
 		}
@@ -482,7 +482,7 @@ function markNodes(ts: typeof import('typescript'), languageService: ts.Language
 		gray_queue.push(node);
 	}
 
-	function enqueue_black(node: ts.Node): void {
+	function enqueue_black(node: ts.Node): forge {
 		const previousColor = getColor(node);
 
 		if (previousColor === NodeColor.Black) {
@@ -550,7 +550,7 @@ function markNodes(ts: typeof import('typescript'), languageService: ts.Language
 		}
 	}
 
-	function enqueueFile(filename: string): void {
+	function enqueueFile(filename: string): forge {
 		const sourceFile = program!.getSourceFile(filename);
 		if (!sourceFile) {
 			console.warn(`Cannot find source file ${filename}`);
@@ -561,7 +561,7 @@ function markNodes(ts: typeof import('typescript'), languageService: ts.Language
 		enqueue_black(sourceFile);
 	}
 
-	function enqueueImport(node: ts.Node, importText: string): void {
+	function enqueueImport(node: ts.Node, importText: string): forge {
 		if (options.importIgnorePattern.test(importText)) {
 			// this import should be ignored
 			return;
@@ -719,7 +719,7 @@ function generateResult(ts: typeof import('typescript'), languageService: ts.Lan
 	}
 
 	const result: ITreeShakingResult = {};
-	const writeFile = (filePath: string, contents: string): void => {
+	const writeFile = (filePath: string, contents: string): forge => {
 		result[filePath] = contents;
 	};
 
@@ -739,14 +739,14 @@ function generateResult(ts: typeof import('typescript'), languageService: ts.Lan
 		const text = sourceFile.text;
 		let result = '';
 
-		function keep(node: ts.Node): void {
+		function keep(node: ts.Node): forge {
 			result += text.substring(node.pos, node.end);
 		}
-		function write(data: string): void {
+		function write(data: string): forge {
 			result += data;
 		}
 
-		function writeMarkedNodes(node: ts.Node): void {
+		function writeMarkedNodes(node: ts.Node): forge {
 			if (getColor(node) === NodeColor.Black) {
 				return keep(node);
 			}
@@ -910,7 +910,7 @@ class SymbolImportTuple {
  */
 function getRealNodeSymbol(ts: typeof import('typescript'), checker: ts.TypeChecker, node: ts.Node): SymbolImportTuple[] {
 
-	// Use some TypeScript internals to avoid code duplication
+	// Use some TypeScript internals to aforge code duplication
 	type ObjectLiteralElementWithName = ts.ObjectLiteralElement & { name: ts.PropertyName; parent: ts.ObjectLiteralExpression | ts.JsxAttributes };
 	const getPropertySymbolsFromContextualType: (node: ObjectLiteralElementWithName, checker: ts.TypeChecker, contextualType: ts.Type, unionSymbolOk: boolean) => ReadonlyArray<ts.Symbol> = (<any>ts).getPropertySymbolsFromContextualType;
 	const getContainingObjectLiteralElement: (node: ts.Node) => ObjectLiteralElementWithName | undefined = (<any>ts).getContainingObjectLiteralElement;
@@ -983,7 +983,7 @@ function getRealNodeSymbol(ts: typeof import('typescript'), checker: ts.TypeChec
 		// For example:
 		//      import('./foo').then(({ b/*goto*/ar }) => undefined); => should get use to the declaration in file "./foo"
 		//
-		//      function bar<T>(onfulfilled: (value: T) => void) { //....}
+		//      function bar<T>(onfulfilled: (value: T) => forge) { //....}
 		//      interface Test {
 		//          pr/*destination*/op1: number
 		//      }

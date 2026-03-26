@@ -116,7 +116,7 @@ export class ExplorerService implements IExplorerService {
 			this.model.roots.forEach(r => {
 				if (r.resource.scheme === e.scheme) {
 					affected = true;
-					r.forgetChildren();
+					r.voidtChildren();
 				}
 			});
 			if (affected) {
@@ -327,7 +327,7 @@ export class ExplorerService implements IExplorerService {
 			return;
 		}
 
-		this.model.roots.forEach(r => r.forgetChildren());
+		this.model.roots.forEach(r => r.voidtChildren());
 		if (this.view) {
 			await this.view.refresh(true);
 			const resource = this.editorService.activeEditor?.resource;

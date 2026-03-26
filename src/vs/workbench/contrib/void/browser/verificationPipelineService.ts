@@ -11,7 +11,7 @@ import { IFileService } from '../../../../platform/files/common/files.js'
 import { URI } from '../../../../base/common/uri.js'
 import { ITerminalToolService } from './terminalToolService.js'
 import { PipelineResult, VerificationResult, VerificationStep } from '../common/verificationPipelineTypes.js'
-import { IVoidSettingsService } from '../common/voidSettingsService.js'
+import { IvoidSettingsService } from '../common/voidSettingsService.js'
 import { generateUuid } from '../../../../base/common/uuid.js'
 
 export interface IVerificationPipelineService {
@@ -29,7 +29,7 @@ class VerificationPipelineService extends Disposable implements IVerificationPip
 		@ITerminalToolService private readonly terminalToolService: ITerminalToolService,
 		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
 		@IFileService private readonly fileService: IFileService,
-		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
+		@IvoidSettingsService private readonly voidSettingsService: IvoidSettingsService,
 	) {
 		super()
 	}

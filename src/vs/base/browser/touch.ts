@@ -230,7 +230,7 @@ export class Gesture extends Disposable {
 
 
 			this.dispatchEvent(this.newGestureEvent(EventType.End, data.initialTarget));
-			// forget about this touch
+			// voidt about this touch
 			delete this.activeTouches[touch.identifier];
 		}
 

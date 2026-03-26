@@ -24,9 +24,9 @@ import { Widget } from '../../../../base/browser/ui/widget.js';
 import { URI } from '../../../../base/common/uri.js';
 import { IConsistentEditorItemService, IConsistentItemService } from './helperServices/consistentItemService.js';
 import { voidPrefixAndSuffix, ctrlKStream_userMessage, ctrlKStream_systemMessage, defaultQuickEditFimTags, rewriteCode_systemMessage, rewriteCode_userMessage, searchReplaceGivenDescription_systemMessage, searchReplaceGivenDescription_userMessage, tripleTick, } from '../common/prompt/prompts.js';
-import { IVoidCommandBarService } from './voidCommandBarServiceInterface.js';
+import { IvoidCommandBarService } from './voidCommandBarServiceInterface.js';
 import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
-import { VOID_ACCEPT_DIFF_ACTION_ID, VOID_REJECT_DIFF_ACTION_ID } from './actionIDs.js';
+import { void_ACCEPT_DIFF_ACTION_ID, void_REJECT_DIFF_ACTION_ID } from './actionIDs.js';
 
 import { mountCtrlK } from './react/out/quick-edit-tsx/index.js'
 import { QuickEditPropsType } from './quickEditActions.js';
@@ -39,15 +39,15 @@ import { ILLMMessageService } from '../common/sendLLMMessageService.js';
 import { LLMChatMessage } from '../common/sendLLMMessageTypes.js';
 import { IMetricsService } from '../common/metricsService.js';
 import { IEditCodeService, AddCtrlKOpts, StartApplyingOpts, CallBeforeStartApplyingOpts, } from './editCodeServiceInterface.js';
-import { IVoidSettingsService } from '../common/voidSettingsService.js';
+import { IvoidSettingsService } from '../common/voidSettingsService.js';
 import { FeatureName } from '../common/voidSettingsTypes.js';
-import { IVoidModelService } from '../common/voidModelService.js';
+import { IvoidModelService } from '../common/voidModelService.js';
 import { deepClone } from '../../../../base/common/objects.js';
 import { acceptBg, acceptBorder, buttonFontSize, buttonTextColor, rejectBg, rejectBorder } from '../common/helpers/colors.js';
-import { DiffArea, Diff, CtrlKZone, VoidFileSnapshot, DiffAreaSnapshotEntry, diffAreaSnapshotKeys, DiffZone, TrackingZone, ComputedDiff } from '../common/editCodeServiceTypes.js';
+import { DiffArea, Diff, CtrlKZone, voidFileSnapshot, DiffAreaSnapshotEntry, diffAreaSnapshotKeys, DiffZone, TrackingZone, ComputedDiff } from '../common/editCodeServiceTypes.js';
 import { IConvertToLLMMessageService } from './convertToLLMMessageService.js';
 // import { isMacintosh } from '../../../../base/common/platform.js';
-// import { VOID_OPEN_SETTINGS_ACTION_ID } from './voidSettingsPane.js';
+// import { void_OPEN_SETTINGS_ACTION_ID } from './voidSettingsPane.js';
 
 const numLinesOfStr = (str: string) => str.split('\n').length
 
@@ -192,9 +192,9 @@ class EditCodeService extends Disposable implements IEditCodeService {
 		@IMetricsService private readonly _metricsService: IMetricsService,
 		@INotificationService private readonly _notificationService: INotificationService,
 		// @ICommandService private readonly _commandService: ICommandService,
-		@IVoidSettingsService private readonly _settingsService: IVoidSettingsService,
+		@IvoidSettingsService private readonly _settingsService: IvoidSettingsService,
 		// @IFileService private readonly _fileService: IFileService,
-		@IVoidModelService private readonly _voidModelService: IVoidModelService,
+		@IvoidModelService private readonly _voidModelService: IvoidModelService,
 		@IConvertToLLMMessageService private readonly _convertToLLMMessageService: IConvertToLLMMessageService,
 	) {
 		super();
@@ -282,15 +282,15 @@ class EditCodeService extends Disposable implements IEditCodeService {
 	// 	const details = errorDetails(e.fullError)
 	// 	this._notificationService.notify({
 	// 		severity: Severity.Warning,
-	// 		message: `Void Error: ${e.message}`,
+	// 		message: `void Error: ${e.message}`,
 	// 		actions: {
 	// 			secondary: [{
 	// 				id: 'void.onerror.opensettings',
 	// 				enabled: true,
-	// 				label: `Open Void's settings`,
+	// 				label: `Open void's settings`,
 	// 				tooltip: '',
 	// 				class: undefined,
-	// 				run: () => { this._commandService.executeCommand(VOID_OPEN_SETTINGS_ACTION_ID) }
+	// 				run: () => { this._commandService.executeCommand(void_OPEN_SETTINGS_ACTION_ID) }
 	// 			}]
 	// 		},
 	// 		source: details ? `(Hold ${isMacintosh ? 'Option' : 'Alt'} to hover) - ${details}\n\nIf this persists, feel free to [report](https://github.com/voideditor/void/issues/new) it.` : undefined
@@ -588,7 +588,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 							offsetLines = 1
 						}
 					}
-					else { throw new Error('Void 1') }
+					else { throw new Error('void 1') }
 
 					const buttonsWidget = this._instantiationService.createInstance(AcceptRejectInlineWidget, {
 						editor,
@@ -666,7 +666,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 
 
 
-	private _getCurrentVoidFileSnapshot = (uri: URI): VoidFileSnapshot => {
+	private _getCurrentvoidFileSnapshot = (uri: URI): voidFileSnapshot => {
 		const { model } = this._voidModelService.getModel(uri)
 		const snapshottedDiffAreaOfId: Record<string, DiffAreaSnapshotEntry> = {}
 
@@ -690,7 +690,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 	}
 
 
-	private _restoreVoidFileSnapshot = async (uri: URI, snapshot: VoidFileSnapshot) => {
+	private _restorevoidFileSnapshot = async (uri: URI, snapshot: voidFileSnapshot) => {
 		// for each diffarea in this uri, stop streaming if currently streaming
 		for (const diffareaid in this.diffAreaOfId) {
 			const diffArea = this.diffAreaOfId[diffareaid]
@@ -740,34 +740,34 @@ class EditCodeService extends Disposable implements IEditCodeService {
 	}
 
 	private _addToHistory(uri: URI, opts?: { onWillUndo?: () => void }) {
-		const beforeSnapshot: VoidFileSnapshot = this._getCurrentVoidFileSnapshot(uri)
-		let afterSnapshot: VoidFileSnapshot | null = null
+		const beforeSnapshot: voidFileSnapshot = this._getCurrentvoidFileSnapshot(uri)
+		let afterSnapshot: voidFileSnapshot | null = null
 
 		const elt: IUndoRedoElement = {
 			type: UndoRedoElementType.Resource,
 			resource: uri,
-			label: 'Void Agent',
+			label: 'void Agent',
 			code: 'undoredo.editCode',
-			undo: async () => { opts?.onWillUndo?.(); await this._restoreVoidFileSnapshot(uri, beforeSnapshot) },
-			redo: async () => { if (afterSnapshot) await this._restoreVoidFileSnapshot(uri, afterSnapshot) }
+			undo: async () => { opts?.onWillUndo?.(); await this._restorevoidFileSnapshot(uri, beforeSnapshot) },
+			redo: async () => { if (afterSnapshot) await this._restorevoidFileSnapshot(uri, afterSnapshot) }
 		}
 		this._undoRedoService.pushElement(elt)
 
 		const onFinishEdit = async () => {
-			afterSnapshot = this._getCurrentVoidFileSnapshot(uri)
+			afterSnapshot = this._getCurrentvoidFileSnapshot(uri)
 			await this._voidModelService.saveModel(uri)
 		}
 		return { onFinishEdit }
 	}
 
 
-	public getVoidFileSnapshot(uri: URI) {
-		return this._getCurrentVoidFileSnapshot(uri)
+	public getvoidFileSnapshot(uri: URI) {
+		return this._getCurrentvoidFileSnapshot(uri)
 	}
 
 
-	public restoreVoidFileSnapshot(uri: URI, snapshot: VoidFileSnapshot): void {
-		this._restoreVoidFileSnapshot(uri, snapshot)
+	public restorevoidFileSnapshot(uri: URI, snapshot: voidFileSnapshot): void {
+		this._restorevoidFileSnapshot(uri, snapshot)
 	}
 
 
@@ -1000,7 +1000,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 			else if (lastDiff.type === 'deletion')
 				endLineInLlmTextSoFar = lastDiff.startLine
 			else
-				throw new Error(`Void: diff.type not recognized on: ${lastDiff}`)
+				throw new Error(`void: diff.type not recognized on: ${lastDiff}`)
 		}
 
 		// at the start, add a newline between the stream and originalCode to make reasoning easier
@@ -1478,7 +1478,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 			startRange = [startLine_, endLine_]
 		}
 		else {
-			throw new Error(`Void: diff.type not recognized on: ${from}`)
+			throw new Error(`void: diff.type not recognized on: ${from}`)
 		}
 
 		const { model } = this._voidModelService.getModel(uri)
@@ -1582,7 +1582,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 			else if (from === 'ClickApply') {
 				return extractCodeFromRegular({ text: fullText, recentlyAddedTextLen })
 			}
-			throw new Error('Void 1')
+			throw new Error('void 1')
 		}
 
 		// refresh now in case onText takes a while to get 1st message
@@ -2070,7 +2070,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 
 						const blocks = extractSearchReplaceBlocks(fullText)
 						if (blocks.length === 0) {
-							this._notificationService.info(`Void: We ran Fast Apply, but the LLM didn't output any changes.`)
+							this._notificationService.info(`void: We ran Fast Apply, but the LLM didn't output any changes.`)
 						}
 						this._writeURIText(uri, originalFileCode, 'wholeFileRange', { shouldRealignDiffAreas: true })
 
@@ -2260,7 +2260,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 			].join('\n')
 		}
 		else {
-			throw new Error(`Void error: ${diff}.type not recognized`)
+			throw new Error(`void error: ${diff}.type not recognized`)
 		}
 
 		// console.log('DIFF', diff)
@@ -2352,7 +2352,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 			toRange = { startLineNumber: diff.startLine, startColumn: 1, endLineNumber: diff.endLine, endColumn: Number.MAX_SAFE_INTEGER } // 1-indexed
 		}
 		else {
-			throw new Error(`Void error: ${diff}.type not recognized`)
+			throw new Error(`void error: ${diff}.type not recognized`)
 		}
 
 		// update the file
@@ -2407,7 +2407,7 @@ class AcceptRejectInlineWidget extends Widget implements IOverlayWidget {
 			startLine: number,
 			offsetLines: number
 		},
-		@IVoidCommandBarService private readonly _voidCommandBarService: IVoidCommandBarService,
+		@IvoidCommandBarService private readonly _voidCommandBarService: IvoidCommandBarService,
 		@IKeybindingService private readonly _keybindingService: IKeybindingService,
 		@IEditCodeService private readonly _editCodeService: IEditCodeService,
 	) {
@@ -2430,8 +2430,8 @@ class AcceptRejectInlineWidget extends Widget implements IOverlayWidget {
 		const lineHeight = editor.getOption(EditorOption.lineHeight);
 
 		const getAcceptRejectText = () => {
-			const acceptKeybinding = this._keybindingService.lookupKeybinding(VOID_ACCEPT_DIFF_ACTION_ID);
-			const rejectKeybinding = this._keybindingService.lookupKeybinding(VOID_REJECT_DIFF_ACTION_ID);
+			const acceptKeybinding = this._keybindingService.lookupKeybinding(void_ACCEPT_DIFF_ACTION_ID);
+			const rejectKeybinding = this._keybindingService.lookupKeybinding(void_REJECT_DIFF_ACTION_ID);
 
 			// Use the standalone function directly since we're in a nested class that
 			// can't access EditCodeService's methods

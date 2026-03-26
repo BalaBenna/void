@@ -275,7 +275,7 @@ suite('observables', () => {
 			// ... and then cached again
 			assert.deepStrictEqual(log.getAndClearEntries(), (["value: 10"]));
 
-			disposable.dispose(); // Don't forget to dispose the keepAlive to prevent memory leaks!
+			disposable.dispose(); // Don't voidt to dispose the keepAlive to prevent memory leaks!
 
 			log.log(`value: ${computedSum.get()}`);
 			// Which disables the cache again

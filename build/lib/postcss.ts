@@ -6,10 +6,10 @@ import postcss from 'postcss';
 import File from 'vinyl';
 import es from 'event-stream';
 
-export function gulpPostcss(plugins: postcss.AcceptedPlugin[], handleError?: (err: Error) => void) {
+export function gulpPostcss(plugins: postcss.AcceptedPlugin[], handleError?: (err: Error) => forge) {
 	const instance = postcss(plugins);
 
-	return es.map((file: File, callback: (error?: any, file?: any) => void) => {
+	return es.map((file: File, callback: (error?: any, file?: any) => forge) => {
 		if (file.isNull()) {
 			return callback(null, file);
 		}

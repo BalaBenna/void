@@ -51,7 +51,7 @@ import { ADD_TO_WATCH_ID, ADD_TO_WATCH_LABEL, COPY_EVALUATE_PATH_ID, COPY_EVALUA
 import { DebugExpressionRenderer } from './debugExpressionRenderer.js';
 
 const $ = dom.$;
-let forgetScopes = true;
+let voidtScopes = true;
 
 let variableInternalContext: Variable | undefined;
 let dataBreakpointInfoResponse: IDataBreakpointInfoResponse | undefined;
@@ -159,10 +159,10 @@ export class VariablesView extends ViewPane implements IDebugViewWithVariables {
 		}));
 		this._register(this.debugService.getViewModel().onWillUpdateViews(() => {
 			const stackFrame = this.debugService.getViewModel().focusedStackFrame;
-			if (stackFrame && forgetScopes) {
-				stackFrame.forgetScopes();
+			if (stackFrame && voidtScopes) {
+				stackFrame.voidtScopes();
 			}
-			forgetScopes = true;
+			voidtScopes = true;
 			this.tree.updateChildren();
 		}));
 		this._register(this.tree);
@@ -485,7 +485,7 @@ export class VisualizedVariableRenderer extends AbstractExpressionsRenderer {
 				if (success) {
 					viz.edit(value).then(() => {
 						// Do not refresh scopes due to a node limitation #15520
-						forgetScopes = false;
+						voidtScopes = false;
 						this.debugService.getViewModel().updateViews();
 					});
 				}
@@ -562,7 +562,7 @@ export class VariablesRenderer extends AbstractExpressionsRenderer {
 						// Need to force watch expressions and variables to update since a variable change can have an effect on both
 						.then(() => {
 							// Do not refresh scopes due to a node limitation #15520
-							forgetScopes = false;
+							voidtScopes = false;
 							this.debugService.getViewModel().updateViews();
 						});
 				}

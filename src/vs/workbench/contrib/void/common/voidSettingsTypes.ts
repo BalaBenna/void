@@ -6,7 +6,7 @@
 
 import { defaultModelsOfProvider, defaultProviderSettings, ModelOverrides } from './modelCapabilities.js';
 import { ToolApprovalType } from './toolsServiceTypes.js';
-import { VoidSettingsState } from './voidSettingsService.js'
+import { voidSettingsState } from './voidSettingsService.js'
 import { SandboxMode, SandboxPolicy, YoloConfig, defaultSandboxPolicy, defaultYoloConfig } from './sandboxTypes.js';
 import { RouterConfig, defaultRouterConfig } from './modelRouterTypes.js';
 import { MemoryConfig, defaultMemoryConfig } from './memoryTypes.js';
@@ -35,7 +35,7 @@ export const customSettingNamesOfProvider = (providerName: ProviderName) => {
 
 
 
-export type VoidStatefulModelInfo = { // <-- STATEFUL
+export type voidStatefulModelInfo = { // <-- STATEFUL
 	modelName: string,
 	type: 'default' | 'autodetected' | 'custom';
 	isHidden: boolean, // whether or not the user is hiding it (switched off)
@@ -45,7 +45,7 @@ export type VoidStatefulModelInfo = { // <-- STATEFUL
 
 type CommonProviderSettings = {
 	_didFillInProviderSettings: boolean | undefined, // undefined initially, computed when user types in all fields
-	models: VoidStatefulModelInfo[],
+	models: voidStatefulModelInfo[],
 }
 
 export type SettingsAtProvider<providerName extends ProviderName> = CustomProviderSettings<providerName> & CommonProviderSettings
@@ -121,7 +121,7 @@ export const subTextMdOfProviderName = (providerName: ProviderName): string => {
 	if (providerName === 'xAI') return 'Get your [API Key here](https://console.x.ai).'
 	if (providerName === 'mistral') return 'Get your [API Key here](https://console.mistral.ai/api-keys).'
 	if (providerName === 'openAICompatible') return `Use any provider that's OpenAI-compatible (use this for llama.cpp and more).`
-	if (providerName === 'googleVertex') return 'You must authenticate before using Vertex with Void. Read more about endpoints [here](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/call-vertex-using-openai-library), and regions [here](https://cloud.google.com/vertex-ai/docs/general/locations#available-regions).'
+	if (providerName === 'googleVertex') return 'You must authenticate before using Vertex with void. Read more about endpoints [here](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/call-vertex-using-openai-library), and regions [here](https://cloud.google.com/vertex-ai/docs/general/locations#available-regions).'
 	if (providerName === 'microsoftAzure') return 'Read more about endpoints [here](https://learn.microsoft.com/en-us/rest/api/aifoundry/model-inference/get-chat-completions/get-chat-completions?view=rest-aifoundry-model-inference-2024-05-01-preview&tabs=HTTP), and get your API key [here](https://learn.microsoft.com/en-us/azure/search/search-security-api-keys?tabs=rest-use%2Cportal-find%2Cportal-query#find-existing-keys).'
 	if (providerName === 'awsBedrock') return 'Connect via a LiteLLM proxy or the AWS [Bedrock-Access-Gateway](https://github.com/aws-samples/bedrock-access-gateway). LiteLLM Bedrock setup docs are [here](https://docs.litellm.ai/docs/providers/bedrock).'
 	if (providerName === 'liteLLM') return 'Read more about endpoints [here](https://docs.litellm.ai/docs/providers/openai_compatible).'
@@ -231,7 +231,7 @@ const defaultCustomSettings: Record<CustomSettingName, undefined> = {
 }
 
 
-const modelInfoOfDefaultModelNames = (defaultModelNames: readonly string[]): { models: VoidStatefulModelInfo[] } => {
+const modelInfoOfDefaultModelNames = (defaultModelNames: readonly string[]): { models: voidStatefulModelInfo[] } => {
 	return {
 		models: defaultModelNames.map((modelName, i) => ({
 			modelName,
@@ -372,7 +372,7 @@ export const hasDownloadButtonsOnModelsProviderNames = [] as const satisfies Pro
 
 
 // use this in isFeatuerNameDissbled
-export const isProviderNameDisabled = (providerName: ProviderName, settingsState: VoidSettingsState) => {
+export const isProviderNameDisabled = (providerName: ProviderName, settingsState: voidSettingsState) => {
 
 	const settingsAtProvider = settingsState.settingsOfProvider[providerName]
 	const isAutodetected = (refreshableProviderNames as readonly string[]).includes(providerName)
@@ -384,7 +384,7 @@ export const isProviderNameDisabled = (providerName: ProviderName, settingsState
 	return false
 }
 
-export const isFeatureNameDisabled = (featureName: FeatureName, settingsState: VoidSettingsState) => {
+export const isFeatureNameDisabled = (featureName: FeatureName, settingsState: voidSettingsState) => {
 	// if has a selected provider, check if it's enabled
 	const selectedProvider = settingsState.modelSelectionOfFeature[featureName]
 
@@ -459,8 +459,7 @@ export type GlobalSettings = {
 	selfHealingConfig: SelfHealingConfig;
 	// Verification Pipeline
 	verificationPipelineConfig: VerificationPipelineConfig;
-	// Auth / Backend Proxy
-	useSelfHostedMode: boolean;
+	// Backend Proxy
 	backendUrl: string;
 }
 
@@ -506,8 +505,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	selfHealingConfig: defaultSelfHealingConfig,
 	// Verification Pipeline
 	verificationPipelineConfig: defaultVerificationPipelineConfig,
-	// Auth / Backend Proxy
-	useSelfHostedMode: false,
+	// Backend Proxy
 	backendUrl: 'http://localhost:3456',
 }
 

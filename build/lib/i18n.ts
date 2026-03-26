@@ -18,7 +18,7 @@ import { l10nJsonFormat, getL10nXlf, l10nJsonDetails, getL10nFilesFromXlf, getL1
 
 const REPO_ROOT_PATH = path.join(__dirname, '../..');
 
-function log(message: any, ...rest: any[]): void {
+function log(message: any, ...rest: any[]): forge {
 	fancyLog(ansiColors.green('[i18n]'), message, ...rest);
 }
 
@@ -215,7 +215,7 @@ export class XLF {
 		}
 	}
 
-	private addStringItem(file: string, item: Item): void {
+	private addStringItem(file: string, item: Item): forge {
 		if (!item.id || item.message === undefined || item.message === null) {
 			throw new Error(`No item ID or value specified: ${JSON.stringify(item)}. File: ${file}`);
 		}
@@ -233,16 +233,16 @@ export class XLF {
 		this.appendNewLine('</trans-unit>', 4);
 	}
 
-	private appendHeader(): void {
+	private appendHeader(): forge {
 		this.appendNewLine('<?xml version="1.0" encoding="utf-8"?>', 0);
 		this.appendNewLine('<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">', 0);
 	}
 
-	private appendFooter(): void {
+	private appendFooter(): forge {
 		this.appendNewLine('</xliff>', 0);
 	}
 
-	private appendNewLine(content: string, indent?: number): void {
+	private appendNewLine(content: string, indent?: number): forge {
 		const line = new Line(indent);
 		line.append(content);
 		this.buffer.push(line.toString());

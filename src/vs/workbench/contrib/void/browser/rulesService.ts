@@ -10,17 +10,17 @@ import { createDecorator } from '../../../../platform/instantiation/common/insta
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { URI } from '../../../../base/common/uri.js';
-import { VoidRule } from '../common/rulesTypes.js';
+import { voidRule } from '../common/rulesTypes.js';
 import { parseFrontmatter, matchGlob } from '../common/frontmatterParser.js';
 
 
 export interface IRulesService {
 	readonly _serviceBrand: undefined;
 	onDidChangeRules: Event<void>;
-	getAllRules(): VoidRule[];
-	getMatchingRules(uri: URI): VoidRule[];
-	getAlwaysApplyRules(): VoidRule[];
-	getRuleByName(name: string): VoidRule | undefined;
+	getAllRules(): voidRule[];
+	getMatchingRules(uri: URI): voidRule[];
+	getAlwaysApplyRules(): voidRule[];
+	getRuleByName(name: string): voidRule | undefined;
 	refreshRules(): Promise<void>;
 }
 
@@ -32,7 +32,7 @@ class RulesService extends Disposable implements IRulesService {
 	private readonly _onDidChangeRules = new Emitter<void>();
 	readonly onDidChangeRules: Event<void> = this._onDidChangeRules.event;
 
-	private _rules: VoidRule[] = [];
+	private _rules: voidRule[] = [];
 
 	constructor(
 		@IWorkspaceContextService private readonly _workspaceContextService: IWorkspaceContextService,
@@ -58,7 +58,7 @@ class RulesService extends Disposable implements IRulesService {
 	}
 
 	async refreshRules(): Promise<void> {
-		const rules: VoidRule[] = []
+		const rules: voidRule[] = []
 		const folders = this._workspaceContextService.getWorkspace().folders
 
 		for (const folder of folders) {
@@ -96,11 +96,11 @@ class RulesService extends Disposable implements IRulesService {
 		this._onDidChangeRules.fire()
 	}
 
-	getAllRules(): VoidRule[] {
+	getAllRules(): voidRule[] {
 		return this._rules
 	}
 
-	getMatchingRules(uri: URI): VoidRule[] {
+	getMatchingRules(uri: URI): voidRule[] {
 		const filePath = uri.fsPath
 		return this._rules.filter(rule => {
 			if (rule.alwaysApply) return true
@@ -109,11 +109,11 @@ class RulesService extends Disposable implements IRulesService {
 		})
 	}
 
-	getAlwaysApplyRules(): VoidRule[] {
+	getAlwaysApplyRules(): voidRule[] {
 		return this._rules.filter(rule => rule.alwaysApply)
 	}
 
-	getRuleByName(name: string): VoidRule | undefined {
+	getRuleByName(name: string): voidRule | undefined {
 		return this._rules.find(rule => rule.name === name)
 	}
 }

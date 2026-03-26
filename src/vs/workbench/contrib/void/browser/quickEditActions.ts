@@ -10,7 +10,7 @@ import { KeybindingWeight } from '../../../../platform/keybinding/common/keybind
 import { ICodeEditorService } from '../../../../editor/browser/services/codeEditorService.js';
 import { IEditCodeService } from './editCodeServiceInterface.js';
 import { roundRangeToLines } from './sidebarActions.js';
-import { VOID_CTRL_K_ACTION_ID } from './actionIDs.js';
+import { void_CTRL_K_ACTION_ID } from './actionIDs.js';
 import { localize2 } from '../../../../nls.js';
 import { IMetricsService } from '../common/metricsService.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
@@ -36,12 +36,12 @@ registerAction2(class extends Action2 {
 	constructor(
 	) {
 		super({
-			id: VOID_CTRL_K_ACTION_ID,
+			id: void_CTRL_K_ACTION_ID,
 			f1: true,
-			title: localize2('voidQuickEditAction', 'Void: Quick Edit'),
+			title: localize2('voidQuickEditAction', 'void: Quick Edit'),
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyCode.KeyK,
-				weight: KeybindingWeight.VoidExtension,
+				weight: KeybindingWeight.voidExtension,
 				when: ContextKeyExpr.deserialize('editorFocus && !terminalFocus'),
 			}
 		});

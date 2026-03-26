@@ -10,7 +10,7 @@ import { IWorkspaceContextService } from '../../../../platform/workspace/common/
 import { generateUuid } from '../../../../base/common/uuid.js';
 
 import { ParallelAgentExecution, ParallelAgentMode, ParallelAgentTask } from '../common/parallelAgentTypes.js';
-import { IVoidSettingsService } from '../common/voidSettingsService.js';
+import { IvoidSettingsService } from '../common/voidSettingsService.js';
 import { ISubagentService } from './subagentServiceInterface.js';
 import { ITerminalToolService } from './terminalToolService.js';
 import { ModelSelection } from '../common/voidSettingsTypes.js';
@@ -67,7 +67,7 @@ class ParallelAgentService extends Disposable implements IParallelAgentService {
 
 	constructor(
 		@IWorkspaceContextService private readonly _workspaceContextService: IWorkspaceContextService,
-		@IVoidSettingsService private readonly _settingsService: IVoidSettingsService,
+		@IvoidSettingsService private readonly _settingsService: IvoidSettingsService,
 		@ISubagentService private readonly _subagentService: ISubagentService,
 		@ITerminalToolService private readonly _terminalToolService: ITerminalToolService,
 	) {

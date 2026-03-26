@@ -3,7 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMessageOnFinalMessageParams, ServiceSendLLMMessageParams, MainSendLLMMessageParams, MainLLMMessageAbortParams, ServiceModelListParams, EventModelListOnSuccessParams, EventModelListOnErrorParams, MainModelListParams, OllamaModelResponse, OpenaiCompatibleModelResponse, } from './sendLLMMessageTypes.js';
+import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMessageOnFinalMessageParams, ServiceSendLLMMessageParams, MainSendLLMMessageParams, MainLLMMessageAbortParams, ServiceModelListParams, EventModelListOnSuccessParams, EventModelListOnErrorParams, MainModelListParams, OllamaModelResponse, OpenaiCompatibleModelResponse, ProxyConfig } from './sendLLMMessageTypes.js';
 
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
@@ -12,7 +12,7 @@ import { IMainProcessService } from '../../../../platform/ipc/common/mainProcess
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { Event } from '../../../../base/common/event.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
-import { IVoidSettingsService } from './voidSettingsService.js';
+import { IvoidSettingsService } from './voidSettingsService.js';
 import { IMCPService } from './mcpService.js';
 
 // calls channel to implement features
@@ -24,6 +24,7 @@ export interface ILLMMessageService {
 	abort: (requestId: string) => void;
 	ollamaList: (params: ServiceModelListParams<OllamaModelResponse>) => void;
 	openAICompatibleList: (params: ServiceModelListParams<OpenaiCompatibleModelResponse>) => void;
+	registerProxyConfigProvider: (provider: () => ProxyConfig) => void;
 }
 
 
@@ -58,9 +59,14 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		}
 	}
 
+	private _proxyConfigProvider: () => ProxyConfig | undefined = () => undefined;
+	registerProxyConfigProvider(provider: () => ProxyConfig) {
+		this._proxyConfigProvider = provider;
+	}
+
 	constructor(
 		@IMainProcessService private readonly mainProcessService: IMainProcessService, // used as a renderer (only usable on client side)
-		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
+		@IvoidSettingsService private readonly voidSettingsService: IvoidSettingsService,
 		// @INotificationService private readonly notificationService: INotificationService,
 		@IMCPService private readonly mcpService: IMCPService,
 	) {
@@ -105,7 +111,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 
 		// throw an error if no model/provider selected (this should usually never be reached, the UI should check this first, but might happen in cases like Apply where we haven't built much UI/checks yet, good practice to have check logic on backend)
 		if (modelSelection === null) {
-			const message = `Please add a provider in Void's Settings.`
+			const message = `Please add a provider in void's Settings.`
 			onError({ message, fullError: null })
 			return null
 		}
@@ -127,26 +133,17 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		this.llmMessageHooks.onError[requestId] = onError
 		this.llmMessageHooks.onAbort[requestId] = onAbort // used internally only
 
-		if (proxyConfig) {
-			// Use proxied LLM call — don't send API keys, backend holds them
-			this.channel.call('sendProxiedLLMMessage', {
-				...proxyParams,
-				requestId,
-				settingsOfProvider, // still needed for model metadata, but keys won't be used
-				modelSelection,
-				mcpTools,
-				proxyConfig,
-			} satisfies MainSendLLMMessageParams);
-		} else {
-			// params will be stripped of all its functions over the IPC channel
-			this.channel.call('sendLLMMessage', {
-				...proxyParams,
-				requestId,
-				settingsOfProvider,
-				modelSelection,
-				mcpTools,
-			} satisfies MainSendLLMMessageParams);
-		}
+		const injectedProxyConfig = this._proxyConfigProvider() || proxyConfig;
+
+		// Always route through backend proxy
+		this.channel.call('sendProxiedLLMMessage', {
+			...proxyParams,
+			requestId,
+			settingsOfProvider,
+			modelSelection,
+			mcpTools,
+			proxyConfig: injectedProxyConfig,
+		} satisfies MainSendLLMMessageParams);
 
 		return requestId
 	}
@@ -168,17 +165,20 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		this.listHooks.ollama.success[requestId_] = onSuccess
 		this.listHooks.ollama.error[requestId_] = onError
 
+		const injectedProxyConfig = this._proxyConfigProvider() || proxyConfig;
+
 		this.channel.call('ollamaList', {
 			...proxyParams,
-			settingsOfProvider,
-			providerName: 'ollama',
 			requestId: requestId_,
+			settingsOfProvider,
+			proxyConfig: injectedProxyConfig,
+			providerName: 'ollama',
 		} satisfies MainModelListParams<OllamaModelResponse>)
 	}
 
 
 	openAICompatibleList = (params: ServiceModelListParams<OpenaiCompatibleModelResponse>) => {
-		const { onSuccess, onError, ...proxyParams } = params
+		const { onSuccess, onError, proxyConfig, ...proxyParams } = params
 
 		const { settingsOfProvider } = this.voidSettingsService.state
 
@@ -187,10 +187,13 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		this.listHooks.openAICompat.success[requestId_] = onSuccess
 		this.listHooks.openAICompat.error[requestId_] = onError
 
+		const injectedProxyConfig = this._proxyConfigProvider() || proxyConfig;
+
 		this.channel.call('openAICompatibleList', {
 			...proxyParams,
-			settingsOfProvider,
 			requestId: requestId_,
+			settingsOfProvider,
+			proxyConfig: injectedProxyConfig,
 		} satisfies MainModelListParams<OpenaiCompatibleModelResponse>)
 	}
 

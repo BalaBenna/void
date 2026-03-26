@@ -13,11 +13,11 @@ import { ChatMarkdownRender, ChatMessageLocation, getApplyBoxId } from '../markd
 import { URI } from '../../../../../../../base/common/uri.js';
 import { IDisposable } from '../../../../../../../base/common/lifecycle.js';
 import { ErrorDisplay } from './ErrorDisplay.js';
-import { BlockCode, TextAreaFns, VoidCustomDropdownBox, VoidInputBox2, VoidSlider, VoidSwitch, VoidDiffEditor } from '../util/inputs.js';
+import { BlockCode, TextAreaFns, voidCustomDropdownBox, voidInputBox2, voidSlider, voidSwitch, voidDiffEditor } from '../util/inputs.js';
 import { ModelDropdown, } from '../void-settings-tsx/ModelDropdown.js';
 import { PastThreadsList, HistoryDropdown } from './SidebarThreadSelector.js';
-import { VOID_CTRL_L_ACTION_ID } from '../../../actionIDs.js';
-import { VOID_OPEN_SETTINGS_ACTION_ID } from '../../../voidSettingsPane.js';
+import { void_CTRL_L_ACTION_ID } from '../../../actionIDs.js';
+import { void_OPEN_SETTINGS_ACTION_ID } from '../../../voidSettingsPane.js';
 import { ChatMode, displayInfoOfProviderName, FeatureName, isFeatureNameDisabled } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js';
 import { ICommandService } from '../../../../../../../platform/commands/common/commands.js';
 import { WarningBox } from '../void-settings-tsx/WarningBox.js';
@@ -153,7 +153,7 @@ export const IconLoading = ({ className = '' }: { className?: string }) => {
 const ReasoningOptionSlider = ({ featureName }: { featureName: FeatureName }) => {
 	const accessor = useAccessor()
 
-	const voidSettingsService = accessor.get('IVoidSettingsService')
+	const voidSettingsService = accessor.get('IvoidSettingsService')
 	const voidSettingsState = useSettingsState()
 
 	const modelSelection = voidSettingsState.modelSelectionOfFeature[featureName]
@@ -171,7 +171,7 @@ const ReasoningOptionSlider = ({ featureName }: { featureName: FeatureName }) =>
 	if (canTurnOffReasoning && !reasoningBudgetSlider) { // if it's just a on/off toggle without a power slider
 		return <div className='flex items-center gap-x-2'>
 			<span className='text-void-fg-3 text-xs pointer-events-none inline-block w-10 pr-1'>Thinking</span>
-			<VoidSwitch
+			<voidSwitch
 				size='xxs'
 				value={isReasoningEnabled}
 				onChange={(newVal) => {
@@ -195,7 +195,7 @@ const ReasoningOptionSlider = ({ featureName }: { featureName: FeatureName }) =>
 
 		return <div className='flex items-center gap-x-2'>
 			<span className='text-void-fg-3 text-xs pointer-events-none inline-block w-10 pr-1'>Thinking</span>
-			<VoidSlider
+			<voidSlider
 				width={50}
 				size='xs'
 				min={min}
@@ -226,7 +226,7 @@ const ReasoningOptionSlider = ({ featureName }: { featureName: FeatureName }) =>
 
 		return <div className='flex items-center gap-x-2'>
 			<span className='text-void-fg-3 text-xs pointer-events-none inline-block w-10 pr-1'>Thinking</span>
-			<VoidSlider
+			<voidSlider
 				width={30}
 				size='xs'
 				min={min}
@@ -271,7 +271,7 @@ const iconOfChatMode: Record<ChatMode, typeof Globe> = {
 const ChatModeDropdown = ({ className }: { className: string }) => {
 	const accessor = useAccessor()
 
-	const voidSettingsService = accessor.get('IVoidSettingsService')
+	const voidSettingsService = accessor.get('IvoidSettingsService')
 	const settingsState = useSettingsState()
 
 	const options: ChatMode[] = useMemo(() => ['agent', 'ask', 'plan', 'debug'], [])
@@ -286,7 +286,7 @@ const ChatModeDropdown = ({ className }: { className: string }) => {
 	const ModeIcon = iconOfChatMode[currentMode]
 
 	return <div className="flex items-center gap-1">
-		<VoidCustomDropdownBox
+		<voidCustomDropdownBox
 			className={className}
 			options={options}
 			selectedOption={currentMode}
@@ -304,7 +304,7 @@ const ChatModeDropdown = ({ className }: { className: string }) => {
 
 
 
-interface VoidChatAreaProps {
+interface voidChatAreaProps {
 	// Required
 	children: React.ReactNode; // This will be the input component
 
@@ -356,7 +356,7 @@ interface VoidChatAreaProps {
 	onPaste?: (e: React.ClipboardEvent) => void;
 }
 
-export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
+export const voidChatArea: React.FC<voidChatAreaProps> = ({
 	children,
 	onSubmit,
 	onAbort,
@@ -748,7 +748,7 @@ export const SelectedFiles = (
 
 	const accessor = useAccessor()
 	const commandService = accessor.get('ICommandService')
-	const modelReferenceService = accessor.get('IVoidModelService')
+	const modelReferenceService = accessor.get('IvoidModelService')
 
 
 
@@ -1313,7 +1313,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 			return null
 		}
 
-		chatbubbleContents = <VoidChatArea
+		chatbubbleContents = <voidChatArea
 			featureName='Chat'
 			onSubmit={onSubmit}
 			onAbort={onAbort}
@@ -1324,7 +1324,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 			selections={stagingSelections}
 			setSelections={setStagingSelections}
 		>
-			<VoidInputBox2
+			<voidInputBox2
 				enableAtToMention
 				ref={setTextAreaRef}
 				className='min-h-[81px] max-h-[500px] px-0.5'
@@ -1341,7 +1341,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 				fnsRef={textAreaFnsRef}
 				multiline={true}
 			/>
-		</VoidChatArea>
+		</voidChatArea>
 	}
 
 	const isMsgAfterCheckpoint = currCheckpointIdx !== undefined && currCheckpointIdx === messageIdx - 1
@@ -1750,7 +1750,7 @@ const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) =>
 	const accessor = useAccessor()
 	const chatThreadsService = accessor.get('IChatThreadService')
 	const metricsService = accessor.get('IMetricsService')
-	const voidSettingsService = accessor.get('IVoidSettingsService')
+	const voidSettingsService = accessor.get('IvoidSettingsService')
 	const voidSettingsState = useSettingsState()
 
 	const onAccept = useCallback(() => {
@@ -1847,7 +1847,7 @@ export const ListableToolItem = ({ name, onClick, isSmall, className, showDot }:
 const EditToolChildren = ({ uri, code, type }: { uri: URI | undefined, code: string, type: 'diff' | 'rewrite' }) => {
 
 	const content = type === 'diff' ?
-		<VoidDiffEditor uri={uri} searchReplaceBlocks={code} />
+		<voidDiffEditor uri={uri} searchReplaceBlocks={code} />
 		: <ChatMarkdownRender string={`\`\`\`\n${code}\n\`\`\``} codeURI={uri} chatMessageLocation={undefined} />
 
 	return <div className='!select-text cursor-auto'>
@@ -3311,7 +3311,7 @@ const ChatHeader = () => {
 				<button
 					className="p-1 rounded hover:bg-void-bg-2-hover text-void-fg-3 hover:text-void-fg-1 transition-colors"
 					onClick={() => {
-						commandService.executeCommand(VOID_OPEN_SETTINGS_ACTION_ID);
+						commandService.executeCommand(void_OPEN_SETTINGS_ACTION_ID);
 					}}
 					data-tooltip-id='void-tooltip'
 					data-tooltip-content='Settings'
@@ -3349,7 +3349,7 @@ export const SidebarChat = () => {
 	const chatThreadsService = accessor.get('IChatThreadService')
 	const fileService = accessor.get('IFileService')
 	const languageService = accessor.get('ILanguageService')
-	const voidSettingsService = accessor.get('IVoidSettingsService')
+	const voidSettingsService = accessor.get('IvoidSettingsService')
 
 	const settingsState = useSettingsState()
 	// ----- HIGHER STATE -----
@@ -3436,7 +3436,7 @@ export const SidebarChat = () => {
 		await chatThreadsService.abortRunning(threadId)
 	}
 
-	const keybindingString = accessor.get('IKeybindingService').lookupKeybinding(VOID_CTRL_L_ACTION_ID)?.getLabel()
+	const keybindingString = accessor.get('IKeybindingService').lookupKeybinding(void_CTRL_L_ACTION_ID)?.getLabel()
 
 	const threadId = currentThread.id
 	const currCheckpointIdx = chatThreadsState.allThreads[threadId]?.state?.currCheckpointIdx ?? undefined  // if not exist, treat like checkpoint is last message (infinity)
@@ -3538,7 +3538,7 @@ export const SidebarChat = () => {
 					showDismiss={true}
 				/>
 
-				<WarningBox className='text-sm my-2 mx-4' onClick={() => { commandService.executeCommand(VOID_OPEN_SETTINGS_ACTION_ID) }} text='Open settings' />
+				<WarningBox className='text-sm my-2 mx-4' onClick={() => { commandService.executeCommand(void_OPEN_SETTINGS_ACTION_ID) }} text='Open settings' />
 			</div>
 		}
 	</ScrollToBottomContainer>
@@ -3801,7 +3801,7 @@ export const SidebarChat = () => {
 		}
 	}, [onSubmit, onAbort, isRunning, settingsState.globalSettings.chatMode, voidSettingsService])
 
-	const inputChatArea = <VoidChatArea
+	const inputChatArea = <voidChatArea
 		featureName='Chat'
 		onSubmit={() => onSubmit()}
 		onAbort={onAbort}
@@ -3826,7 +3826,7 @@ export const SidebarChat = () => {
 		onDrop={onDrop}
 		onPaste={onPaste}
 	>
-		<VoidInputBox2
+		<voidInputBox2
 			enableAtToMention
 			className={`min-h-[140px] px-0.5 py-0.5`}
 			placeholder={`Plan, @ for context, / for commands`}
@@ -3838,7 +3838,7 @@ export const SidebarChat = () => {
 			multiline={true}
 		/>
 
-	</VoidChatArea>
+	</voidChatArea>
 
 
 	const isLandingPage = previousMessages.length === 0

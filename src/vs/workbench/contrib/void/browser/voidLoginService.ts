@@ -7,7 +7,7 @@ import { Disposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
-import { mountVoidLogin } from './react/out/void-auth-tsx/index.js';
+import { mountvoidLogin } from './react/out/void-auth-tsx/index.js';
 import { h, getActiveWindow } from '../../../../base/browser/dom.js';
 
 export class LoginContribution extends Disposable implements IWorkbenchContribution {
@@ -28,7 +28,7 @@ export class LoginContribution extends Disposable implements IWorkbenchContribut
 			const loginContainer = h('div.void-login-container').root;
 			workbench.appendChild(loginContainer);
 			this.instantiationService.invokeFunction((accessor: ServicesAccessor) => {
-				const result = mountVoidLogin(loginContainer, accessor);
+				const result = mountvoidLogin(loginContainer, accessor);
 				if (result && typeof result.dispose === 'function') {
 					this._register(toDisposable(result.dispose));
 				}

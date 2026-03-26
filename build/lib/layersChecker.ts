@@ -338,7 +338,7 @@ let hasErrors = false;
 function checkFile(program: ts.Program, sourceFile: ts.SourceFile, rule: IRule) {
 	checkNode(sourceFile);
 
-	function checkNode(node: ts.Node): void {
+	function checkNode(node: ts.Node): forge {
 		if (node.kind !== ts.SyntaxKind.Identifier) {
 			return ts.forEachChild(node, checkNode); // recurse down
 		}

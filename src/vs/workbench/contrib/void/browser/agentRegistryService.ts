@@ -10,17 +10,17 @@ import { createDecorator } from '../../../../platform/instantiation/common/insta
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { URI } from '../../../../base/common/uri.js';
-import { VoidAgentDefinition } from '../common/agentRegistryTypes.js';
+import { voidAgentDefinition } from '../common/agentRegistryTypes.js';
 import { parseFrontmatter } from '../common/frontmatterParser.js';
 
 
 export interface IAgentRegistryService {
 	readonly _serviceBrand: undefined;
 	onDidChangeAgents: Event<void>;
-	getAllAgents(): VoidAgentDefinition[];
-	getAgent(id: string): VoidAgentDefinition | undefined;
-	getBuiltinAgents(): VoidAgentDefinition[];
-	getCustomAgents(): VoidAgentDefinition[];
+	getAllAgents(): voidAgentDefinition[];
+	getAgent(id: string): voidAgentDefinition | undefined;
+	getBuiltinAgents(): voidAgentDefinition[];
+	getCustomAgents(): voidAgentDefinition[];
 	refreshAgents(): Promise<void>;
 	getAgentRosterString(): string;
 }
@@ -29,7 +29,7 @@ export const IAgentRegistryService = createDecorator<IAgentRegistryService>('voi
 
 
 // Built-in agent definitions — these were previously hardcoded in subagentService.ts
-const builtinAgents: VoidAgentDefinition[] = [
+const builtinAgents: voidAgentDefinition[] = [
 	{
 		id: 'explore',
 		name: 'Explore',
@@ -99,7 +99,7 @@ class AgentRegistryService extends Disposable implements IAgentRegistryService {
 	private readonly _onDidChangeAgents = new Emitter<void>();
 	readonly onDidChangeAgents: Event<void> = this._onDidChangeAgents.event;
 
-	private _agents: VoidAgentDefinition[] = [...builtinAgents];
+	private _agents: voidAgentDefinition[] = [...builtinAgents];
 
 	constructor(
 		@IWorkspaceContextService private readonly _workspaceContextService: IWorkspaceContextService,
@@ -124,7 +124,7 @@ class AgentRegistryService extends Disposable implements IAgentRegistryService {
 	}
 
 	async refreshAgents(): Promise<void> {
-		const customAgents: VoidAgentDefinition[] = []
+		const customAgents: voidAgentDefinition[] = []
 
 		// 1. Scan workspace .void/agents/ directories (project-level)
 		const folders = this._workspaceContextService.getWorkspace().folders
@@ -135,7 +135,7 @@ class AgentRegistryService extends Disposable implements IAgentRegistryService {
 		}
 
 		// Combine: builtins first, then custom (custom can override builtins by id)
-		const agentMap = new Map<string, VoidAgentDefinition>()
+		const agentMap = new Map<string, voidAgentDefinition>()
 		for (const agent of builtinAgents) {
 			agentMap.set(agent.id, agent)
 		}
@@ -147,8 +147,8 @@ class AgentRegistryService extends Disposable implements IAgentRegistryService {
 		this._onDidChangeAgents.fire()
 	}
 
-	private async _loadAgentsFromDir(dirUri: URI, source: 'project' | 'user'): Promise<VoidAgentDefinition[]> {
-		const agents: VoidAgentDefinition[] = []
+	private async _loadAgentsFromDir(dirUri: URI, source: 'project' | 'user'): Promise<voidAgentDefinition[]> {
+		const agents: voidAgentDefinition[] = []
 		try {
 			const stat = await this._fileService.resolve(dirUri)
 			if (!stat.children) return agents
@@ -188,19 +188,19 @@ class AgentRegistryService extends Disposable implements IAgentRegistryService {
 		return agents
 	}
 
-	getAllAgents(): VoidAgentDefinition[] {
+	getAllAgents(): voidAgentDefinition[] {
 		return this._agents
 	}
 
-	getAgent(id: string): VoidAgentDefinition | undefined {
+	getAgent(id: string): voidAgentDefinition | undefined {
 		return this._agents.find(a => a.id === id)
 	}
 
-	getBuiltinAgents(): VoidAgentDefinition[] {
+	getBuiltinAgents(): voidAgentDefinition[] {
 		return this._agents.filter(a => a.source === 'builtin')
 	}
 
-	getCustomAgents(): VoidAgentDefinition[] {
+	getCustomAgents(): voidAgentDefinition[] {
 		return this._agents.filter(a => a.source !== 'builtin')
 	}
 

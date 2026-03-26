@@ -4,6 +4,6 @@
  *--------------------------------------------------------------------------------------*/
 
 import { mountFnGenerator } from '../util/mountFnGenerator.js'
-import { VoidTooltip } from './VoidTooltip.js'
+import { voidTooltip } from './voidTooltip.js'
 
-export const mountVoidTooltip = mountFnGenerator(VoidTooltip)
+export const mountvoidTooltip = mountFnGenerator(voidTooltip)

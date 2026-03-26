@@ -8,7 +8,7 @@
 // 'void.settingsServiceStorageI' // 1.0.2
 
 // 1.0.3
-export const VOID_SETTINGS_STORAGE_KEY = 'void.settingsServiceStorageII'
+export const void_SETTINGS_STORAGE_KEY = 'void.settingsServiceStorageII'
 
 
 // past values:

@@ -23,14 +23,14 @@ import { URI } from '../../../../base/common/uri.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 
 
-import { mountVoidSettings } from './react/out/void-settings-tsx/index.js'
+import { mountvoidSettings } from './react/out/void-settings-tsx/index.js'
 import { Codicon } from '../../../../base/common/codicons.js';
 import { toDisposable } from '../../../../base/common/lifecycle.js';
 
 
 // refer to preferences.contribution.ts keybindings editor
 
-class VoidSettingsInput extends EditorInput {
+class voidSettingsInput extends EditorInput {
 
 	static readonly ID: string = 'workbench.input.void.settings';
 
@@ -38,18 +38,18 @@ class VoidSettingsInput extends EditorInput {
 		scheme: 'void',  // Custom scheme for our editor (try Schemas.https)
 		path: 'settings'
 	})
-	readonly resource = VoidSettingsInput.RESOURCE;
+	readonly resource = voidSettingsInput.RESOURCE;
 
 	constructor() {
 		super();
 	}
 
 	override get typeId(): string {
-		return VoidSettingsInput.ID;
+		return voidSettingsInput.ID;
 	}
 
 	override getName(): string {
-		return nls.localize('voidSettingsInputsName', 'Void\'s Settings');
+		return nls.localize('voidSettingsInputsName', 'void\'s Settings');
 	}
 
 	override getIcon() {
@@ -59,7 +59,7 @@ class VoidSettingsInput extends EditorInput {
 }
 
 
-class VoidSettingsPane extends EditorPane {
+class voidSettingsPane extends EditorPane {
 	static readonly ID = 'workbench.test.myCustomPane';
 
 	// private _scrollbar: DomScrollableElement | undefined;
@@ -71,7 +71,7 @@ class VoidSettingsPane extends EditorPane {
 		@IStorageService storageService: IStorageService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService
 	) {
-		super(VoidSettingsPane.ID, group, telemetryService, themeService, storageService);
+		super(voidSettingsPane.ID, group, telemetryService, themeService, storageService);
 	}
 
 	protected createEditor(parent: HTMLElement): void {
@@ -90,7 +90,7 @@ class VoidSettingsPane extends EditorPane {
 
 		// Mount React into the scrollable content
 		this.instantiationService.invokeFunction(accessor => {
-			const disposeFn = mountVoidSettings(settingsElt, accessor)?.dispose;
+			const disposeFn = mountvoidSettings(settingsElt, accessor)?.dispose;
 			this._register(toDisposable(() => disposeFn?.()))
 
 			// setTimeout(() => { // this is a complete hack and I don't really understand how scrollbar works here
@@ -112,18 +112,18 @@ class VoidSettingsPane extends EditorPane {
 
 // register Settings pane
 Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane).registerEditorPane(
-	EditorPaneDescriptor.create(VoidSettingsPane, VoidSettingsPane.ID, nls.localize('VoidSettingsPane', "Void\'s Settings Pane")),
-	[new SyncDescriptor(VoidSettingsInput)]
+	EditorPaneDescriptor.create(voidSettingsPane, voidSettingsPane.ID, nls.localize('voidSettingsPane', "void\'s Settings Pane")),
+	[new SyncDescriptor(voidSettingsInput)]
 );
 
 
 // register the gear on the top right
-export const VOID_TOGGLE_SETTINGS_ACTION_ID = 'workbench.action.toggleVoidSettings'
+export const void_TOGGLE_SETTINGS_ACTION_ID = 'workbench.action.togglevoidSettings'
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
-			id: VOID_TOGGLE_SETTINGS_ACTION_ID,
-			title: nls.localize2('voidSettings', "Void: Toggle Settings"),
+			id: void_TOGGLE_SETTINGS_ACTION_ID,
+			title: nls.localize2('voidSettings', "void: Toggle Settings"),
 			icon: Codicon.settingsGear,
 			menu: [
 				{
@@ -146,7 +146,7 @@ registerAction2(class extends Action2 {
 		const instantiationService = accessor.get(IInstantiationService);
 
 		// if is open, close it
-		const openEditors = editorService.findEditors(VoidSettingsInput.RESOURCE); // should only have 0 or 1 elements...
+		const openEditors = editorService.findEditors(voidSettingsInput.RESOURCE); // should only have 0 or 1 elements...
 		if (openEditors.length !== 0) {
 			const openEditor = openEditors[0].editor
 			const isCurrentlyOpen = editorService.activeEditor?.resource?.fsPath === openEditor.resource?.fsPath
@@ -159,7 +159,7 @@ registerAction2(class extends Action2 {
 
 
 		// else open it
-		const input = instantiationService.createInstance(VoidSettingsInput);
+		const input = instantiationService.createInstance(voidSettingsInput);
 
 		await editorGroupService.activeGroup.openEditor(input);
 	}
@@ -167,12 +167,12 @@ registerAction2(class extends Action2 {
 
 
 
-export const VOID_OPEN_SETTINGS_ACTION_ID = 'workbench.action.openVoidSettings'
+export const void_OPEN_SETTINGS_ACTION_ID = 'workbench.action.openvoidSettings'
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
-			id: VOID_OPEN_SETTINGS_ACTION_ID,
-			title: nls.localize2('voidSettingsAction2', "Void: Open Settings"),
+			id: void_OPEN_SETTINGS_ACTION_ID,
+			title: nls.localize2('voidSettingsAction2', "void: Open Settings"),
 			f1: true,
 			icon: Codicon.settingsGear,
 		});
@@ -182,13 +182,13 @@ registerAction2(class extends Action2 {
 		const instantiationService = accessor.get(IInstantiationService);
 
 		// close all instances if found
-		const openEditors = editorService.findEditors(VoidSettingsInput.RESOURCE);
+		const openEditors = editorService.findEditors(voidSettingsInput.RESOURCE);
 		if (openEditors.length > 0) {
 			await editorService.closeEditors(openEditors);
 		}
 
 		// then, open one single editor
-		const input = instantiationService.createInstance(VoidSettingsInput);
+		const input = instantiationService.createInstance(voidSettingsInput);
 		await editorService.openEditor(input);
 	}
 })
@@ -201,8 +201,8 @@ registerAction2(class extends Action2 {
 MenuRegistry.appendMenuItem(MenuId.GlobalActivity, {
 	group: '0_command',
 	command: {
-		id: VOID_TOGGLE_SETTINGS_ACTION_ID,
-		title: nls.localize('voidSettingsActionGear', "Void\'s Settings")
+		id: void_TOGGLE_SETTINGS_ACTION_ID,
+		title: nls.localize('voidSettingsActionGear', "void\'s Settings")
 	},
 	order: 1
 });

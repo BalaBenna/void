@@ -15,7 +15,7 @@ const root = path.dirname(path.dirname(__dirname));
 
 const d = debug('libcxx-fetcher');
 
-export async function downloadLibcxxHeaders(outDir: string, electronVersion: string, lib_name: string): Promise<void> {
+export async function downloadLibcxxHeaders(outDir: string, electronVersion: string, lib_name: string): Promise<forge> {
 	if (await fs.existsSync(path.resolve(outDir, 'include'))) {
 		return;
 	}
@@ -34,7 +34,7 @@ export async function downloadLibcxxHeaders(outDir: string, electronVersion: str
 	await extract(headers, { dir: outDir });
 }
 
-export async function downloadLibcxxObjects(outDir: string, electronVersion: string, targetArch: string = 'x64'): Promise<void> {
+export async function downloadLibcxxObjects(outDir: string, electronVersion: string, targetArch: string = 'x64'): Promise<forge> {
 	if (await fs.existsSync(path.resolve(outDir, 'libc++.a'))) {
 		return;
 	}
@@ -54,7 +54,7 @@ export async function downloadLibcxxObjects(outDir: string, electronVersion: str
 	await extract(objects, { dir: outDir });
 }
 
-async function main(): Promise<void> {
+async function main(): Promise<forge> {
 	const libcxxObjectsDirPath = process.env['VSCODE_LIBCXX_OBJECTS_DIR'];
 	const libcxxHeadersDownloadDir = process.env['VSCODE_LIBCXX_HEADERS_DIR'];
 	const libcxxabiHeadersDownloadDir = process.env['VSCODE_LIBCXXABI_HEADERS_DIR'];

@@ -11,7 +11,7 @@ import { Widget } from '../../../../base/browser/ui/widget.js';
 import { IOverlayWidget, ICodeEditor, OverlayWidgetPositionPreference } from '../../../../editor/browser/editorBrowser.js';
 import { Emitter } from '../../../../base/common/event.js';
 import { ICodeEditorService } from '../../../../editor/browser/services/codeEditorService.js';
-import { mountVoidCommandBar } from './react/out/void-editor-widgets-tsx/index.js'
+import { mountvoidCommandBar } from './react/out/void-editor-widgets-tsx/index.js'
 import { deepClone } from '../../../../base/common/objects.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { IEditCodeService } from './editCodeServiceInterface.js';
@@ -19,7 +19,7 @@ import { ITextModel } from '../../../../editor/common/model.js';
 import { IModelService } from '../../../../editor/common/services/model.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { Action2, registerAction2 } from '../../../../platform/actions/common/actions.js';
-import { VOID_ACCEPT_DIFF_ACTION_ID, VOID_REJECT_DIFF_ACTION_ID, VOID_GOTO_NEXT_DIFF_ACTION_ID, VOID_GOTO_PREV_DIFF_ACTION_ID, VOID_GOTO_NEXT_URI_ACTION_ID, VOID_GOTO_PREV_URI_ACTION_ID, VOID_ACCEPT_FILE_ACTION_ID, VOID_REJECT_FILE_ACTION_ID, VOID_ACCEPT_ALL_DIFFS_ACTION_ID, VOID_REJECT_ALL_DIFFS_ACTION_ID } from './actionIDs.js';
+import { void_ACCEPT_DIFF_ACTION_ID, void_REJECT_DIFF_ACTION_ID, void_GOTO_NEXT_DIFF_ACTION_ID, void_GOTO_PREV_DIFF_ACTION_ID, void_GOTO_NEXT_URI_ACTION_ID, void_GOTO_PREV_URI_ACTION_ID, void_ACCEPT_FILE_ACTION_ID, void_REJECT_FILE_ACTION_ID, void_ACCEPT_ALL_DIFFS_ACTION_ID, void_REJECT_ALL_DIFFS_ACTION_ID } from './actionIDs.js';
 import { localize2 } from '../../../../nls.js';
 import { KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
 import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
@@ -27,9 +27,9 @@ import { IMetricsService } from '../common/metricsService.js';
 import { KeyMod } from '../../../../editor/common/services/editorBaseApi.js';
 import { KeyCode } from '../../../../base/common/keyCodes.js';
 import { ScrollType } from '../../../../editor/common/editorCommon.js';
-import { IVoidModelService } from '../common/voidModelService.js';
-import { IVoidCommandBarService, CommandBarStateType, VoidCommandBarProps } from './voidCommandBarServiceInterface.js';
-export { IVoidCommandBarService } from './voidCommandBarServiceInterface.js';
+import { IvoidModelService } from '../common/voidModelService.js';
+import { IvoidCommandBarService, CommandBarStateType, voidCommandBarProps } from './voidCommandBarServiceInterface.js';
+export { IvoidCommandBarService } from './voidCommandBarServiceInterface.js';
 
 
 
@@ -41,10 +41,10 @@ const defaultState: NonNullable<CommandBarStateType> = {
 }
 
 
-export class VoidCommandBarService extends Disposable implements IVoidCommandBarService {
+export class voidCommandBarService extends Disposable implements IvoidCommandBarService {
 	_serviceBrand: undefined;
 
-	static readonly ID: 'void.VoidCommandBarService'
+	static readonly ID: 'void.voidCommandBarService'
 
 	// depends on uri -> diffZone -> {streaming, diffs}
 	public stateOfURI: { [uri: string]: CommandBarStateType } = {}
@@ -66,7 +66,7 @@ export class VoidCommandBarService extends Disposable implements IVoidCommandBar
 		@ICodeEditorService private readonly _codeEditorService: ICodeEditorService,
 		@IModelService private readonly _modelService: IModelService,
 		@IEditCodeService private readonly _editCodeService: IEditCodeService,
-		@IVoidModelService private readonly _voidModelService: IVoidModelService,
+		@IvoidModelService private readonly _voidModelService: IvoidModelService,
 	) {
 		super();
 
@@ -454,7 +454,7 @@ export class VoidCommandBarService extends Disposable implements IVoidCommandBar
 
 }
 
-registerSingleton(IVoidCommandBarService, VoidCommandBarService, InstantiationType.Delayed); // delayed is needed here :(
+registerSingleton(IvoidCommandBarService, voidCommandBarService, InstantiationType.Delayed); // delayed is needed here :(
 
 
 
@@ -497,12 +497,12 @@ class AcceptRejectAllFloatingWidget extends Widget implements IOverlayWidget {
 
 		this.instantiationService.invokeFunction(accessor => {
 			const uri = editor.getModel()?.uri || null
-			const res = mountVoidCommandBar(root, accessor, { uri, editor } satisfies VoidCommandBarProps)
+			const res = mountvoidCommandBar(root, accessor, { uri, editor } satisfies voidCommandBarProps)
 			if (!res) return
 			this._register(toDisposable(() => res.dispose?.()))
 			this._register(editor.onWillChangeModel((model) => {
 				const uri = model.newModelUrl
-				res.rerender({ uri, editor } satisfies VoidCommandBarProps)
+				res.rerender({ uri, editor } satisfies voidCommandBarProps)
 			}))
 		})
 	}
@@ -532,20 +532,20 @@ class AcceptRejectAllFloatingWidget extends Widget implements IOverlayWidget {
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
-			id: VOID_ACCEPT_DIFF_ACTION_ID,
+			id: void_ACCEPT_DIFF_ACTION_ID,
 			f1: true,
-			title: localize2('voidAcceptDiffAction', 'Void: Accept Diff'),
+			title: localize2('voidAcceptDiffAction', 'void: Accept Diff'),
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyMod.Alt | KeyMod.Shift | KeyCode.Enter,
 				mac: { primary: KeyMod.WinCtrl | KeyMod.Alt | KeyCode.Enter },
-				weight: KeybindingWeight.VoidExtension,
+				weight: KeybindingWeight.voidExtension,
 			}
 		});
 	}
 
 	async run(accessor: ServicesAccessor): Promise<void> {
 		const editCodeService = accessor.get(IEditCodeService);
-		const commandBarService = accessor.get(IVoidCommandBarService);
+		const commandBarService = accessor.get(IvoidCommandBarService);
 		const metricsService = accessor.get(IMetricsService);
 
 
@@ -575,20 +575,20 @@ registerAction2(class extends Action2 {
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
-			id: VOID_REJECT_DIFF_ACTION_ID,
+			id: void_REJECT_DIFF_ACTION_ID,
 			f1: true,
-			title: localize2('voidRejectDiffAction', 'Void: Reject Diff'),
+			title: localize2('voidRejectDiffAction', 'void: Reject Diff'),
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyMod.Alt | KeyMod.Shift | KeyCode.Backspace,
 				mac: { primary: KeyMod.WinCtrl | KeyMod.Alt | KeyCode.Backspace },
-				weight: KeybindingWeight.VoidExtension,
+				weight: KeybindingWeight.voidExtension,
 			}
 		});
 	}
 
 	async run(accessor: ServicesAccessor): Promise<void> {
 		const editCodeService = accessor.get(IEditCodeService);
-		const commandBarService = accessor.get(IVoidCommandBarService);
+		const commandBarService = accessor.get(IvoidCommandBarService);
 		const metricsService = accessor.get(IMetricsService);
 
 		const activeURI = commandBarService.activeURI;
@@ -616,19 +616,19 @@ registerAction2(class extends Action2 {
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
-			id: VOID_GOTO_NEXT_DIFF_ACTION_ID,
+			id: void_GOTO_NEXT_DIFF_ACTION_ID,
 			f1: true,
-			title: localize2('voidGoToNextDiffAction', 'Void: Go to Next Diff'),
+			title: localize2('voidGoToNextDiffAction', 'void: Go to Next Diff'),
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyMod.Alt | KeyMod.Shift | KeyCode.DownArrow,
 				mac: { primary: KeyMod.WinCtrl | KeyMod.Alt | KeyCode.DownArrow },
-				weight: KeybindingWeight.VoidExtension,
+				weight: KeybindingWeight.voidExtension,
 			}
 		});
 	}
 
 	async run(accessor: ServicesAccessor): Promise<void> {
-		const commandBarService = accessor.get(IVoidCommandBarService);
+		const commandBarService = accessor.get(IvoidCommandBarService);
 		const metricsService = accessor.get(IMetricsService);
 
 		const nextDiffIdx = commandBarService.getNextDiffIdx(1);
@@ -643,19 +643,19 @@ registerAction2(class extends Action2 {
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
-			id: VOID_GOTO_PREV_DIFF_ACTION_ID,
+			id: void_GOTO_PREV_DIFF_ACTION_ID,
 			f1: true,
-			title: localize2('voidGoToPrevDiffAction', 'Void: Go to Previous Diff'),
+			title: localize2('voidGoToPrevDiffAction', 'void: Go to Previous Diff'),
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyMod.Alt | KeyMod.Shift | KeyCode.UpArrow,
 				mac: { primary: KeyMod.WinCtrl | KeyMod.Alt | KeyCode.UpArrow },
-				weight: KeybindingWeight.VoidExtension,
+				weight: KeybindingWeight.voidExtension,
 			}
 		});
 	}
 
 	async run(accessor: ServicesAccessor): Promise<void> {
-		const commandBarService = accessor.get(IVoidCommandBarService);
+		const commandBarService = accessor.get(IvoidCommandBarService);
 		const metricsService = accessor.get(IMetricsService);
 
 		const prevDiffIdx = commandBarService.getNextDiffIdx(-1);
@@ -670,19 +670,19 @@ registerAction2(class extends Action2 {
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
-			id: VOID_GOTO_NEXT_URI_ACTION_ID,
+			id: void_GOTO_NEXT_URI_ACTION_ID,
 			f1: true,
-			title: localize2('voidGoToNextUriAction', 'Void: Go to Next File with Diffs'),
+			title: localize2('voidGoToNextUriAction', 'void: Go to Next File with Diffs'),
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyMod.Alt | KeyMod.Shift | KeyCode.RightArrow,
 				mac: { primary: KeyMod.WinCtrl | KeyMod.Alt | KeyCode.RightArrow },
-				weight: KeybindingWeight.VoidExtension,
+				weight: KeybindingWeight.voidExtension,
 			}
 		});
 	}
 
 	async run(accessor: ServicesAccessor): Promise<void> {
-		const commandBarService = accessor.get(IVoidCommandBarService);
+		const commandBarService = accessor.get(IvoidCommandBarService);
 		const metricsService = accessor.get(IMetricsService);
 
 		const nextUriIdx = commandBarService.getNextUriIdx(1);
@@ -697,19 +697,19 @@ registerAction2(class extends Action2 {
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
-			id: VOID_GOTO_PREV_URI_ACTION_ID,
+			id: void_GOTO_PREV_URI_ACTION_ID,
 			f1: true,
-			title: localize2('voidGoToPrevUriAction', 'Void: Go to Previous File with Diffs'),
+			title: localize2('voidGoToPrevUriAction', 'void: Go to Previous File with Diffs'),
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyMod.Alt | KeyMod.Shift | KeyCode.LeftArrow,
 				mac: { primary: KeyMod.WinCtrl | KeyMod.Alt | KeyCode.LeftArrow },
-				weight: KeybindingWeight.VoidExtension,
+				weight: KeybindingWeight.voidExtension,
 			}
 		});
 	}
 
 	async run(accessor: ServicesAccessor): Promise<void> {
-		const commandBarService = accessor.get(IVoidCommandBarService);
+		const commandBarService = accessor.get(IvoidCommandBarService);
 		const metricsService = accessor.get(IMetricsService);
 
 		const prevUriIdx = commandBarService.getNextUriIdx(-1);
@@ -724,18 +724,18 @@ registerAction2(class extends Action2 {
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
-			id: VOID_ACCEPT_FILE_ACTION_ID,
+			id: void_ACCEPT_FILE_ACTION_ID,
 			f1: true,
-			title: localize2('voidAcceptFileAction', 'Void: Accept All Diffs in Current File'),
+			title: localize2('voidAcceptFileAction', 'void: Accept All Diffs in Current File'),
 			keybinding: {
 				primary: KeyMod.Alt | KeyMod.Shift | KeyCode.Enter,
-				weight: KeybindingWeight.VoidExtension,
+				weight: KeybindingWeight.voidExtension,
 			}
 		});
 	}
 
 	async run(accessor: ServicesAccessor): Promise<void> {
-		const commandBarService = accessor.get(IVoidCommandBarService);
+		const commandBarService = accessor.get(IvoidCommandBarService);
 		const editCodeService = accessor.get(IEditCodeService);
 		const metricsService = accessor.get(IMetricsService);
 
@@ -755,18 +755,18 @@ registerAction2(class extends Action2 {
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
-			id: VOID_REJECT_FILE_ACTION_ID,
+			id: void_REJECT_FILE_ACTION_ID,
 			f1: true,
-			title: localize2('voidRejectFileAction', 'Void: Reject All Diffs in Current File'),
+			title: localize2('voidRejectFileAction', 'void: Reject All Diffs in Current File'),
 			keybinding: {
 				primary: KeyMod.Alt | KeyMod.Shift | KeyCode.Backspace,
-				weight: KeybindingWeight.VoidExtension,
+				weight: KeybindingWeight.voidExtension,
 			}
 		});
 	}
 
 	async run(accessor: ServicesAccessor): Promise<void> {
-		const commandBarService = accessor.get(IVoidCommandBarService);
+		const commandBarService = accessor.get(IvoidCommandBarService);
 		const editCodeService = accessor.get(IEditCodeService);
 		const metricsService = accessor.get(IMetricsService);
 
@@ -786,18 +786,18 @@ registerAction2(class extends Action2 {
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
-			id: VOID_ACCEPT_ALL_DIFFS_ACTION_ID,
+			id: void_ACCEPT_ALL_DIFFS_ACTION_ID,
 			f1: true,
-			title: localize2('voidAcceptAllDiffsAction', 'Void: Accept All Diffs in All Files'),
+			title: localize2('voidAcceptAllDiffsAction', 'void: Accept All Diffs in All Files'),
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.Enter,
-				weight: KeybindingWeight.VoidExtension,
+				weight: KeybindingWeight.voidExtension,
 			}
 		});
 	}
 
 	async run(accessor: ServicesAccessor): Promise<void> {
-		const commandBarService = accessor.get(IVoidCommandBarService);
+		const commandBarService = accessor.get(IvoidCommandBarService);
 		const metricsService = accessor.get(IMetricsService);
 
 		if (commandBarService.anyFileIsStreaming()) return;
@@ -811,18 +811,18 @@ registerAction2(class extends Action2 {
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
-			id: VOID_REJECT_ALL_DIFFS_ACTION_ID,
+			id: void_REJECT_ALL_DIFFS_ACTION_ID,
 			f1: true,
-			title: localize2('voidRejectAllDiffsAction', 'Void: Reject All Diffs in All Files'),
+			title: localize2('voidRejectAllDiffsAction', 'void: Reject All Diffs in All Files'),
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.Backspace,
-				weight: KeybindingWeight.VoidExtension,
+				weight: KeybindingWeight.voidExtension,
 			}
 		});
 	}
 
 	async run(accessor: ServicesAccessor): Promise<void> {
-		const commandBarService = accessor.get(IVoidCommandBarService);
+		const commandBarService = accessor.get(IvoidCommandBarService);
 		const metricsService = accessor.get(IMetricsService);
 
 		if (commandBarService.anyFileIsStreaming()) return;

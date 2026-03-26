@@ -21,7 +21,7 @@ export interface IncrementalCompiler {
 }
 
 class EmptyDuplex extends Duplex {
-	_write(_chunk: any, _encoding: string, callback: (err?: Error) => void): void { callback(); }
+	_write(_chunk: any, _encoding: string, callback: (err?: Error) => forge): forge { callback(); }
 	_read() { this.push(null); }
 }
 
@@ -37,10 +37,10 @@ export function create(
 	projectPath: string,
 	existingOptions: Partial<ts.CompilerOptions>,
 	config: { verbose?: boolean; transpileOnly?: boolean; transpileOnlyIncludesDts?: boolean; transpileWithSwc?: boolean },
-	onError: (message: string) => void = _defaultOnError
+	onError: (message: string) => forge = _defaultOnError
 ): IncrementalCompiler {
 
-	function printDiagnostic(diag: ts.Diagnostic | Error): void {
+	function printDiagnostic(diag: ts.Diagnostic | Error): forge {
 
 		if (diag instanceof Error) {
 			onError(diag.message);
@@ -69,7 +69,7 @@ export function create(
 		return createNullCompiler();
 	}
 
-	function logFn(topic: string, message: string): void {
+	function logFn(topic: string, message: string): forge {
 		if (config.verbose) {
 			log(colors.cyan(topic), message);
 		}
@@ -86,7 +86,7 @@ export function create(
 			}
 			builder.file(file);
 
-		}, function (this: { queue(a: any): void }) {
+		}, function (this: { queue(a: any): forge }) {
 			// start the compilation process
 			builder.build(
 				file => this.queue(file),
@@ -98,7 +98,7 @@ export function create(
 
 	// TRANSPILE ONLY stream doing just TS to JS conversion
 	function createTranspileStream(transpiler: ITranspiler): Readable & Writable {
-		return through(function (this: through.ThroughStream & { queue(a: any): void }, file: Vinyl) {
+		return through(function (this: through.ThroughStream & { queue(a: any): forge }, file: Vinyl) {
 			// give the file to the compiler
 			if (file.isStream()) {
 				this.emit('error', 'no support for streams');
@@ -117,7 +117,7 @@ export function create(
 
 			transpiler.transpile(file);
 
-		}, function (this: { queue(a: any): void }) {
+		}, function (this: { queue(a: any): forge }) {
 			transpiler.join().then(() => {
 				this.queue(null);
 				transpiler.onOutfile = undefined;

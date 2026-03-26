@@ -149,8 +149,8 @@ export const defaultModelsOfProvider = {
 
 
 
-export type VoidStaticModelInfo = { // not stateful
-	// Void uses the information below to know how to handle each model.
+export type voidStaticModelInfo = { // not stateful
+	// void uses the information below to know how to handle each model.
 	// for some examples, see openAIModelOptions and anthropicModelOptions (below).
 
 	contextWindow: number; // input tokens
@@ -206,7 +206,7 @@ export const modelOverrideKeys = [
 ] as const
 
 export type ModelOverrides = Pick<
-	VoidStaticModelInfo,
+	voidStaticModelInfo,
 	(typeof modelOverrideKeys)[number]
 >
 
@@ -223,10 +223,10 @@ type ProviderReasoningIOSettings = {
 	| { nameOfFieldInDelta?: undefined, needsManualParse?: true, };
 }
 
-type VoidStaticProviderInfo = { // doesn't change (not stateful)
+type voidStaticProviderInfo = { // doesn't change (not stateful)
 	providerReasoningIOSettings?: ProviderReasoningIOSettings; // input/output settings around thinking (allowed to be empty) - only applied if the model supports reasoning output
-	modelOptions: { [key: string]: VoidStaticModelInfo };
-	modelOptionsFallback: (modelName: string, fallbackKnownValues?: Partial<VoidStaticModelInfo>) => (VoidStaticModelInfo & { modelName: string, recognizedModelName: string }) | null;
+	modelOptions: { [key: string]: voidStaticModelInfo };
+	modelOptionsFallback: (modelName: string, fallbackKnownValues?: Partial<voidStaticModelInfo>) => (voidStaticModelInfo & { modelName: string, recognizedModelName: string }) | null;
 }
 
 
@@ -239,7 +239,7 @@ const defaultModelOptions = {
 	supportsSystemMessage: false,
 	supportsFIM: false,
 	reasoningCapabilities: false,
-} as const satisfies VoidStaticModelInfo
+} as const satisfies voidStaticModelInfo
 
 // TODO!!! double check all context sizes below
 // TODO!!! add openrouter common models
@@ -375,18 +375,18 @@ const openSourceModelOptions_assumingOAICompat = {
 		reasoningCapabilities: false,
 		contextWindow: 1_000_000, reservedOutputTokenSpace: 32_000,
 	}
-} as const satisfies { [s: string]: Partial<VoidStaticModelInfo> }
+} as const satisfies { [s: string]: Partial<voidStaticModelInfo> }
 
 
 
 
 // keep modelName, but use the fallback's defaults
-const extensiveModelOptionsFallback: VoidStaticProviderInfo['modelOptionsFallback'] = (modelName, fallbackKnownValues) => {
+const extensiveModelOptionsFallback: voidStaticProviderInfo['modelOptionsFallback'] = (modelName, fallbackKnownValues) => {
 
 	const lower = modelName.toLowerCase()
 
-	const toFallback = <T extends { [s: string]: Omit<VoidStaticModelInfo, 'cost' | 'downloadable'> },>(obj: T, recognizedModelName: string & keyof T)
-		: VoidStaticModelInfo & { modelName: string, recognizedModelName: string } => {
+	const toFallback = <T extends { [s: string]: Omit<voidStaticModelInfo, 'cost' | 'downloadable'> },>(obj: T, recognizedModelName: string & keyof T)
+		: voidStaticModelInfo & { modelName: string, recognizedModelName: string } => {
 
 		const opts = obj[recognizedModelName]
 		const supportsSystemMessage = opts.supportsSystemMessage === 'separated'
@@ -557,9 +557,9 @@ const anthropicModelOptions = {
 		supportsSystemMessage: 'separated',
 		reasoningCapabilities: false,
 	}
-} as const satisfies { [s: string]: VoidStaticModelInfo }
+} as const satisfies { [s: string]: voidStaticModelInfo }
 
-const anthropicSettings: VoidStaticProviderInfo = {
+const anthropicSettings: voidStaticProviderInfo = {
 	providerReasoningIOSettings: {
 		input: {
 			includeInPayload: (reasoningInfo) => {
@@ -690,7 +690,7 @@ const openAIModelOptions = { // https://platform.openai.com/docs/pricing
 		supportsSystemMessage: 'system-role', // ??
 		reasoningCapabilities: false,
 	},
-} as const satisfies { [s: string]: VoidStaticModelInfo }
+} as const satisfies { [s: string]: voidStaticModelInfo }
 
 
 // https://platform.openai.com/docs/guides/reasoning?api-mode=chat
@@ -703,7 +703,7 @@ const openAICompatIncludeInPayloadReasoning = (reasoningInfo: SendableReasoningI
 
 }
 
-const openAISettings: VoidStaticProviderInfo = {
+const openAISettings: voidStaticProviderInfo = {
 	modelOptions: openAIModelOptions,
 	modelOptionsFallback: (modelName) => {
 		const lower = modelName.toLowerCase()
@@ -774,9 +774,9 @@ const xAIModelOptions = {
 		specialToolFormat: 'openai-style',
 		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: false, reasoningSlider: { type: 'effort_slider', values: ['low', 'high'], default: 'low' } },
 	},
-} as const satisfies { [s: string]: VoidStaticModelInfo }
+} as const satisfies { [s: string]: voidStaticModelInfo }
 
-const xAISettings: VoidStaticProviderInfo = {
+const xAISettings: voidStaticProviderInfo = {
 	modelOptions: xAIModelOptions,
 	modelOptionsFallback: (modelName) => {
 		const lower = modelName.toLowerCase()
@@ -905,9 +905,9 @@ const geminiModelOptions = { // https://ai.google.dev/gemini-api/docs/pricing
 		specialToolFormat: 'gemini-style',
 		reasoningCapabilities: false,
 	},
-} as const satisfies { [s: string]: VoidStaticModelInfo }
+} as const satisfies { [s: string]: voidStaticModelInfo }
 
-const geminiSettings: VoidStaticProviderInfo = {
+const geminiSettings: voidStaticProviderInfo = {
 	modelOptions: geminiModelOptions,
 	modelOptionsFallback: (modelName) => { return null },
 }
@@ -930,10 +930,10 @@ const deepseekModelOptions = {
 		cost: { cache_read: .14, input: .55, output: 2.19, },
 		downloadable: false,
 	},
-} as const satisfies { [s: string]: VoidStaticModelInfo }
+} as const satisfies { [s: string]: voidStaticModelInfo }
 
 
-const deepseekSettings: VoidStaticProviderInfo = {
+const deepseekSettings: voidStaticProviderInfo = {
 	modelOptions: deepseekModelOptions,
 	modelOptionsFallback: (modelName) => { return null },
 	providerReasoningIOSettings: {
@@ -1020,9 +1020,9 @@ const mistralModelOptions = { // https://mistral.ai/products/la-plateforme#prici
 		supportsSystemMessage: 'system-role',
 		reasoningCapabilities: false,
 	},
-} as const satisfies { [s: string]: VoidStaticModelInfo }
+} as const satisfies { [s: string]: voidStaticModelInfo }
 
-const mistralSettings: VoidStaticProviderInfo = {
+const mistralSettings: voidStaticProviderInfo = {
 	modelOptions: mistralModelOptions,
 	modelOptionsFallback: (modelName) => { return null },
 	providerReasoningIOSettings: {
@@ -1069,8 +1069,8 @@ const groqModelOptions = { // https://console.groq.com/docs/models, https://groq
 		supportsSystemMessage: 'system-role',
 		reasoningCapabilities: { supportsReasoning: true, canIOReasoning: true, canTurnOffReasoning: false, openSourceThinkTags: ['<think>', '</think>'] }, // we're using reasoning_format:parsed so really don't need to know openSourceThinkTags
 	},
-} as const satisfies { [s: string]: VoidStaticModelInfo }
-const groqSettings: VoidStaticProviderInfo = {
+} as const satisfies { [s: string]: voidStaticModelInfo }
+const groqSettings: voidStaticProviderInfo = {
 	modelOptions: groqModelOptions,
 	modelOptionsFallback: (modelName) => { return null },
 	providerReasoningIOSettings: {
@@ -1091,8 +1091,8 @@ const groqSettings: VoidStaticProviderInfo = {
 
 // ---------------- GOOGLE VERTEX ----------------
 const googleVertexModelOptions = {
-} as const satisfies Record<string, VoidStaticModelInfo>
-const googleVertexSettings: VoidStaticProviderInfo = {
+} as const satisfies Record<string, voidStaticModelInfo>
+const googleVertexSettings: voidStaticProviderInfo = {
 	modelOptions: googleVertexModelOptions,
 	modelOptionsFallback: (modelName) => { return null },
 	providerReasoningIOSettings: {
@@ -1102,8 +1102,8 @@ const googleVertexSettings: VoidStaticProviderInfo = {
 
 // ---------------- MICROSOFT AZURE ----------------
 const microsoftAzureModelOptions = {
-} as const satisfies Record<string, VoidStaticModelInfo>
-const microsoftAzureSettings: VoidStaticProviderInfo = {
+} as const satisfies Record<string, voidStaticModelInfo>
+const microsoftAzureSettings: voidStaticProviderInfo = {
 	modelOptions: microsoftAzureModelOptions,
 	modelOptionsFallback: (modelName) => { return null },
 	providerReasoningIOSettings: {
@@ -1113,9 +1113,9 @@ const microsoftAzureSettings: VoidStaticProviderInfo = {
 
 // ---------------- AWS BEDROCK ----------------
 const awsBedrockModelOptions = {
-} as const satisfies Record<string, VoidStaticModelInfo>
+} as const satisfies Record<string, voidStaticModelInfo>
 
-const awsBedrockSettings: VoidStaticProviderInfo = {
+const awsBedrockSettings: voidStaticProviderInfo = {
 	modelOptions: awsBedrockModelOptions,
 	modelOptionsFallback: (modelName) => { return null },
 	providerReasoningIOSettings: {
@@ -1125,7 +1125,7 @@ const awsBedrockSettings: VoidStaticProviderInfo = {
 
 
 // ---------------- VLLM, OLLAMA, OPENAICOMPAT (self-hosted / local) ----------------
-const openaiCompatible: VoidStaticProviderInfo = {
+const openaiCompatible: voidStaticProviderInfo = {
 	modelOptionsFallback: (modelName) => extensiveModelOptionsFallback(modelName),
 	modelOptions: {},
 	providerReasoningIOSettings: {
@@ -1135,7 +1135,7 @@ const openaiCompatible: VoidStaticProviderInfo = {
 	},
 }
 
-const liteLLMSettings: VoidStaticProviderInfo = { // https://docs.litellm.ai/docs/reasoning_content
+const liteLLMSettings: voidStaticProviderInfo = { // https://docs.litellm.ai/docs/reasoning_content
 	modelOptionsFallback: (modelName) => extensiveModelOptionsFallback(modelName, { downloadable: { sizeGb: 'not-known' } }),
 	modelOptions: {},
 	providerReasoningIOSettings: {
@@ -1289,9 +1289,9 @@ const openRouterModelOptions_assumingOpenAICompat = {
 		cost: { input: 0.07, output: 0.16 },
 		downloadable: false,
 	}
-} as const satisfies { [s: string]: VoidStaticModelInfo }
+} as const satisfies { [s: string]: voidStaticModelInfo }
 
-const openRouterSettings: VoidStaticProviderInfo = {
+const openRouterSettings: voidStaticProviderInfo = {
 	modelOptions: openRouterModelOptions_assumingOpenAICompat,
 	modelOptionsFallback: (modelName) => {
 		const res = extensiveModelOptionsFallback(modelName)
@@ -1332,7 +1332,7 @@ const openRouterSettings: VoidStaticProviderInfo = {
 
 
 
-const ollamaSettings: VoidStaticProviderInfo = {
+const ollamaSettings: voidStaticProviderInfo = {
 	modelOptionsFallback: (modelName) => extensiveModelOptionsFallback(modelName),
 	modelOptions: {},
 	providerReasoningIOSettings: {
@@ -1344,7 +1344,7 @@ const ollamaSettings: VoidStaticProviderInfo = {
 // ---------------- model settings of everything above ----------------
 
 
-const modelSettingsOfProvider: { [providerName in ProviderName]: VoidStaticProviderInfo } = {
+const modelSettingsOfProvider: { [providerName in ProviderName]: voidStaticProviderInfo } = {
 	openAI: openAISettings,
 	anthropic: anthropicSettings,
 	xAI: xAISettings,
@@ -1375,7 +1375,7 @@ export const getModelCapabilities = (
 	providerName: ProviderName,
 	modelName: string,
 	overridesOfModel: OverridesOfModel | undefined
-): VoidStaticModelInfo & (
+): voidStaticModelInfo & (
 	| { modelName: string; recognizedModelName: string; isUnrecognizedModel: false }
 	| { modelName: string; recognizedModelName?: undefined; isUnrecognizedModel: true }
 ) => {

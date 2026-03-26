@@ -108,7 +108,7 @@ suite('MainThreadDiagnostics', function () {
 			};
 			const target = URI.file('a');
 			diag.$changeMany('foo', [[target, [{ ...markerDataStub, message: 'same_owner' }]]]);
-			markerService.changeOne('bar', target, [{ ...markerDataStub, message: 'forgein_owner' }]);
+			markerService.changeOne('bar', target, [{ ...markerDataStub, message: 'voidin_owner' }]);
 
 			// added one marker via the API and one via the ext host. the latter must not
 			// trigger an event to the extension host
@@ -117,7 +117,7 @@ suite('MainThreadDiagnostics', function () {
 			assert.strictEqual(markerService.read().length, 2);
 			assert.strictEqual(changedData.length, 1);
 			assert.strictEqual(changedData[0].length, 1);
-			assert.strictEqual(changedData[0][0][1][0].message, 'forgein_owner');
+			assert.strictEqual(changedData[0][0][1][0].message, 'voidin_owner');
 
 			diag.dispose();
 		});

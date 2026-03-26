@@ -93,7 +93,7 @@ export class MouseHandler extends ViewEventHandler {
 			this._onMouseMove(e);
 
 			// See https://github.com/microsoft/vscode/issues/138789
-			// When moving the mouse really quickly, the browser sometimes forgets to
+			// When moving the mouse really quickly, the browser sometimes voidts to
 			// send us a `mouseleave` or `mouseout` event. We therefore install here
 			// a global `mousemove` listener to manually recover if the mouse goes outside
 			// the editor. As soon as the mouse leaves outside of the editor, we

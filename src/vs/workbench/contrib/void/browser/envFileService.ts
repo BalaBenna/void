@@ -22,7 +22,7 @@ export interface IEnvFileService {
 
 export const IEnvFileService = createDecorator<IEnvFileService>('voidEnvFileService');
 
-// Recognized keys that Void can use from .env
+// Recognized keys that void can use from .env
 const RECOGNIZED_KEYS = new Set([
 	'TAVILY_API_KEY',
 	'ANTHROPIC_API_KEY',

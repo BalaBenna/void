@@ -16,7 +16,7 @@ import { chat_userMessageContent, isABuiltinToolName } from '../common/prompt/pr
 import { AnthropicReasoning, getErrorMessage, RawToolCallObj, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { ChatMode, FeatureName, ModelSelection, ModelSelectionOptions } from '../common/voidSettingsTypes.js';
-import { IVoidSettingsService } from '../common/voidSettingsService.js';
+import { IvoidSettingsService } from '../common/voidSettingsService.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolResultType, ToolCallParams, ToolName, ToolResult } from '../common/toolsServiceTypes.js';
 import { IToolsService } from './toolsService.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
@@ -25,10 +25,10 @@ import { ChatMessage, CheckpointEntry, CodespanLocationLink, ImageAttachment, Pl
 import { Position } from '../../../../editor/common/core/position.js';
 import { IMetricsService } from '../common/metricsService.js';
 import { shorten } from '../../../../base/common/labels.js';
-import { IVoidModelService } from '../common/voidModelService.js';
+import { IvoidModelService } from '../common/voidModelService.js';
 import { findLast, findLastIdx } from '../../../../base/common/arraysFind.js';
 import { IEditCodeService } from './editCodeServiceInterface.js';
-import { VoidFileSnapshot } from '../common/editCodeServiceTypes.js';
+import { voidFileSnapshot } from '../common/editCodeServiceTypes.js';
 import { INotificationService, Severity } from '../../../../platform/notification/common/notification.js';
 import { truncate } from '../../../../base/common/strings.js';
 import { THREAD_STORAGE_KEY } from '../common/storageKeys.js';
@@ -47,7 +47,7 @@ import { IMemoryService } from './memoryService.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { VSBuffer } from '../../../../base/common/buffer.js';
 import { ISelfHealingService } from './selfHealingService.js';
-import { IVoidAuthService } from './voidAuthService.js';
+import { IvoidAuthService } from './voidAuthService.js';
 
 
 // related to retrying when LLM message has error
@@ -155,10 +155,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 	constructor(
 		@IStorageService private readonly _storageService: IStorageService,
-		@IVoidModelService private readonly _voidModelService: IVoidModelService,
+		@IvoidModelService private readonly _voidModelService: IvoidModelService,
 		@ILLMMessageService private readonly _llmMessageService: ILLMMessageService,
 		@IToolsService private readonly _toolsService: IToolsService,
-		@IVoidSettingsService private readonly _settingsService: IVoidSettingsService,
+		@IvoidSettingsService private readonly _settingsService: IvoidSettingsService,
 		@ILanguageFeaturesService private readonly _languageFeaturesService: ILanguageFeaturesService,
 		@IMetricsService private readonly _metricsService: IMetricsService,
 		@IEditCodeService private readonly _editCodeService: IEditCodeService,
@@ -174,7 +174,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@IMemoryService private readonly _memoryService: IMemoryService,
 		@IEditorService private readonly _editorService: IEditorService,
 		@ISelfHealingService private readonly _selfHealingService: ISelfHealingService,
-		@IVoidAuthService private readonly _authService: IVoidAuthService,
+		@IvoidAuthService private readonly _authService: IvoidAuthService,
 	) {
 		super()
 		this.state = { allThreads: {}, currentThreadId: null as unknown as string } // default state
@@ -291,11 +291,11 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			// set streamState
 			const messages = newState.allThreads[threadId]?.messages
 			const lastMessage = messages && messages[messages.length - 1]
-			// if awaiting user but stream state doesn't indicate it (happens if restart Void)
+			// if awaiting user but stream state doesn't indicate it (happens if restart void)
 			if (lastMessage && lastMessage.role === 'tool' && lastMessage.type === 'tool_request')
 				this._setStreamState(threadId, { isRunning: 'awaiting_user', })
 
-			// if running now but stream state doesn't indicate it (happens if restart Void), cancel that last tool
+			// if running now but stream state doesn't indicate it (happens if restart void), cancel that last tool
 			if (lastMessage && lastMessage.role === 'tool' && lastMessage.type === 'running_now') {
 
 				this._updateLatestTool(threadId, { role: 'tool', type: 'rejected', content: lastMessage.content, id: lastMessage.id, rawParams: lastMessage.rawParams, result: null, name: lastMessage.name, params: lastMessage.params, mcpServerName: lastMessage.mcpServerName })
@@ -672,13 +672,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				let resMessageIsDonePromise: (res: ResTypes) => void // resolves when user approves this tool use (or if tool doesn't require approval)
 				const messageIsDonePromise = new Promise<ResTypes>((res, rej) => { resMessageIsDonePromise = res })
 
-				// Build proxy config if authenticated and not in self-hosted mode
-				const authState = this._authService.state
-				const globalSettings = this._settingsService.state.globalSettings
-				const useSelfHostedMode = globalSettings.useSelfHostedMode || false
-				const proxyConfig = (authState.isAuthenticated && authState.session && !useSelfHostedMode)
-					? { authToken: authState.session.accessToken, backendUrl: globalSettings.backendUrl || 'http://localhost:3456' }
-					: undefined
+				// Global proxy config is automatically injected by ILLMMessageService
 
 				const llmCancelToken = this._llmMessageService.sendLLMMessage({
 					messagesType: 'chatMessages',
@@ -689,7 +683,6 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					overridesOfModel,
 					logging: { loggingName: `Chat - ${chatMode}`, loggingExtras: { threadId, nMessagesSent, chatMode } },
 					separateSystemMessage: separateSystemMessage,
-					proxyConfig,
 					onText: ({ fullText, fullReasoning, toolCall }) => {
 						this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: fullText, reasoningSoFar: fullReasoning, toolCallSoFar: toolCall ?? null }, interrupt: Promise.resolve(() => { if (llmCancelToken) this._llmMessageService.abort(llmCancelToken) }) })
 					},
@@ -1432,8 +1425,8 @@ Return ONLY the JSON array, no other text.`
 		const voidFileSnapshot = checkpointMessage.voidFileSnapshotOfURI ? checkpointMessage.voidFileSnapshotOfURI[fsPath] ?? null : null
 		if (!opts.includeUserModifiedChanges) { return { voidFileSnapshot, } }
 
-		const userModifiedVoidFileSnapshot = fsPath in checkpointMessage.userModifications.voidFileSnapshotOfURI ? checkpointMessage.userModifications.voidFileSnapshotOfURI[fsPath] ?? null : null
-		return { voidFileSnapshot: userModifiedVoidFileSnapshot ?? voidFileSnapshot, }
+		const userModifiedvoidFileSnapshot = fsPath in checkpointMessage.userModifications.voidFileSnapshotOfURI ? checkpointMessage.userModifications.voidFileSnapshotOfURI[fsPath] ?? null : null
+		return { voidFileSnapshot: userModifiedvoidFileSnapshot ?? voidFileSnapshot, }
 	}
 
 	private _computeNewCheckpointInfo({ threadId }: { threadId: string }) {
@@ -1443,7 +1436,7 @@ Return ONLY the JSON array, no other text.`
 		const lastCheckpointIdx = findLastIdx(thread.messages, (m) => m.role === 'checkpoint') ?? -1
 		if (lastCheckpointIdx === -1) return
 
-		const voidFileSnapshotOfURI: { [fsPath: string]: VoidFileSnapshot | undefined } = {}
+		const voidFileSnapshotOfURI: { [fsPath: string]: voidFileSnapshot | undefined } = {}
 
 		// add a change for all the URIs in the checkpoint history
 		const { lastIdxOfURI } = this._getCheckpointsBetween({ threadId, loIdx: 0, hiIdx: lastCheckpointIdx, }) ?? {}
@@ -1455,11 +1448,11 @@ Return ONLY the JSON array, no other text.`
 			if (checkpoint2.role !== 'checkpoint') continue
 			const res = this._getCheckpointInfo(checkpoint2, fsPath, { includeUserModifiedChanges: false })
 			if (!res) continue
-			const { voidFileSnapshot: oldVoidFileSnapshot } = res
+			const { voidFileSnapshot: oldvoidFileSnapshot } = res
 
 			// if there was any change to the str or diffAreaSnapshot, update. rough approximation of equality, oldDiffAreasSnapshot === diffAreasSnapshot is not perfect
-			const voidFileSnapshot = this._editCodeService.getVoidFileSnapshot(URI.file(fsPath))
-			if (oldVoidFileSnapshot === voidFileSnapshot) continue
+			const voidFileSnapshot = this._editCodeService.getvoidFileSnapshot(URI.file(fsPath))
+			if (oldvoidFileSnapshot === voidFileSnapshot) continue
 			voidFileSnapshotOfURI[fsPath] = voidFileSnapshot
 		}
 
@@ -1490,7 +1483,7 @@ Return ONLY the JSON array, no other text.`
 		if (!thread) return
 		const { model } = this._voidModelService.getModel(uri)
 		if (!model) return // should never happen
-		const diffAreasSnapshot = this._editCodeService.getVoidFileSnapshot(uri)
+		const diffAreasSnapshot = this._editCodeService.getvoidFileSnapshot(uri)
 		this._addCheckpoint(threadId, {
 			role: 'checkpoint',
 			type: 'tool_edit',
@@ -1625,7 +1618,7 @@ We only need to do it for files that were edited since `to`, ie files between to
 					if (!res) continue
 					const { voidFileSnapshot } = res
 					if (!voidFileSnapshot) continue
-					this._editCodeService.restoreVoidFileSnapshot(URI.file(fsPath), voidFileSnapshot)
+					this._editCodeService.restorevoidFileSnapshot(URI.file(fsPath), voidFileSnapshot)
 					break
 				}
 			}
@@ -1659,7 +1652,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 					if (!res) continue
 					const { voidFileSnapshot } = res
 					if (!voidFileSnapshot) continue
-					this._editCodeService.restoreVoidFileSnapshot(URI.file(fsPath), voidFileSnapshot)
+					this._editCodeService.restorevoidFileSnapshot(URI.file(fsPath), voidFileSnapshot)
 					break
 				}
 			}
@@ -2207,7 +2200,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 
 		// Temporarily override maxAgentIterations for this run
 		const originalMaxIterations = this._settingsService.state.globalSettings.maxAgentIterations
-		;(this._settingsService.state.globalSettings as any).maxAgentIterations = maxIterations
+			; (this._settingsService.state.globalSettings as any).maxAgentIterations = maxIterations
 
 		try {
 			// Run the agent loop with a timeout
@@ -2256,7 +2249,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 			return { result: `Subagent error: ${e?.message || e}`, status: 'failed' }
 		} finally {
 			// Restore original maxIterations
-			;(this._settingsService.state.globalSettings as any).maxAgentIterations = originalMaxIterations
+			; (this._settingsService.state.globalSettings as any).maxAgentIterations = originalMaxIterations
 
 			// Clean up: remove the hidden thread from state (don't persist deletion)
 			const cleanedThreads = { ...this.state.allThreads }

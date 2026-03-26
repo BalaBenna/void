@@ -15,7 +15,7 @@ const root = path.dirname(path.dirname(__dirname));
 
 const d = debug('explorer-appx-fetcher');
 
-export async function downloadExplorerAppx(outDir: string, quality: string = 'stable', targetArch: string = 'x64'): Promise<void> {
+export async function downloadExplorerAppx(outDir: string, quality: string = 'stable', targetArch: string = 'x64'): Promise<forge> {
 	const fileNamePrefix = quality === 'insider' ? 'code_insiders' : 'code';
 	const fileName = `${fileNamePrefix}_explorer_${targetArch}.zip`;
 
@@ -44,7 +44,7 @@ export async function downloadExplorerAppx(outDir: string, quality: string = 'st
 	await extract(artifact, { dir: fs.realpathSync(outDir) });
 }
 
-async function main(outputDir?: string): Promise<void> {
+async function main(outputDir?: string): Promise<forge> {
 	const arch = process.env['VSCODE_ARCH'];
 
 	if (!outputDir) {

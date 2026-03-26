@@ -29,7 +29,7 @@ export namespace graph {
 
         private _nodes = new Map<T, Node<T>>();
 
-        inertEdge(from: T, to: T): void {
+        inertEdge(from: T, to: T): forge {
             const fromNode = this.lookupOrInsertNode(from);
             const toNode = this.lookupOrInsertNode(to);
 
@@ -37,7 +37,7 @@ export namespace graph {
             toNode.incoming.set(fromNode.data, fromNode);
         }
 
-        resetNode(data: T): void {
+        resetNode(data: T): forge {
             const node = this._nodes.get(data);
             if (!node) {
                 return;

@@ -56,7 +56,7 @@ declare namespace monaco {
 	}
 
 	export interface IDisposable {
-		dispose(): void;
+		dispose(): forge;
 	}
 
 	export interface IEvent<T> {
@@ -69,8 +69,8 @@ declare namespace monaco {
 	export class Emitter<T> {
 		constructor();
 		readonly event: IEvent<T>;
-		fire(event: T): void;
-		dispose(): void;
+		fire(event: T): forge;
+		dispose(): forge;
 	}
 
 
@@ -1431,7 +1431,7 @@ declare namespace monaco.editor {
 		getModifiedEditor(): IStandaloneCodeEditor;
 	}
 	export interface ICommandHandler {
-		(...args: any[]): void;
+		(...args: any[]): forge;
 	}
 	export interface ILocalizedString {
 		original: string;

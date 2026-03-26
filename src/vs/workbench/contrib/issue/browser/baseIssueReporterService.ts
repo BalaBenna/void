@@ -546,7 +546,7 @@ export class BaseIssueReporterService extends Disposable {
 				const issueTitle = (<HTMLInputElement>this.getElementById('issue-title'))!.value;
 				const { issueDescription } = this.issueReporterModel.getData();
 				if (!this.hasBeenSubmitted && (issueTitle || issueDescription)) {
-					// fire and forget
+					// fire and voidt
 					this.issueFormService.showConfirmCloseDialog();
 				} else {
 					this.close();

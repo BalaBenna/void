@@ -39,19 +39,19 @@ export enum ThemeSettings {
 }
 
 export enum ThemeSettingDefaults {
-	COLOR_THEME_DARK = 'Islands Dark', // Void changed this from 'Default Dark+'
+	COLOR_THEME_DARK = 'Islands Dark', // void changed this from 'Default Dark+'
 	COLOR_THEME_LIGHT = 'Default Light Modern',
 	COLOR_THEME_HC_DARK = 'Default High Contrast',
 	COLOR_THEME_HC_LIGHT = 'Default High Contrast Light',
 
-	COLOR_THEME_DARK_OLD = 'Default Dark+', // Void changed this from 'Default Dark Modern'
+	COLOR_THEME_DARK_OLD = 'Default Dark+', // void changed this from 'Default Dark Modern'
 	COLOR_THEME_LIGHT_OLD = 'Default Light+',
 
 	FILE_ICON_THEME = 'vs-seti',
 	PRODUCT_ICON_THEME = 'Default',
 }
 
-export const COLOR_THEME_DARK_INITIAL_COLORS = { // Void changed this to match Islands Dark
+export const COLOR_THEME_DARK_INITIAL_COLORS = { // void changed this to match Islands Dark
 	'activityBar.activeBorder': '#548af7',
 	'activityBar.background': '#121216',
 	'activityBar.border': '#12121600',

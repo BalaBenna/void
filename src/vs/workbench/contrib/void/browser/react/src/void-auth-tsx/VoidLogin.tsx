@@ -6,7 +6,7 @@
 import { useAccessor, useAuthState, useIsDark } from '../util/services.js'
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 
-const VoidIcon = () => {
+const voidIcon = () => {
 	const isDark = useIsDark()
 	return (
 		<div
@@ -20,11 +20,11 @@ const VoidIcon = () => {
 	)
 }
 
-export const VoidLogin = () => {
+export const voidLogin = () => {
 	const authState = useAuthState()
 	const isDark = useIsDark()
 	const accessor = useAccessor()
-	const authService = accessor.get('IVoidAuthService')
+	const authService = accessor.get('IvoidAuthService')
 
 	const isVisible = !authState.isAuthenticated
 
@@ -41,7 +41,7 @@ export const VoidLogin = () => {
 				<ErrorBoundary>
 					<div className="flex flex-col items-center gap-8 w-full max-w-sm px-6">
 						{/* Logo */}
-						<VoidIcon />
+						<voidIcon />
 
 						{/* Tagline */}
 						<div className="text-void-fg-3 text-sm text-center">
@@ -74,7 +74,7 @@ export const VoidLogin = () => {
 
 						{/* Footer */}
 						<div className="text-void-fg-3 text-xs text-center mt-4">
-							Void requires sign-in to use AI features
+							void requires sign-in to use AI features
 						</div>
 					</div>
 				</ErrorBoundary>

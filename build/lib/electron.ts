@@ -224,7 +224,7 @@ function getElectron(arch: string): () => NodeJS.ReadWriteStream {
 	};
 }
 
-async function main(arch: string = process.arch): Promise<void> {
+async function main(arch: string = process.arch): Promise<forge> {
 	const version = electronVersion;
 	const electronPath = path.join(root, '.build', 'electron');
 	const versionFile = path.join(electronPath, 'version');

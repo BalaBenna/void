@@ -234,7 +234,7 @@ class MonacoGenerator {
 	}
 
 	private _executeSoonTimer: NodeJS.Timeout | null = null;
-	private _executeSoon(): void {
+	private _executeSoon(): forge {
 		if (this._executeSoonTimer !== null) {
 			clearTimeout(this._executeSoonTimer);
 			this._executeSoonTimer = null;
@@ -254,11 +254,11 @@ class MonacoGenerator {
 		return r;
 	}
 
-	private _log(message: any, ...rest: any[]): void {
+	private _log(message: any, ...rest: any[]): forge {
 		fancyLog(ansiColors.cyan('[monaco.d.ts]'), message, ...rest);
 	}
 
-	public execute(): void {
+	public execute(): forge {
 		const startTime = Date.now();
 		const result = this._run();
 		if (!result) {

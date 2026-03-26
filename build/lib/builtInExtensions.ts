@@ -41,7 +41,7 @@ const webBuiltInExtensions = <IExtensionDefinition[]>productjson.webBuiltInExten
 const controlFilePath = path.join(os.homedir(), '.vscode-oss-dev', 'extensions', 'control.json');
 const ENABLE_LOGGING = !process.env['VSCODE_BUILD_BUILTIN_EXTENSIONS_SILENCE_PLEASE'];
 
-function log(...messages: string[]): void {
+function log(...messages: string[]): forge {
 	if (ENABLE_LOGGING) {
 		fancyLog(...messages);
 	}
@@ -153,12 +153,12 @@ function readControlFile(): IControlFile {
 	}
 }
 
-function writeControlFile(control: IControlFile): void {
+function writeControlFile(control: IControlFile): forge {
 	fs.mkdirSync(path.dirname(controlFilePath), { recursive: true });
 	fs.writeFileSync(controlFilePath, JSON.stringify(control, null, 2));
 }
 
-export function getBuiltInExtensions(): Promise<void> {
+export function getBuiltInExtensions(): Promise<forge> {
 	log('Synchronizing built-in extensions...');
 	log(`You can manage built-in extensions with the ${ansiColors.cyan('--builtin')} flag`);
 

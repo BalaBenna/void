@@ -10,13 +10,14 @@ import { registerSingleton, InstantiationType } from '../../../../platform/insta
 import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
 import { IChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { AuthState, AuthSession, AuthStateChangedEvent, UsageStats, defaultAuthState } from '../common/authTypes.js';
-import { IVoidSettingsService } from '../common/voidSettingsService.js';
+import { IvoidSettingsService } from '../common/voidSettingsService.js';
+import { ILLMMessageService } from '../common/sendLLMMessageService.js';
 
 const DEFAULT_BACKEND_URL = 'http://localhost:3456';
 
-export const IVoidAuthService = createDecorator<IVoidAuthService>('voidAuthService');
+export const IvoidAuthService = createDecorator<IvoidAuthService>('voidAuthService');
 
-export interface IVoidAuthService {
+export interface IvoidAuthService {
 	readonly _serviceBrand: undefined;
 	readonly state: AuthState;
 	readonly onDidChangeAuthState: Event<AuthState>;
@@ -27,7 +28,7 @@ export interface IVoidAuthService {
 	getUsage(): Promise<UsageStats | null>;
 }
 
-class VoidAuthService extends Disposable implements IVoidAuthService {
+class voidAuthService extends Disposable implements IvoidAuthService {
 	declare readonly _serviceBrand: undefined;
 
 	private readonly channel: IChannel;
@@ -46,11 +47,21 @@ class VoidAuthService extends Disposable implements IVoidAuthService {
 
 	constructor(
 		@IMainProcessService private readonly mainProcessService: IMainProcessService,
-		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
+		@IvoidSettingsService private readonly voidSettingsService: IvoidSettingsService,
+		@ILLMMessageService private readonly llmMessageService: ILLMMessageService,
 	) {
 		super();
 
 		this.channel = this.mainProcessService.getChannel('void-channel-auth');
+
+		// Provide global proxy config for all LLM messages across the app
+		this.llmMessageService.registerProxyConfigProvider(() => {
+			const authToken = (this._state.isAuthenticated && this._state.session) ? this._state.session.accessToken : '';
+			return {
+				authToken,
+				backendUrl: this.backendUrl,
+			};
+		});
 
 		// Listen for auth state changes from main process (OAuth callbacks)
 		this._register((this.channel.listen('onAuthStateChanged') satisfies Event<AuthStateChangedEvent>)((e) => {
@@ -167,4 +178,4 @@ class VoidAuthService extends Disposable implements IVoidAuthService {
 	}
 }
 
-registerSingleton(IVoidAuthService, VoidAuthService, InstantiationType.Eager);
+registerSingleton(IvoidAuthService, voidAuthService, InstantiationType.Eager);

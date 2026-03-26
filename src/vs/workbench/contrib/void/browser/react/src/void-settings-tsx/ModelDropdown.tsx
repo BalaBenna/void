@@ -6,10 +6,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FeatureName, featureNames, isFeatureNameDisabled, ModelSelection, modelSelectionsEqual, ProviderName, providerNames, SettingsOfProvider } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js'
 import { useSettingsState, useRefreshModelState, useAccessor } from '../util/services.js'
-import { _VoidSelectBox, VoidCustomDropdownBox } from '../util/inputs.js'
+import { _voidSelectBox, voidCustomDropdownBox } from '../util/inputs.js'
 import { SelectBox } from '../../../../../../../base/browser/ui/selectBox/selectBox.js'
 import { IconWarning } from '../sidebar-tsx/SidebarChat.js'
-import { VOID_OPEN_SETTINGS_ACTION_ID, VOID_TOGGLE_SETTINGS_ACTION_ID } from '../../../voidSettingsPane.js'
+import { void_OPEN_SETTINGS_ACTION_ID, void_TOGGLE_SETTINGS_ACTION_ID } from '../../../voidSettingsPane.js'
 import { modelFilterOfFeatureName, ModelOption } from '../../../../../../../workbench/contrib/void/common/voidSettingsService.js'
 import { WarningBox } from './WarningBox.js'
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
@@ -24,7 +24,7 @@ const optionsEqual = (m1: ModelOption[], m2: ModelOption[]) => {
 
 const ModelSelectBox = ({ options, featureName, className }: { options: ModelOption[], featureName: FeatureName, className: string }) => {
 	const accessor = useAccessor()
-	const voidSettingsService = accessor.get('IVoidSettingsService')
+	const voidSettingsService = accessor.get('IvoidSettingsService')
 
 	const selection = voidSettingsService.state.modelSelectionOfFeature[featureName]
 	const selectedOption = selection ? voidSettingsService.state._modelOptions.find(v => modelSelectionsEqual(v.selection, selection))! : options[0]
@@ -33,7 +33,7 @@ const ModelSelectBox = ({ options, featureName, className }: { options: ModelOpt
 		voidSettingsService.setModelSelectionOfFeature(featureName, newOption.selection)
 	}, [voidSettingsService, featureName])
 
-	return <VoidCustomDropdownBox
+	return <voidCustomDropdownBox
 		options={options}
 		selectedOption={selectedOption}
 		onChangeOption={onChangeOption}
@@ -78,7 +78,7 @@ export const ModelDropdown = ({ featureName, className }: { featureName: Feature
 	const accessor = useAccessor()
 	const commandService = accessor.get('ICommandService')
 
-	const openSettings = () => { commandService.executeCommand(VOID_OPEN_SETTINGS_ACTION_ID); };
+	const openSettings = () => { commandService.executeCommand(void_OPEN_SETTINGS_ACTION_ID); };
 
 
 	const { emptyMessage } = modelFilterOfFeatureName[featureName]
