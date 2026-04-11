@@ -135,15 +135,26 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 
 		const injectedProxyConfig = this._proxyConfigProvider() || proxyConfig;
 
-		// Always route through backend proxy
-		this.channel.call('sendProxiedLLMMessage', {
-			...proxyParams,
-			requestId,
-			settingsOfProvider,
-			modelSelection,
-			mcpTools,
-			proxyConfig: injectedProxyConfig,
-		} satisfies MainSendLLMMessageParams);
+		// Route through backend proxy if authenticated, otherwise use direct provider calls
+		if (injectedProxyConfig?.authToken) {
+			this.channel.call('sendProxiedLLMMessage', {
+				...proxyParams,
+				requestId,
+				settingsOfProvider,
+				modelSelection,
+				mcpTools,
+				proxyConfig: injectedProxyConfig,
+			} satisfies MainSendLLMMessageParams);
+		} else {
+			this.channel.call('sendLLMMessage', {
+				...proxyParams,
+				requestId,
+				settingsOfProvider,
+				modelSelection,
+				mcpTools,
+				proxyConfig: injectedProxyConfig,
+			} satisfies MainSendLLMMessageParams);
+		}
 
 		return requestId
 	}
@@ -156,7 +167,7 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 
 
 	ollamaList = (params: ServiceModelListParams<OllamaModelResponse>) => {
-		const { onSuccess, onError, ...proxyParams } = params
+		const { onSuccess, onError, proxyConfig, ...proxyParams } = params
 
 		const { settingsOfProvider } = this.voidSettingsService.state
 

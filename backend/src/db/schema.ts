@@ -31,10 +31,14 @@ export const users = pgTable("users", {
   name: varchar("name", { length: 255 }).notNull(),
   avatarUrl: text("avatar_url"),
   googleId: varchar("google_id", { length: 255 }).unique(),
+  authProvider: varchar("auth_provider", { length: 20 }).notNull().default("google"),
   plan: planEnum("plan").notNull().default("free"),
   stripeCustomerId: varchar("stripe_customer_id", { length: 255 }),
   stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 }),
   isActive: boolean("is_active").notNull().default(true),
+  lastActiveAt: timestamp("last_active_at"),
+  totalMessagesAllTime: integer("total_messages_all_time").notNull().default(0),
+  totalTokensAllTime: integer("total_tokens_all_time").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -51,6 +55,23 @@ export const refreshTokens = pgTable("refresh_tokens", {
   token: text("token").notNull().unique(),
   expiresAt: timestamp("expires_at").notNull(),
   revoked: boolean("revoked").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ============================================================
+// User Sessions (device/login tracking)
+// ============================================================
+
+export const userSessions = pgTable("user_sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  deviceId: varchar("device_id", { length: 255 }),
+  platform: varchar("platform", { length: 50 }),
+  appVersion: varchar("app_version", { length: 50 }),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

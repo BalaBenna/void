@@ -56,6 +56,17 @@ export type PlanItem = {
 	status?: PlanItemStatus;
 	files?: string[];
 	size?: 'S' | 'M' | 'L';
+	phase?: string;         // Phase name (e.g., "Foundation", "Core Enhancement")
+	dependencies?: string[]; // IDs of tasks that must complete first
+}
+
+// Checkpoint branching
+export type BranchPoint = {
+	parentThreadId: string;
+	checkpointIndex: number;      // index of the checkpoint message in the parent thread
+	branchThreadId: string;       // the new thread created from this branch
+	branchName: string;           // git branch name created
+	createdAt: number;
 }
 
 // Image attachment for user messages
@@ -111,6 +122,41 @@ export type StagingSelectionItem = {
 } | {
 	type: 'Folder';
 	uri: URI;
+	language?: undefined;
+	state?: undefined;
+} | {
+	type: 'Branch';
+	branchName: string;
+	branchDiffContent: string;
+	uri?: undefined;
+	language?: undefined;
+	state?: undefined;
+} | {
+	type: 'Symbol';
+	symbolName: string;
+	uri: URI;
+	range: [number, number];
+	language: string;
+	state?: undefined;
+} | {
+	type: 'Terminal';
+	terminalId: string;
+	content: string;
+	uri?: undefined;
+	language?: undefined;
+	state?: undefined;
+} | {
+	type: 'Web';
+	query: string;
+	content: string;
+	uri?: undefined;
+	language?: undefined;
+	state?: undefined;
+} | {
+	type: 'Codebase';
+	query: string;
+	content: string;
+	uri?: undefined;
 	language?: undefined;
 	state?: undefined;
 }

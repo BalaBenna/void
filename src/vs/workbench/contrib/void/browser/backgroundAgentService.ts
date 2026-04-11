@@ -189,7 +189,7 @@ class BackgroundAgentService extends Disposable implements IBackgroundAgentServi
 		try {
 			const { result, status } = await this._chatThreadService.runSubagentThread({
 				prompt: agent.prompt,
-				chatModeOverride: 'agent',
+				chatModeOverride: 'build',
 				maxIterations: 50,
 				timeoutMs: 600_000, // 10 minute timeout for background agents
 			});

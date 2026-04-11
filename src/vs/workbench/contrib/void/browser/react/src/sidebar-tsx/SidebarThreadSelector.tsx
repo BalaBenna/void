@@ -277,9 +277,66 @@ const PastThreadElement = ({ pastThread, idx, hoveredIdx, setHoveredIdx, isRunni
 
 // ==================== History Dropdown ====================
 
+// Format time ago in readable form like "45 mins ago", "1 wk ago"
+const formatTimeAgo = (date: Date): string => {
+	const now = new Date();
+	const diffMs = now.getTime() - date.getTime();
+	const diffMinutes = Math.floor(diffMs / (1000 * 60));
+	const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+	const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+	const diffWeeks = Math.floor(diffDays / 7);
+
+	if (diffMinutes < 1) return 'just now';
+	if (diffMinutes < 60) return `${diffMinutes} mins ago`;
+	if (diffHours < 24) return `${diffHours}h ago`;
+	if (diffDays < 7) return `${diffDays}d ago`;
+	return `${diffWeeks} wk ago`;
+};
+
+// Single thread row in the history dropdown
+const HistoryThreadRow = ({ thread, onSelect, onDelete }: {
+	thread: ThreadType,
+	onSelect: () => void,
+	onDelete: () => void,
+}) => {
+	const [showConfirm, setShowConfirm] = useState(false);
+	const title = getThreadTitle(thread);
+	const timeAgo = formatTimeAgo(new Date(thread.lastModified));
+
+	return (
+		<div
+			className="group flex items-center justify-between px-5 py-2.5 cursor-pointer hover:bg-void-bg-2-hover transition-colors"
+			onClick={onSelect}
+		>
+			<span className="truncate text-sm text-void-fg-1 font-medium min-w-0 flex-1 mr-3">
+				{title || 'New conversation'}
+			</span>
+			<div className="flex items-center gap-2 flex-shrink-0">
+				<span className="text-xs text-void-fg-3 opacity-60">{timeAgo}</span>
+				{showConfirm ? (
+					<div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+						<button className="p-0.5 rounded hover:bg-red-500/20 text-red-400" onClick={() => { onDelete(); setShowConfirm(false); }}>
+							<Check size={12} />
+						</button>
+						<button className="p-0.5 rounded hover:bg-void-bg-2-hover text-void-fg-3" onClick={() => setShowConfirm(false)}>
+							<X size={12} />
+						</button>
+					</div>
+				) : (
+					<button
+						className="p-0.5 rounded hover:bg-void-bg-2-hover text-void-fg-3 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity"
+						onClick={(e) => { e.stopPropagation(); setShowConfirm(true); }}
+					>
+						<Copy size={12} />
+					</button>
+				)}
+			</div>
+		</div>
+	);
+};
+
 export const HistoryDropdown = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
 	const [searchQuery, setSearchQuery] = useState('');
-	const [hoveredThreadId, setHoveredThreadId] = useState<string | null>(null);
 	const dropdownRef = useRef<HTMLDivElement>(null);
 	const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -287,16 +344,15 @@ export const HistoryDropdown = ({ isOpen, onClose }: { isOpen: boolean, onClose:
 	const chatThreadsService = accessor.get('IChatThreadService')
 
 	const threadsState = useChatThreadsState()
-	const { allThreads } = threadsState
+	const { allThreads, currentThreadId } = threadsState
+	const streamState = useFullChatThreadsStreamState()
 
 	// Focus search input when dropdown opens
 	useEffect(() => {
 		if (isOpen && searchInputRef.current) {
 			setTimeout(() => searchInputRef.current?.focus(), 50);
 		}
-		if (isOpen) {
-			setSearchQuery('');
-		}
+		if (isOpen) setSearchQuery('');
 	}, [isOpen]);
 
 	// Close on click outside
@@ -313,7 +369,7 @@ export const HistoryDropdown = ({ isOpen, onClose }: { isOpen: boolean, onClose:
 
 	if (!isOpen || !allThreads) return null;
 
-	// Filter and sort threads, excluding subagent threads
+	// Filter and sort threads, excluding subagent threads and empty threads
 	const sortedThreadIds = Object.keys(allThreads)
 		.filter(threadId => (allThreads[threadId]?.messages.length ?? 0) !== 0)
 		.filter(threadId => !allThreads[threadId]?.isSubagent)
@@ -324,90 +380,137 @@ export const HistoryDropdown = ({ isOpen, onClose }: { isOpen: boolean, onClose:
 		? sortedThreadIds.filter(threadId => {
 			const thread = allThreads[threadId];
 			if (!thread) return false;
-			const title = getThreadTitle(thread).toLowerCase();
-			return title.includes(searchQuery.toLowerCase());
+			return getThreadTitle(thread).toLowerCase().includes(searchQuery.toLowerCase());
 		})
 		: sortedThreadIds;
 
-	// Group threads by relative time period
-	const groupedThreads: { label: string, threadIds: string[] }[] = [];
-	let currentGroupLabel = '';
+	// Categorize threads: Current, Running, Recent
+	const currentThread = currentThreadId ? allThreads[currentThreadId] : null;
+	const runningThreadIds = filteredThreadIds.filter(id => {
+		if (id === currentThreadId) return false;
+		const s = streamState[id];
+		return s?.isRunning === 'LLM' || s?.isRunning === 'tool' || s?.isRunning === 'idle' || s?.isRunning === 'awaiting_user';
+	});
+	const recentThreadIds = filteredThreadIds.filter(id =>
+		id !== currentThreadId && !runningThreadIds.includes(id)
+	);
 
-	for (const threadId of filteredThreadIds) {
-		const thread = allThreads[threadId];
-		if (!thread) continue;
-		const groupLabel = formatRelativeTimeGroup(new Date(thread.lastModified));
-		if (groupLabel !== currentGroupLabel) {
-			currentGroupLabel = groupLabel;
-			groupedThreads.push({ label: groupLabel, threadIds: [] });
-		}
-		groupedThreads[groupedThreads.length - 1].threadIds.push(threadId);
-	}
+	const handleSelect = (threadId: string) => {
+		chatThreadsService.switchToThread(threadId);
+		onClose();
+	};
+	const handleDelete = (threadId: string) => {
+		chatThreadsService.deleteThread(threadId);
+	};
 
 	return (
+		<>
+		{/* Backdrop overlay — covers entire sidebar viewport */}
+		<div
+			className="fixed inset-0 z-[99]"
+			style={{ backgroundColor: 'rgba(0, 0, 0, 0.25)', backdropFilter: 'blur(1px)' }}
+			onClick={onClose}
+		/>
+
+		{/* Centered modal — positioned in the middle of the sidebar viewport */}
 		<div
 			ref={dropdownRef}
-			className="absolute left-0 right-0 top-full mt-1 z-50 bg-void-bg-1 border border-void-border-2 rounded-md shadow-lg max-h-[60vh] overflow-y-auto"
+			className="fixed z-[100] bg-void-bg-1 border border-void-border-2 rounded-xl overflow-y-auto"
+			style={{
+				top: '50%',
+				left: '50%',
+				transform: 'translate(-50%, -50%)',
+				width: 'min(380px, calc(100vw - 24px))',
+				maxHeight: '65vh',
+				boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05)',
+			}}
 		>
+			{/* Header */}
+			<div className="px-5 pt-5 pb-1">
+				<h3 className="text-sm text-void-fg-3 select-none" style={{ opacity: 0.7 }}>Select a conversation</h3>
+			</div>
+
 			{/* Search bar */}
-			<div className="p-2 border-b border-void-border-3">
-				<div className="flex items-center gap-2 px-2 py-1 bg-void-bg-2 rounded border border-void-border-3 focus-within:border-void-border-1">
-					<Search size={14} className="text-void-fg-3 flex-shrink-0" />
+			<div className="px-4 pb-3">
+				<div className="flex items-center gap-2 px-3 py-2 bg-void-bg-2 rounded-lg border border-void-border-3 focus-within:border-void-border-1 transition-colors">
+					<Search size={14} className="text-void-fg-3 flex-shrink-0 opacity-40" />
 					<input
 						ref={searchInputRef}
 						type="text"
-						placeholder="Search..."
+						placeholder="Search chats..."
 						value={searchQuery}
 						onChange={(e) => setSearchQuery(e.target.value)}
-						className="bg-transparent text-void-fg-1 text-sm w-full outline-none placeholder:text-void-fg-3"
+						className="bg-transparent text-void-fg-1 text-sm w-full outline-none placeholder:text-void-fg-3 placeholder:opacity-40"
 					/>
 				</div>
 			</div>
 
-			{/* Thread groups */}
-			<div className="py-1">
-				{groupedThreads.length === 0 ? (
-					<div className="px-3 py-2 text-void-fg-3 text-sm">No threads found</div>
-				) : (
-					groupedThreads.map((group) => (
-						<div key={group.label}>
-							{/* Group header */}
-							<div className="px-3 py-1 text-xs text-void-fg-3 opacity-60 select-none">
-								{group.label}
-							</div>
+			{/* Current section */}
+			{currentThread && currentThread.messages.length > 0 && !searchQuery && (
+				<div>
+					<div className="px-5 pt-1 pb-1.5 text-xs text-void-fg-3 select-none" style={{ opacity: 0.45 }}>
+						Current
+					</div>
+					<HistoryThreadRow
+						thread={currentThread}
+						onSelect={() => onClose()}
+						onDelete={() => handleDelete(currentThread.id)}
+					/>
+				</div>
+			)}
 
-							{/* Thread items */}
-							{group.threadIds.map((threadId) => {
-								const thread = allThreads[threadId];
-								if (!thread) return null;
-								const title = getThreadTitle(thread);
-								const isHovered = hoveredThreadId === threadId;
+			{/* Running in void section */}
+			{runningThreadIds.length > 0 && (
+				<div>
+					<div className="px-5 pt-3 pb-1.5 text-xs text-void-fg-3 select-none" style={{ opacity: 0.45 }}>
+						Running in void
+					</div>
+					{runningThreadIds.map(threadId => {
+						const thread = allThreads[threadId];
+						if (!thread) return null;
+						return (
+							<HistoryThreadRow
+								key={threadId}
+								thread={thread}
+								onSelect={() => handleSelect(threadId)}
+								onDelete={() => handleDelete(threadId)}
+							/>
+						);
+					})}
+				</div>
+			)}
 
-								return (
-									<div
-										key={threadId}
-										className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-void-bg-2-hover text-sm"
-										onClick={() => {
-											chatThreadsService.switchToThread(threadId);
-											onClose();
-										}}
-										onMouseEnter={() => setHoveredThreadId(threadId)}
-										onMouseLeave={() => setHoveredThreadId(null)}
-									>
-										<MessageCircle size={14} className="text-void-fg-3 flex-shrink-0" />
-										<span className="truncate flex-1 text-void-fg-1">{title}</span>
-										{isHovered && (
-											<div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-												<TrashButton threadId={threadId} />
-											</div>
-										)}
-									</div>
-								);
-							})}
-						</div>
-					))
-				)}
-			</div>
+			{/* Recent in void section */}
+			{recentThreadIds.length > 0 && (
+				<div>
+					<div className="px-5 pt-3 pb-1.5 text-xs text-void-fg-3 select-none" style={{ opacity: 0.45 }}>
+						{searchQuery ? 'Search results' : 'Recent in void'}
+					</div>
+					{recentThreadIds.map(threadId => {
+						const thread = allThreads[threadId];
+						if (!thread) return null;
+						return (
+							<HistoryThreadRow
+								key={threadId}
+								thread={thread}
+								onSelect={() => handleSelect(threadId)}
+								onDelete={() => handleDelete(threadId)}
+							/>
+						);
+					})}
+				</div>
+			)}
+
+			{/* Empty state */}
+			{filteredThreadIds.length === 0 && (
+				<div className="px-5 py-8 text-center text-void-fg-3 text-sm" style={{ opacity: 0.5 }}>
+					{searchQuery ? 'No conversations found' : 'No conversations yet'}
+				</div>
+			)}
+
+			{/* Bottom padding */}
+			<div className="h-2" />
 		</div>
+		</>
 	);
 };

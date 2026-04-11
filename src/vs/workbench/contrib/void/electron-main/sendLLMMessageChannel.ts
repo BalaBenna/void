@@ -8,10 +8,11 @@
 
 import { IServerChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
-import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMessageOnFinalMessageParams, MainSendLLMMessageParams, AbortRef, SendLLMMessageParams, MainLLMMessageAbortParams, ModelListParams, EventModelListOnSuccessParams, EventModelListOnErrorParams, OllamaModelResponse, OpenaiCompatibleModelResponse, MainModelListParams, } from '../common/sendLLMMessageTypes.js';
+import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMessageOnFinalMessageParams, MainSendLLMMessageParams, AbortRef, SendLLMMessageParams, MainLLMMessageAbortParams, ModelListParams, EventModelListOnSuccessParams, EventModelListOnErrorParams, OllamaModelResponse, OpenaiCompatibleModelResponse, MainModelListParams, RawToolCallObj, AnthropicReasoning, } from '../common/sendLLMMessageTypes.js';
 import { sendLLMMessage } from './llmMessage/sendLLMMessage.js'
 import { IMetricsService } from '../common/metricsService.js';
 import { sendLLMMessageToProviderImplementation } from './llmMessage/sendLLMMessage.impl.js';
+import { availableTools, InternalToolInfo } from '../common/prompt/prompts.js';
 
 // NODE IMPLEMENTATION - calls actual sendLLMMessage() and returns listeners to it
 
@@ -117,9 +118,27 @@ export class LLMMessageChannel implements IServerChannel {
 		this._infoOfRunningRequest[requestId].waitForSend = p
 	}
 
+	// Convert InternalToolInfo[] to backend ToolDefinition format
+	private _convertToolsForBackend(tools: InternalToolInfo[] | undefined): any[] {
+		if (!tools || tools.length === 0) return []
+		return tools.map(tool => ({
+			name: tool.name,
+			description: tool.description,
+			input_schema: {
+				type: 'object',
+				properties: Object.fromEntries(
+					Object.entries(tool.params).map(([paramName, paramInfo]) => [
+						paramName,
+						{ type: 'string', description: paramInfo.description }
+					])
+				),
+			},
+		}))
+	}
+
 	// Proxied LLM call — sends request to backend server instead of calling providers directly
 	private async _callSendProxiedLLMMessage(params: MainSendLLMMessageParams) {
-		const { requestId, proxyConfig, modelSelection, messagesType, messages } = params;
+		const { requestId, proxyConfig, modelSelection, messagesType, messages, modelSelectionOptions } = params;
 
 		if (!proxyConfig) {
 			this.llmMessageEmitters.onError.fire({ requestId, message: 'No proxy config provided', fullError: null });
@@ -146,6 +165,28 @@ export class LLMMessageChannel implements IServerChannel {
 			return;
 		}
 
+		// Prepend system message if provided separately
+		const separateSystemMessage = (params as any).separateSystemMessage as string | undefined;
+		if (separateSystemMessage) {
+			chatMessages = [{ role: 'system', content: separateSystemMessage } as any, ...chatMessages];
+		}
+
+		// Convert tools to backend format
+		const chatMode = (params as any).chatMode ?? null;
+		const mcpTools = (params as any).mcpTools as InternalToolInfo[] | undefined;
+		const allTools = availableTools(chatMode, mcpTools);
+		const toolDefs = this._convertToolsForBackend(allTools);
+
+		// Build reasoning config from modelSelectionOptions
+		let reasoning: any = undefined;
+		if (modelSelectionOptions?.reasoningEnabled) {
+			reasoning = {
+				budgetTokens: modelSelectionOptions.reasoningBudget,
+				reasoningEffort: modelSelectionOptions.reasoningEffort,
+				thinkingBudget: modelSelectionOptions.reasoningBudget,
+			}
+		}
+
 		if (!(requestId in this._infoOfRunningRequest))
 			this._infoOfRunningRequest[requestId] = { waitForSend: undefined, abortRef: { current: null } }
 
@@ -154,9 +195,6 @@ export class LLMMessageChannel implements IServerChannel {
 
 		const p = (async () => {
 			try {
-				// Format messages for the backend completion API
-				// LLMChatMessage is a union (Anthropic/OpenAI/Gemini), so we pass them as-is to the backend
-
 				const response = await fetch(`${proxyConfig.backendUrl}/v1/completions/stream`, {
 					method: 'POST',
 					headers: {
@@ -168,6 +206,9 @@ export class LLMMessageChannel implements IServerChannel {
 						messages: chatMessages,
 						maxTokens: 4096,
 						stream: true,
+						tools: toolDefs.length > 0 ? toolDefs : undefined,
+						toolChoice: toolDefs.length > 0 ? 'auto' : undefined,
+						reasoning,
 					}),
 					signal: abortController.signal,
 				});
@@ -182,7 +223,7 @@ export class LLMMessageChannel implements IServerChannel {
 					return;
 				}
 
-				// Parse SSE stream
+				// Parse SSE stream with full reasoning + tool call support
 				const reader = response.body?.getReader();
 				if (!reader) {
 					this.llmMessageEmitters.onError.fire({ requestId, message: 'No response body', fullError: null });
@@ -192,6 +233,10 @@ export class LLMMessageChannel implements IServerChannel {
 				const decoder = new TextDecoder();
 				let buffer = '';
 				let fullText = '';
+				let fullReasoning = '';
+				let currentToolCall: RawToolCallObj | undefined = undefined;
+				let toolParamsJson = '';
+				let anthropicReasoning: AnthropicReasoning[] | null = null;
 
 				while (true) {
 					const { done, value } = await reader.read();
@@ -208,21 +253,75 @@ export class LLMMessageChannel implements IServerChannel {
 
 						try {
 							const event = JSON.parse(jsonStr);
+
 							if (event.type === 'text') {
 								fullText += event.text;
 								this.llmMessageEmitters.onText.fire({
-									requestId,
-									fullText,
-									fullReasoning: '',
+									requestId, fullText, fullReasoning, toolCall: currentToolCall,
 								});
-							} else if (event.type === 'done') {
+							}
+							else if (event.type === 'reasoning') {
+								fullReasoning += event.text;
+								// Build anthropicReasoning array for display
+								if (!anthropicReasoning) anthropicReasoning = [];
+								const last = anthropicReasoning[anthropicReasoning.length - 1];
+								if (last && last.type === 'thinking') {
+									(last as any).thinking += event.text;
+								} else {
+									anthropicReasoning.push({ type: 'thinking', thinking: event.text, signature: '' });
+								}
+								this.llmMessageEmitters.onText.fire({
+									requestId, fullText, fullReasoning, toolCall: currentToolCall,
+								});
+							}
+							else if (event.type === 'tool_use_start') {
+								toolParamsJson = '';
+								currentToolCall = {
+									name: event.name,
+									id: event.id,
+									rawParams: {},
+									doneParams: [],
+									isDone: false,
+								};
+								this.llmMessageEmitters.onText.fire({
+									requestId, fullText, fullReasoning, toolCall: currentToolCall,
+								});
+							}
+							else if (event.type === 'tool_use_delta') {
+								toolParamsJson += event.partial_json;
+								// Try partial parse for progressive UI
+								try {
+									const partialParams = JSON.parse(toolParamsJson);
+									if (currentToolCall && typeof partialParams === 'object') {
+										currentToolCall.rawParams = partialParams;
+										currentToolCall.doneParams = Object.keys(partialParams) as any;
+									}
+								} catch { /* partial JSON, can't parse yet */ }
+								this.llmMessageEmitters.onText.fire({
+									requestId, fullText, fullReasoning, toolCall: currentToolCall,
+								});
+							}
+							else if (event.type === 'tool_use_end') {
+								if (currentToolCall) {
+									const input = event.input || {};
+									currentToolCall.rawParams = input;
+									currentToolCall.doneParams = Object.keys(input) as any;
+									currentToolCall.isDone = true;
+								}
+								this.llmMessageEmitters.onText.fire({
+									requestId, fullText, fullReasoning, toolCall: currentToolCall,
+								});
+							}
+							else if (event.type === 'done') {
 								this.llmMessageEmitters.onFinalMessage.fire({
 									requestId,
 									fullText,
-									fullReasoning: '',
-									anthropicReasoning: null,
+									fullReasoning,
+									toolCall: currentToolCall,
+									anthropicReasoning,
 								});
-							} else if (event.type === 'error') {
+							}
+							else if (event.type === 'error') {
 								this.llmMessageEmitters.onError.fire({
 									requestId,
 									message: event.error || event.message,

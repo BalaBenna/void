@@ -13,6 +13,7 @@ import { IvoidSettingsService } from '../common/voidSettingsService.js';
 import { IChatThreadService } from './chatThreadServiceInterface.js';
 import { ISubagentService } from './subagentServiceInterface.js';
 import { IAgentRegistryService } from './agentRegistryService.js';
+import { IMemoryService } from './memoryService.js';
 
 export { ISubagentService } from './subagentServiceInterface.js';
 
@@ -36,6 +37,7 @@ class SubagentService extends Disposable implements ISubagentService {
 		@IvoidSettingsService private readonly _voidSettingsService: IvoidSettingsService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IAgentRegistryService private readonly _agentRegistryService: IAgentRegistryService,
+		@IMemoryService private readonly _memoryService: IMemoryService,
 	) {
 		super();
 	}
@@ -116,11 +118,13 @@ class SubagentService extends Disposable implements ISubagentService {
 		};
 		this._executions.set(execution.id, execution);
 
-		// Build the full prompt with the subagent's system instructions
-		const fullPrompt = `${agentDef.systemPrompt}\n\nTask: ${prompt}`
+		// Build the full prompt with the subagent's system instructions + shared memory context
+		const sharedContext = await this._memoryService.getSharedContext(prompt, 5)
+		const memoryBlock = sharedContext ? `\n\nRelevant context from previous sessions:\n${sharedContext}` : ''
+		const fullPrompt = `${agentDef.systemPrompt}${memoryBlock}\n\nTask: ${prompt}`
 
 		// Derive chatMode from agent definition
-		const chatMode = agentDef.readonly ? 'ask' : 'agent'
+		const chatMode = agentDef.readonly ? 'ask' : 'build'
 		const maxIterations = agentDef.maxIterations
 		const timeoutMs = agentDef.timeout
 
@@ -132,11 +136,23 @@ class SubagentService extends Disposable implements ISubagentService {
 			timeoutMs,
 		})
 
+		const storeResultAsMemory = (result: string | undefined) => {
+			if (result && result.length > 20 && result.length < 2000) {
+				this._memoryService.addMemory({
+					type: 'project_fact',
+					content: `Subagent (${type}): ${result.substring(0, 500)}`,
+					context: `subagent result for: ${prompt.substring(0, 100)}`,
+					tags: [type, 'subagent'],
+				}).catch(() => { /* silently fail */ });
+			}
+		};
+
 		if (background) {
-			// Fire and voidt for background subagents — update execution when done
+			// Fire and forget for background subagents — update execution when done
 			runPromise.then(({ result, status }) => {
 				execution.status = status;
 				execution.result = result;
+				storeResultAsMemory(result);
 			}).catch(e => {
 				execution.status = 'failed';
 				execution.result = `Subagent error: ${e}`;
@@ -147,6 +163,7 @@ class SubagentService extends Disposable implements ISubagentService {
 				const { result, status } = await runPromise;
 				execution.status = status;
 				execution.result = result;
+				storeResultAsMemory(result);
 			} catch (e) {
 				execution.status = 'failed';
 				execution.result = `Subagent error: ${e}`;

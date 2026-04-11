@@ -23,6 +23,7 @@ export type AuthSession = {
 
 export type AuthState = {
 	isAuthenticated: boolean
+	isGuest: boolean
 	session: AuthSession | null
 	isLoading: boolean
 	error: string | null
@@ -30,6 +31,7 @@ export type AuthState = {
 
 export const defaultAuthState: AuthState = {
 	isAuthenticated: false,
+	isGuest: false,
 	session: null,
 	isLoading: true,
 	error: null,

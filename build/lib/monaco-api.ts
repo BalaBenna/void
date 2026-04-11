@@ -17,7 +17,7 @@ const SRC = path.join(__dirname, '../../src');
 export const RECIPE_PATH = path.join(__dirname, '../monaco/monaco.d.ts.recipe');
 const DECLARATION_PATH = path.join(__dirname, '../../src/vs/monaco.d.ts');
 
-function logErr(message: any, ...rest: any[]): forge {
+function logErr(message: any, ...rest: any[]): void {
 	fancyLog(ansiColors.yellow(`[monaco.d.ts]`), message, ...rest);
 }
 
@@ -37,10 +37,10 @@ function isDeclaration(ts: typeof import('typescript'), a: TSTopLevelDeclare): a
 	);
 }
 
-function visitTopLevelDeclarations(ts: typeof import('typescript'), sourceFile: ts.SourceFile, visitor: (node: TSTopLevelDeclare) => boolean): forge {
+function visitTopLevelDeclarations(ts: typeof import('typescript'), sourceFile: ts.SourceFile, visitor: (node: TSTopLevelDeclare) => boolean): void {
 	let stop = false;
 
-	const visit = (node: ts.Node): forge => {
+	const visit = (node: ts.Node): void => {
 		if (stop) {
 			return;
 		}
@@ -609,7 +609,7 @@ export class DeclarationResolver {
 		this._sourceFileCache = Object.create(null);
 	}
 
-	public invalidateCache(moduleId: string): forge {
+	public invalidateCache(moduleId: string): void {
 		this._sourceFileCache[moduleId] = null;
 	}
 

@@ -3,17 +3,21 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+import React, { useState } from 'react';
 import { useIsDark } from '../util/services.js';
 // import { SidebarThreadSelector } from './SidebarThreadSelector.js';
 // import { SidebarChat } from './SidebarChat.js';
 
 import '../styles.css'
 import { SidebarChat } from './SidebarChat.js';
+import { SentinelPanel } from './SentinelPanel.js';
 import ErrorBoundary from './ErrorBoundary.js';
 
 export const Sidebar = ({ className }: { className: string }) => {
 
 	const isDark = useIsDark()
+	const [showSentinel, setShowSentinel] = useState(false)
+
 	return <div
 		className={`@@void-scope ${isDark ? 'dark' : ''}`}
 		style={{ width: '100%', height: '100%' }}
@@ -29,7 +33,13 @@ export const Sidebar = ({ className }: { className: string }) => {
 
 			<div className={`w-full h-full`}>
 				<ErrorBoundary>
-					<SidebarChat />
+					{showSentinel ? (
+						<ErrorBoundary fallback={<div className="p-4 text-sm text-void-fg-3">Sentinel failed to load. <button className="underline" onClick={() => setShowSentinel(false)}>Go back</button></div>}>
+							<SentinelPanel onClose={() => setShowSentinel(false)} />
+						</ErrorBoundary>
+					) : (
+						<SidebarChat onOpenSentinel={() => setShowSentinel(true)} />
+					)}
 				</ErrorBoundary>
 
 			</div>
@@ -38,4 +48,3 @@ export const Sidebar = ({ className }: { className: string }) => {
 
 
 }
-

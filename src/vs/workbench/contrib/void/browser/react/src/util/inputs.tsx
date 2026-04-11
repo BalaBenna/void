@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { forwardRef, ForwardRefExoticComponent, MutableRefObject, RefAttributes, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { IInputBoxStyles, InputBox } from '../../../../../../../base/browser/ui/inputbox/inputBox.js';
 import { defaultCheckboxStyles, defaultInputBoxStyles, defaultSelectBoxStyles } from '../../../../../../../platform/theme/browser/defaultStyles.js';
 import { SelectBox } from '../../../../../../../base/browser/ui/selectBox/selectBox.js';
@@ -18,7 +19,7 @@ import { inputBackground, inputForeground } from '../../../../../../../platform/
 import { useFloating, autoUpdate, offset, flip, shift, size, autoPlacement } from '@floating-ui/react';
 import { URI } from '../../../../../../../base/common/uri.js';
 import { getBasename, getFolderName } from '../sidebar-tsx/SidebarChat.js';
-import { ChevronRight, File, Folder, FolderClosed, LucideProps } from 'lucide-react';
+import { ChevronRight, Code2, File, Folder, FolderClosed, GitBranch, Globe, Search, Terminal, LucideProps } from 'lucide-react';
 import { StagingSelectionItem } from '../../../../common/chatThreadServiceTypes.js';
 import { DiffEditorWidget } from '../../../../../../../editor/browser/widget/diffEditor/diffEditorWidget.js';
 import { extractSearchReplaceBlocks, ExtractedSearchReplaceBlock } from '../../../../common/helpers/extractCodeFromResult.js';
@@ -67,6 +68,11 @@ type Option = {
 		| { leafNodeType?: undefined, nextOptions: Option[], generateNextOptions?: undefined, }
 		| { leafNodeType?: undefined, nextOptions?: undefined, generateNextOptions: GenerateNextOptions, }
 		| { leafNodeType: 'File' | 'Folder', uri: URI, nextOptions?: undefined, generateNextOptions?: undefined, }
+		| { leafNodeType: 'Branch', branchName: string, branchDiffContent: string, uri?: undefined, nextOptions?: undefined, generateNextOptions?: undefined, }
+		| { leafNodeType: 'Symbol', symbolName: string, uri: URI, range: [number, number], language: string, nextOptions?: undefined, generateNextOptions?: undefined, }
+		| { leafNodeType: 'Terminal', terminalId: string, content: string, uri?: undefined, nextOptions?: undefined, generateNextOptions?: undefined, }
+		| { leafNodeType: 'Web', query: string, content: string, uri?: undefined, nextOptions?: undefined, generateNextOptions?: undefined, }
+		| { leafNodeType: 'Codebase', query: string, content: string, uri?: undefined, nextOptions?: undefined, generateNextOptions?: undefined, }
 	)
 
 
@@ -198,6 +204,7 @@ const getOptionsAtPath = async (accessor: ReturnType<typeof useAccessor>, path: 
 			const searchResults = (await (await toolsService.callTool.search_pathnames_only({
 				query: t,
 				includePattern: null,
+				globPattern: null,
 				pageNumber: 1,
 			})).result).uris
 
@@ -296,6 +303,111 @@ const getOptionsAtPath = async (accessor: ReturnType<typeof useAccessor>, path: 
 			iconInMenu: Folder,
 			generateNextOptions: async (t) => (await searchForFilesOrFolders(t, 'folders')) || [],
 		},
+		{
+			leafNodeType: 'Branch',
+			branchName: 'current',
+			branchDiffContent: '',
+			fullName: 'branch',
+			abbreviatedName: '@branch',
+			iconInMenu: GitBranch,
+		},
+		{
+			fullName: 'symbol',
+			abbreviatedName: 'symbol',
+			iconInMenu: Code2,
+			generateNextOptions: async (t) => {
+				try {
+					const searchResults = (await (await toolsService.callTool.search_pathnames_only({
+						query: t || '*',
+						includePattern: null,
+						globPattern: null,
+						pageNumber: 1,
+					})).result).uris
+
+					const results: Option[] = []
+					for (const uri of searchResults.slice(0, 20)) {
+						const relativePath = getRelativeWorkspacePath(accessor, uri)
+						const language = accessor.get('ILanguageService').guessLanguageIdByFilepathOrFirstLine(uri) || ''
+						results.push({
+							leafNodeType: 'Symbol',
+							symbolName: t || relativePath,
+							uri,
+							range: [1, 50] as [number, number],
+							language,
+							fullName: relativePath,
+							abbreviatedName: getAbbreviatedName(relativePath),
+							iconInMenu: Code2,
+						})
+					}
+					return results
+				} catch { return [] }
+			},
+		},
+		{
+			fullName: 'terminal',
+			abbreviatedName: 'terminal',
+			iconInMenu: Terminal,
+			generateNextOptions: async () => {
+				try {
+					const terminalToolService = accessor.get('ITerminalToolService')
+					const terminalIds = terminalToolService.listPersistentTerminalIds()
+					return terminalIds.map(id => ({
+						leafNodeType: 'Terminal' as const,
+						terminalId: id,
+						content: '',
+						fullName: `Terminal ${id}`,
+						abbreviatedName: `terminal-${id}`,
+						iconInMenu: Terminal,
+					}))
+				} catch { return [] }
+			},
+		},
+		{
+			fullName: 'web',
+			abbreviatedName: 'web',
+			iconInMenu: Globe,
+			generateNextOptions: async (t) => {
+				if (!t) return []
+				return [{
+					leafNodeType: 'Web' as const,
+					query: t,
+					content: `Searching web for: ${t}`,
+					fullName: t,
+					abbreviatedName: t,
+					iconInMenu: Globe,
+				}]
+			},
+		},
+		{
+			fullName: 'codebase',
+			abbreviatedName: 'codebase',
+			iconInMenu: Search,
+			generateNextOptions: async (t) => {
+				if (!t) return []
+				try {
+					const embeddingsService = accessor.get('IEmbeddingsService')
+					const results = await embeddingsService.search(t, null, 5)
+					const content = results.map((r: any) => `${r.uri.fsPath}:${r.startLine}-${r.endLine}\n${r.content}`).join('\n---\n')
+					return [{
+						leafNodeType: 'Codebase' as const,
+						query: t,
+						content: content || `No results found for: ${t}`,
+						fullName: t,
+						abbreviatedName: t,
+						iconInMenu: Search,
+					}]
+				} catch {
+					return [{
+						leafNodeType: 'Codebase' as const,
+						query: t,
+						content: `Codebase search for: ${t}`,
+						fullName: t,
+						abbreviatedName: t,
+						iconInMenu: Search,
+					}]
+				}
+			},
+		},
 	]
 
 	// follow the path in the optionsTree (until the last path element)
@@ -354,7 +466,7 @@ type InputBox2Props = {
 	onBlur?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
 	onChangeHeight?: (newHeight: number) => void;
 }
-export const voidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(function X({ initValue, placeholder, multiline, enableAtToMention, fnsRef, className, onKeyDown, onFocus, onBlur, onChangeText }, ref) {
+export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(function X({ initValue, placeholder, multiline, enableAtToMention, fnsRef, className, onKeyDown, onFocus, onBlur, onChangeText }, ref) {
 
 
 	// mirrors whatever is in ref
@@ -440,6 +552,36 @@ export const voidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 				uri: option.uri,
 				language: undefined,
 				state: undefined,
+			}
+			else if (option.leafNodeType === 'Branch') newSelection = {
+				type: 'Branch',
+				branchName: option.branchName,
+				branchDiffContent: option.branchDiffContent,
+				uri: undefined,
+				language: undefined,
+				state: undefined,
+			}
+			else if (option.leafNodeType === 'Symbol') newSelection = {
+				type: 'Symbol',
+				symbolName: option.symbolName,
+				uri: option.uri,
+				range: option.range,
+				language: option.language,
+			}
+			else if (option.leafNodeType === 'Terminal') newSelection = {
+				type: 'Terminal',
+				terminalId: option.terminalId,
+				content: option.content,
+			}
+			else if (option.leafNodeType === 'Web') newSelection = {
+				type: 'Web',
+				query: option.query,
+				content: option.content,
+			}
+			else if (option.leafNodeType === 'Codebase') newSelection = {
+				type: 'Codebase',
+				query: option.query,
+				content: option.content,
 			}
 			else throw new Error(`Unexpected leafNodeType ${option.leafNodeType}`)
 
@@ -878,7 +1020,7 @@ export const voidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 })
 
 
-export const voidSimpleInputBox = ({ value, onChangeValue, placeholder, className, disabled, passwordBlur, compact, ...inputProps }: {
+export const VoidSimpleInputBox = ({ value, onChangeValue, placeholder, className, disabled, passwordBlur, compact, ...inputProps }: {
 	value: string;
 	onChangeValue: (value: string) => void;
 	placeholder: string;
@@ -1004,7 +1146,7 @@ export const voidInputBox = ({ onChangeText, onCreateInstance, inputBoxRef, plac
 
 
 
-export const voidSlider = ({
+export const VoidSlider = ({
 	value,
 	onChange,
 	size = 'md',
@@ -1165,7 +1307,7 @@ export const voidSlider = ({
 
 
 
-export const voidSwitch = ({
+export const VoidSwitch = ({
 	value,
 	onChange,
 	size = 'md',
@@ -1217,7 +1359,7 @@ export const voidSwitch = ({
 
 
 
-export const voidCheckBox = ({ label, value, onClick, className }: { label: string, value: boolean, onClick: (checked: boolean) => void, className?: string }) => {
+export const VoidCheckBox = ({ label, value, onClick, className }: { label: string, value: boolean, onClick: (checked: boolean) => void, className?: string }) => {
 	const divRef = useRef<HTMLDivElement | null>(null)
 	const instanceRef = useRef<Checkbox | null>(null)
 
@@ -1251,7 +1393,7 @@ export const voidCheckBox = ({ label, value, onClick, className }: { label: stri
 
 
 
-export const voidCustomDropdownBox = <T extends NonNullable<any>>({
+export const VoidCustomDropdownBox = <T extends NonNullable<any>>({
 	options,
 	selectedOption,
 	onChangeOption,
@@ -1391,11 +1533,11 @@ export const voidCustomDropdownBox = <T extends NonNullable<any>>({
 			<button
 				type='button'
 				ref={refs.setReference}
-				className="flex items-center h-4 bg-transparent whitespace-nowrap hover:brightness-90 w-full"
-				onClick={() => setIsOpen(!isOpen)}
+				className="flex items-center min-h-[20px] bg-transparent whitespace-nowrap hover:brightness-90 w-full"
+				onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen) }}
 			>
 				<span className={`truncate ${arrowTouchesText ? 'mr-1' : ''}`}>
-					{getOptionDisplayName(selectedOption)}
+					{selectedOption ? getOptionDisplayName(selectedOption) : ''}
 				</span>
 				<svg
 					className={`size-3 flex-shrink-0 ${arrowTouchesText ? '' : 'ml-auto'}`}
@@ -1412,11 +1554,11 @@ export const voidCustomDropdownBox = <T extends NonNullable<any>>({
 				</svg>
 			</button>
 
-			{/* Dropdown Menu */}
-			{isOpen && (
+			{/* Dropdown Menu - portaled to body to escape overflow containers */}
+			{isOpen && createPortal(
 				<div
 					ref={refs.setFloating}
-					className="z-[100] bg-void-bg-1 border-void-border-3 border rounded shadow-lg"
+					className="z-[100000] bg-void-bg-1 border-void-border-3 border rounded shadow-lg"
 					style={{
 						position: strategy,
 						top: y ?? 0,
@@ -1432,7 +1574,7 @@ export const voidCustomDropdownBox = <T extends NonNullable<any>>({
 				><div className='overflow-auto max-h-80'>
 
 						{options.map((option) => {
-							const thisOptionIsSelected = getOptionsEqual(option, selectedOption);
+							const thisOptionIsSelected = selectedOption ? getOptionsEqual(option, selectedOption) : false;
 							const optionName = getOptionDropdownName(option);
 							const optionDetail = getOptionDropdownDetail?.(option) || '';
 
@@ -1470,7 +1612,8 @@ export const voidCustomDropdownBox = <T extends NonNullable<any>>({
 						})}
 					</div>
 
-				</div>
+				</div>,
+				document.body
 			)}
 		</div>
 	);
@@ -1716,7 +1859,7 @@ export const BlockCode = ({ initValue, language, maxHeight, showScrollbars }: Bl
 }
 
 
-export const voidButtonBgDarken = ({ children, disabled, onClick, className }: { children: React.ReactNode; disabled?: boolean; onClick: () => void; className?: string }) => {
+export const VoidButtonBgDarken = ({ children, disabled, onClick, className }: { children: React.ReactNode; disabled?: boolean; onClick: () => void; className?: string }) => {
 	return <button disabled={disabled}
 		className={`px-3 py-1 bg-black/10 dark:bg-white/10 rounded-sm overflow-hidden whitespace-nowrap flex items-center justify-center ${className || ''}`}
 		onClick={onClick}
@@ -1960,7 +2103,7 @@ const SingleDiffEditor = ({ block, lang }: { block: ExtractedSearchReplaceBlock,
  *   - searchReplaceBlocks: string in search/replace format (from LLM)
  *   - language?: string (optional, fallback to 'plaintext')
  */
-export const voidDiffEditor = ({ uri, searchReplaceBlocks, language }: { uri?: any, searchReplaceBlocks: string, language?: string }) => {
+export const VoidDiffEditor = ({ uri, searchReplaceBlocks, language }: { uri?: any, searchReplaceBlocks: string, language?: string }) => {
 	const accessor = useAccessor();
 	const languageService = accessor.get('ILanguageService');
 

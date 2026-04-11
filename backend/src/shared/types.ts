@@ -8,7 +8,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  avatarUrl?: string;
+  avatarUrl: string | null;
   plan: PlanType;
   createdAt: string;
   updatedAt: string;
@@ -47,8 +47,8 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
   free: {
     messagesPerDay: 50,
     maxTokensPerRequest: 4096,
-    allowedModels: ["claude-haiku-4-5", "gemini-flash"],
-    agenticEnabled: false,
+    allowedModels: ["*"],
+    agenticEnabled: true,
     maxProjects: 3,
     maxFileUploads: 10,
   },
@@ -58,6 +58,9 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
     allowedModels: [
       "claude-sonnet-4-5",
       "claude-haiku-4-5",
+      "gpt-4o",
+      "gpt-4o-mini",
+      "o4-mini",
       "gemini-pro",
       "gemini-flash",
     ],
@@ -72,6 +75,10 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
       "claude-opus-4-5",
       "claude-sonnet-4-5",
       "claude-haiku-4-5",
+      "gpt-4o",
+      "gpt-4o-mini",
+      "o3",
+      "o4-mini",
       "gemini-pro",
       "gemini-flash",
     ],
@@ -93,9 +100,61 @@ export const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
 // AI Chat / Completion
 // ============================================================
 
+// Content block types (matching Anthropic API format)
+export type TextBlock = { type: "text"; text: string };
+export type ThinkingBlock = { type: "thinking"; thinking: string };
+export type RedactedThinkingBlock = { type: "redacted_thinking" };
+export type ToolUseBlock = {
+  type: "tool_use";
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+};
+export type ToolResultBlock = {
+  type: "tool_result";
+  tool_use_id: string;
+  content: string;
+  is_error?: boolean;
+};
+export type ImageBlock = {
+  type: "image";
+  source: { type: "base64"; media_type: string; data: string };
+};
+export type ContentBlock =
+  | TextBlock
+  | ThinkingBlock
+  | RedactedThinkingBlock
+  | ToolUseBlock
+  | ToolResultBlock
+  | ImageBlock;
+
+// Tool definition (matches Anthropic's Tool schema)
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  input_schema: {
+    type: "object";
+    properties: Record<
+      string,
+      { type: string; description?: string; enum?: string[] }
+    >;
+    required?: string[];
+  };
+}
+
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
-  content: string;
+  content: string | ContentBlock[];
+}
+
+// Reasoning/thinking configuration per provider
+export interface ReasoningConfig {
+  // Anthropic extended thinking: budget in tokens (1024-8192)
+  budgetTokens?: number;
+  // OpenAI reasoning: effort level
+  reasoningEffort?: "low" | "medium" | "high";
+  // Gemini thinking: budget in tokens
+  thinkingBudget?: number;
 }
 
 export interface CompletionRequest {
@@ -107,11 +166,18 @@ export interface CompletionRequest {
   activeFile?: string;
   selectedCode?: string;
   projectContext?: string;
+  // Tool calling support
+  tools?: ToolDefinition[];
+  toolChoice?: "auto" | "any" | "none" | { type: "tool"; name: string };
+  // Reasoning/thinking support
+  reasoning?: ReasoningConfig;
 }
 
 export interface CompletionResponse {
   id: string;
   content: string;
+  reasoning: string;
+  contentBlocks: ContentBlock[];
   model: string;
   tokensUsed: {
     input: number;

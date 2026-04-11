@@ -7,7 +7,7 @@ import { IWorkspaceContextService } from '../../../../platform/workspace/common/
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { ChatMessage, ImageAttachment } from '../common/chatThreadServiceTypes.js';
 import { getIsReasoningEnabledState, getReservedOutputTokenSpace, getModelCapabilities } from '../common/modelCapabilities.js';
-import { reParsedToolXMLString, chat_systemMessage } from '../common/prompt/prompts.js';
+import { reParsedToolXMLString, chat_systemMessage, classifyTask, taskSpecificInstructions } from '../common/prompt/prompts.js';
 import { AnthropicLLMChatMessage, AnthropicReasoning, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, OpenAILLMChatMessage, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
 import { IvoidSettingsService } from '../common/voidSettingsService.js';
 import { ChatMode, FeatureName, ModelSelection, ProviderName } from '../common/voidSettingsTypes.js';
@@ -20,7 +20,10 @@ import { ToolName } from '../common/toolsServiceTypes.js';
 import { IMCPService } from '../common/mcpService.js';
 import { IRulesService } from './rulesService.js';
 import { IMemoryService } from './memoryService.js';
+import { Memory } from '../common/memoryTypes.js';
 import { IAgentRegistryService } from './agentRegistryService.js';
+import { IContextGatheringService } from './contextGatheringService.js';
+import { ISmartContextService } from './smartContextService.js';
 
 export const EMPTY_MESSAGE = '(empty message)'
 
@@ -44,7 +47,7 @@ type SimpleLLMMessage = {
 
 
 
-const CHARS_PER_TOKEN = 4 // assume abysmal chars per token
+const CHARS_PER_TOKEN = 3.8 // calibrated average: code ~3.5, prose ~4.5
 const TRIM_TO_LEN = 120
 
 
@@ -599,6 +602,8 @@ export const IConvertToLLMMessageService = createDecorator<IConvertToLLMMessageS
 class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMessageService {
 	_serviceBrand: undefined;
 
+	private _cachedMemories: Memory[] = [];
+
 	constructor(
 		@IModelService private readonly modelService: IModelService,
 		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
@@ -611,6 +616,8 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		@IRulesService private readonly rulesService: IRulesService,
 		@IMemoryService private readonly memoryService: IMemoryService,
 		@IAgentRegistryService private readonly agentRegistryService: IAgentRegistryService,
+		@IContextGatheringService private readonly contextGatheringService: IContextGatheringService,
+		@ISmartContextService private readonly smartContextService: ISmartContextService,
 	) {
 		super()
 	}
@@ -663,9 +670,12 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		// Phase 8: Inject relevant memories from previous sessions
 		const memoryConfig = this.voidSettingsService.state.globalSettings.memoryConfig;
 		if (memoryConfig.enabled && latestUserMessage) {
-			const memories = this.memoryService.getRelevantMemories(latestUserMessage, 5);
-			if (memories.length > 0) {
-				const memoryStr = memories.map(m => `- [${m.type}] ${m.content}`).join('\n');
+			// Fire-and-forget async query; use cached results synchronously
+			this.memoryService.getRelevantMemories(latestUserMessage, 5).then(memories => {
+				this._cachedMemories = memories;
+			});
+			if (this._cachedMemories.length > 0) {
+				const memoryStr = this._cachedMemories.map(m => `- [${m.type}] ${m.content}`).join('\n');
 				ans.push(`Relevant memories from previous sessions:\n${memoryStr}`);
 			}
 		}
@@ -682,7 +692,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		const activeURI = this.editorService.activeEditor?.resource?.fsPath;
 
 		const directoryStr = await this.directoryStrService.getAllDirectoriesStr({
-			cutOffMessage: chatMode === 'agent' || chatMode === 'ask' || chatMode === 'plan' || chatMode === 'debug' ?
+			cutOffMessage: chatMode === 'auto' || chatMode === 'build' || chatMode === 'ask' || chatMode === 'plan' ?
 				`...Directories string cut off, use tools to read more...`
 				: `...Directories string cut off, ask user for more if necessary...`
 		})
@@ -692,7 +702,16 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		const mcpTools = this.mcpService.getMCPTools()
 
 		const persistentTerminalIDs = this.terminalToolService.listPersistentTerminalIds()
-		const systemMessage = chat_systemMessage({ workspaceFolders, openedURIs, directoryStr, activeURI, persistentTerminalIDs, chatMode, mcpTools, includeXMLToolDefinitions, webSearchEnabled })
+		const { enableImplementationSummary } = this.voidSettingsService.state.globalSettings
+		const systemMessage = chat_systemMessage({ workspaceFolders, openedURIs, directoryStr, activeURI, persistentTerminalIDs, chatMode, mcpTools, includeXMLToolDefinitions, webSearchEnabled, enableImplementationSummary })
+
+		// Append context gathering snippets for richer context awareness
+		const contextSnippets = this.contextGatheringService.getCachedSnippets()
+		if (contextSnippets.length > 0) {
+			const contextSection = `\n\nHere is additional context gathered from the user's current cursor location and nearby code:\n<gathered_context>\n${contextSnippets.slice(0, 10).join('\n---\n')}\n</gathered_context>`
+			return systemMessage + contextSection
+		}
+
 		return systemMessage
 	}
 
@@ -796,7 +815,24 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 
 		// Get combined AI instructions (with memory context from latest user message)
 		const latestUserMsg = [...chatMessages].reverse().find(m => m.role === 'user')
-		const aiInstructions = this._getCombinedAIInstructions(latestUserMsg?.content ?? undefined);
+		let aiInstructions = this._getCombinedAIInstructions(latestUserMsg?.content ?? undefined);
+
+		// Inject task-specific instructions based on user intent classification
+		if (latestUserMsg?.content) {
+			const taskClass = classifyTask(latestUserMsg.content);
+			const taskInstr = taskSpecificInstructions(taskClass);
+			if (taskInstr) {
+				aiInstructions += `\n\n${taskInstr}`;
+			}
+		}
+
+		// Inject smart context from codebase search
+		if (latestUserMsg?.content) {
+			const smartContext = this.smartContextService.getRelevantContext(latestUserMsg.content);
+			if (smartContext) {
+				aiInstructions += `\n\nRelevant code from the codebase (auto-retrieved):\n${smartContext}`;
+			}
+		}
 		const isReasoningEnabled = getIsReasoningEnabledState('Chat', providerName, modelName, modelSelectionOptions, overridesOfModel)
 		const reservedOutputTokenSpace = getReservedOutputTokenSpace(providerName, modelName, { isReasoningEnabled, overridesOfModel })
 		const llmMessages = this._chatMessagesToSimpleMessages(chatMessages)

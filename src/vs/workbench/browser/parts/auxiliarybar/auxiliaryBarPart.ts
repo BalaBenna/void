@@ -101,7 +101,7 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 		super(
 			Parts.AUXILIARYBAR_PART,
 			{
-				hasTitle: true,
+				hasTitle: false,
 				borderWidth: () => (this.getColor(SIDE_BAR_BORDER) || this.getColor(contrastBorder)) ? 1 : 0,
 			},
 			AuxiliaryBarPart.activeViewSettingsKey,
@@ -239,17 +239,13 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 	}
 
 	protected shouldShowCompositeBar(): boolean {
-		return this.configuration.position !== ActivityBarPosition.HIDDEN;
+		// void: always hide composite bar to remove header/footer
+		return false;
 	}
 
 	protected getCompositeBarPosition(): CompositeBarPosition {
-		switch (this.configuration.position) {
-			case ActivityBarPosition.TOP: return CompositeBarPosition.TOP;
-			case ActivityBarPosition.BOTTOM: return CompositeBarPosition.BOTTOM;
-			case ActivityBarPosition.HIDDEN: return CompositeBarPosition.TITLE;
-			case ActivityBarPosition.DEFAULT: return CompositeBarPosition.TITLE;
-			default: return CompositeBarPosition.TITLE;
-		}
+		// void: always use TITLE to prevent header/footer creation
+		return CompositeBarPosition.TITLE;
 	}
 
 	protected override createHeaderArea() {

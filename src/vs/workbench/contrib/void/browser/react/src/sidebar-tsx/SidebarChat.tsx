@@ -13,16 +13,17 @@ import { ChatMarkdownRender, ChatMessageLocation, getApplyBoxId } from '../markd
 import { URI } from '../../../../../../../base/common/uri.js';
 import { IDisposable } from '../../../../../../../base/common/lifecycle.js';
 import { ErrorDisplay } from './ErrorDisplay.js';
-import { BlockCode, TextAreaFns, voidCustomDropdownBox, voidInputBox2, voidSlider, voidSwitch, voidDiffEditor } from '../util/inputs.js';
+import { BlockCode, TextAreaFns, VoidCustomDropdownBox, VoidInputBox2, VoidSlider, VoidSwitch, VoidDiffEditor } from '../util/inputs.js';
 import { ModelDropdown, } from '../void-settings-tsx/ModelDropdown.js';
 import { PastThreadsList, HistoryDropdown } from './SidebarThreadSelector.js';
+import { ComposerView } from './ComposerView.js';
 import { void_CTRL_L_ACTION_ID } from '../../../actionIDs.js';
 import { void_OPEN_SETTINGS_ACTION_ID } from '../../../voidSettingsPane.js';
 import { ChatMode, displayInfoOfProviderName, FeatureName, isFeatureNameDisabled } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js';
 import { ICommandService } from '../../../../../../../platform/commands/common/commands.js';
 import { WarningBox } from '../void-settings-tsx/WarningBox.js';
 import { getModelCapabilities, getIsReasoningEnabledState } from '../../../../common/modelCapabilities.js';
-import { AlertTriangle, File, Ban, Check, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Globe, Image as ImageIcon, Clock, Plus, MoreHorizontal, Mic, Monitor, Loader2, Circle, Minus } from 'lucide-react';
+import { AlertTriangle, File, Ban, Check, ChevronRight, ChevronDown, Dot, FileIcon, GitBranch, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text, Globe, Image as ImageIcon, Clock, Plus, MoreHorizontal, Mic, Monitor, Loader2, Circle, Minus, Search, Shield } from 'lucide-react';
 import { ChatMessage, CheckpointEntry, ImageAttachment, PlanItem, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
 import { CopyButton, EditToolAcceptRejectButtonsHTML, IconShell1, JumpToFileButton, JumpToTerminalButton, StatusIndicator, StatusIndicatorForApplyButton, useApplyStreamState, useEditToolStreamState } from '../markdown/ApplyBlockHoverButtons.js';
@@ -125,23 +126,12 @@ export const IconLoading = ({ className = '' }: { className?: string }) => {
 	const [loadingText, setLoadingText] = useState('.');
 
 	useEffect(() => {
-		let intervalId;
+		const intervalId = setInterval(() => {
+			setLoadingText(prev => prev === '...' ? '.' : prev + '.');
+		}, 300);
 
-		// Function to handle the animation
-		const toggleLoadingText = () => {
-			if (loadingText === '...') {
-				setLoadingText('.');
-			} else {
-				setLoadingText(loadingText + '.');
-			}
-		};
-
-		// Start the animation loop
-		intervalId = setInterval(toggleLoadingText, 300);
-
-		// Cleanup function to clear the interval when component unmounts
 		return () => clearInterval(intervalId);
-	}, [loadingText, setLoadingText]);
+	}, []);
 
 	return <div className={`${className}`}>{loadingText}</div>;
 
@@ -171,7 +161,7 @@ const ReasoningOptionSlider = ({ featureName }: { featureName: FeatureName }) =>
 	if (canTurnOffReasoning && !reasoningBudgetSlider) { // if it's just a on/off toggle without a power slider
 		return <div className='flex items-center gap-x-2'>
 			<span className='text-void-fg-3 text-xs pointer-events-none inline-block w-10 pr-1'>Thinking</span>
-			<voidSwitch
+			<VoidSwitch
 				size='xxs'
 				value={isReasoningEnabled}
 				onChange={(newVal) => {
@@ -195,7 +185,7 @@ const ReasoningOptionSlider = ({ featureName }: { featureName: FeatureName }) =>
 
 		return <div className='flex items-center gap-x-2'>
 			<span className='text-void-fg-3 text-xs pointer-events-none inline-block w-10 pr-1'>Thinking</span>
-			<voidSlider
+			<VoidSlider
 				width={50}
 				size='xs'
 				min={min}
@@ -226,7 +216,7 @@ const ReasoningOptionSlider = ({ featureName }: { featureName: FeatureName }) =>
 
 		return <div className='flex items-center gap-x-2'>
 			<span className='text-void-fg-3 text-xs pointer-events-none inline-block w-10 pr-1'>Thinking</span>
-			<voidSlider
+			<VoidSlider
 				width={30}
 				size='xs'
 				min={min}
@@ -248,63 +238,187 @@ const ReasoningOptionSlider = ({ featureName }: { featureName: FeatureName }) =>
 
 
 const nameOfChatMode: Record<ChatMode, string> = {
-	'agent': 'Agent',
-	'ask': 'Ask',
+	'auto': 'Auto',
+	'build': 'Build',
 	'plan': 'Plan',
-	'debug': 'Debug',
+	'ask': 'Ask',
 }
 
 const detailOfChatMode: Record<ChatMode, string> = {
-	'agent': 'Autonomous coding agent with full tool access',
-	'ask': 'Search and read codebase, no edits',
+	'auto': 'Automatically selects the best mode for your task',
+	'build': 'Autonomous coding agent with full tool access',
 	'plan': 'Research and create structured implementation plans',
-	'debug': 'Specialized bug-finding and root-cause analysis',
+	'ask': 'Search and read codebase, no edits',
 }
 
 const iconOfChatMode: Record<ChatMode, typeof Globe> = {
-	'agent': Globe,
-	'ask': File,
+	'auto': Globe,
+	'build': GitBranch,
 	'plan': Flag,
-	'debug': AlertTriangle,
+	'ask': Search,
 }
 
-const ChatModeDropdown = ({ className }: { className: string }) => {
-	const accessor = useAccessor()
+const chatModes: ChatMode[] = ['auto', 'build', 'plan', 'ask']
 
+const ChatModeDropdown = ({ className }: { className?: string }) => {
+	const [isOpen, setIsOpen] = useState(false)
+	const dropdownRef = useRef<HTMLDivElement>(null)
+	const accessor = useAccessor()
 	const voidSettingsService = accessor.get('IvoidSettingsService')
 	const settingsState = useSettingsState()
 
-	const options: ChatMode[] = useMemo(() => ['agent', 'ask', 'plan', 'debug'], [])
-
-	// Fallback to 'agent' if stored mode is invalid (e.g. old 'normal'/'gather')
-	const currentMode: ChatMode = nameOfChatMode[settingsState.globalSettings.chatMode] ? settingsState.globalSettings.chatMode : 'agent'
-
-	const onChangeOption = useCallback((newVal: ChatMode) => {
-		voidSettingsService.setGlobalSetting('chatMode', newVal)
-	}, [voidSettingsService])
-
+	// Fallback to 'auto' if stored mode is invalid (e.g. old 'normal'/'gather'/'agent')
+	const currentMode: ChatMode = nameOfChatMode[settingsState.globalSettings.chatMode] ? settingsState.globalSettings.chatMode : 'auto'
 	const ModeIcon = iconOfChatMode[currentMode]
 
-	return <div className="flex items-center gap-1">
-		<voidCustomDropdownBox
-			className={className}
-			options={options}
-			selectedOption={currentMode}
-			onChangeOption={onChangeOption}
-			getOptionDisplayName={(val) => nameOfChatMode[val] ?? val}
-			getOptionDropdownName={(val) => nameOfChatMode[val] ?? val}
-			getOptionDropdownDetail={(val) => detailOfChatMode[val] ?? ''}
-			getOptionsEqual={(a, b) => a === b}
-		/>
-	</div>
+	// Close on outside click
+	useEffect(() => {
+		if (!isOpen) return
+		const handler = (e: MouseEvent) => {
+			if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setIsOpen(false)
+		}
+		document.addEventListener('mousedown', handler)
+		return () => document.removeEventListener('mousedown', handler)
+	}, [isOpen])
 
+	return (
+		<div className="relative" ref={dropdownRef}>
+			<button
+				type="button"
+				className={`flex items-center gap-1 text-xs py-0.5 px-1.5 rounded border transition-colors cursor-pointer
+					text-void-fg-3 bg-void-bg-1 border-void-border-2 hover:text-void-fg-1 hover:border-void-border-1 ${className ?? ''}`}
+				onClick={() => setIsOpen(!isOpen)}
+			>
+				<ModeIcon size={12} />
+				<span>{nameOfChatMode[currentMode]}</span>
+				<ChevronDown size={10} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+			</button>
+
+			{isOpen && (
+				<div className="absolute bottom-full left-0 mb-1 z-50 bg-void-bg-1 border border-void-border-2 rounded-lg shadow-xl overflow-y-auto"
+					style={{ minWidth: '220px', maxWidth: '320px' }}
+				>
+					{chatModes.map((mode) => {
+						const isSelected = mode === currentMode
+						const Icon = iconOfChatMode[mode]
+						return (
+							<div
+								key={mode}
+								className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer text-xs transition-colors
+									${isSelected ? 'bg-blue-500/15 text-void-fg-1' : 'text-void-fg-1 hover:bg-void-bg-2-hover'}`}
+								onClick={() => {
+									voidSettingsService.setGlobalSetting('chatMode', mode)
+									setIsOpen(false)
+								}}
+							>
+								<Icon size={14} className="flex-shrink-0" />
+								<div className="flex flex-col">
+									<span className="font-medium">{nameOfChatMode[mode]}</span>
+									<span className="text-void-fg-3 opacity-70 text-[10px]">{detailOfChatMode[mode]}</span>
+								</div>
+							</div>
+						)
+					})}
+				</div>
+			)}
+		</div>
+	)
 }
 
 
 
 
 
-interface voidChatAreaProps {
+// Inline model selector that always shows in the chat bottom bar
+const InlineChatModelSelector = ({ featureName }: { featureName: FeatureName }) => {
+	const [isOpen, setIsOpen] = useState(false)
+	const dropdownRef = useRef<HTMLDivElement>(null)
+	const accessor = useAccessor()
+	const voidSettingsService = accessor.get('IvoidSettingsService')
+	const commandService = accessor.get('ICommandService')
+	const settingsState = useSettingsState()
+
+	const selection = settingsState.modelSelectionOfFeature[featureName]
+	const allModels = settingsState._modelOptions
+
+	// Check if feature is disabled (model configuration error)
+	const isDisabled = isFeatureNameDisabled(featureName, settingsState)
+	const hasError = isDisabled !== false
+
+	// Close on outside click
+	useEffect(() => {
+		if (!isOpen) return
+		const handler = (e: MouseEvent) => {
+			if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setIsOpen(false)
+		}
+		document.addEventListener('mousedown', handler)
+		return () => document.removeEventListener('mousedown', handler)
+	}, [isOpen])
+
+	const displayName = selection
+		? `${selection.modelName}`
+		: isDisabled === 'needToEnableModel' ? 'Enable a model'
+			: isDisabled === 'addModel' ? 'Add a model'
+				: isDisabled === 'addProvider' || isDisabled === 'notFilledIn' || isDisabled === 'providerNotAutoDetected' ? 'Provider required'
+					: 'Select model'
+
+	const handleClick = () => {
+		if (hasError) {
+			commandService.executeCommand(void_OPEN_SETTINGS_ACTION_ID)
+		} else if (allModels.length > 0) {
+			setIsOpen(!isOpen)
+		} else {
+			commandService.executeCommand(void_OPEN_SETTINGS_ACTION_ID)
+		}
+	}
+
+	return (
+		<div className="relative" ref={dropdownRef}>
+			{/* Trigger button */}
+			<button
+				type="button"
+				className={`flex items-center gap-1 text-xs py-0.5 px-1.5 rounded border transition-colors cursor-pointer
+					${hasError
+						? 'text-yellow-500 bg-yellow-500/10 border-yellow-500/30 hover:bg-yellow-500/20'
+						: selection
+							? 'text-void-fg-3 bg-void-bg-1 border-void-border-2 hover:text-void-fg-1 hover:border-void-border-1'
+							: 'text-yellow-500 bg-yellow-500/10 border-yellow-500/30 hover:bg-yellow-500/20'
+					}`}
+				onClick={handleClick}
+			>
+				<ChevronDown size={10} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+				<span className="truncate max-w-[140px]">{displayName}</span>
+			</button>
+
+			{/* Dropdown */}
+			{isOpen && !hasError && allModels.length > 0 && (
+				<div className="absolute bottom-full left-0 mb-1 z-50 bg-void-bg-1 border border-void-border-2 rounded-lg shadow-xl overflow-y-auto"
+					style={{ maxHeight: '240px', minWidth: '200px', maxWidth: '280px' }}
+				>
+					{allModels.map((opt, i) => {
+						const isSelected = selection && opt.selection.providerName === selection.providerName && opt.selection.modelName === selection.modelName
+						return (
+							<div
+								key={`${opt.selection.providerName}-${opt.selection.modelName}-${i}`}
+								className={`flex items-center justify-between px-3 py-1.5 cursor-pointer text-xs transition-colors
+									${isSelected ? 'bg-blue-500/15 text-void-fg-1' : 'text-void-fg-1 hover:bg-void-bg-2-hover'}`}
+								onClick={() => {
+									voidSettingsService.setModelSelectionOfFeature(featureName, opt.selection)
+									setIsOpen(false)
+								}}
+							>
+								<span className="truncate">{opt.selection.modelName}</span>
+								<span className="text-void-fg-3 opacity-50 ml-2 flex-shrink-0">{opt.selection.providerName}</span>
+							</div>
+						)
+					})}
+				</div>
+			)}
+		</div>
+	)
+}
+
+interface VoidChatAreaProps {
 	// Required
 	children: React.ReactNode; // This will be the input component
 
@@ -356,7 +470,48 @@ interface voidChatAreaProps {
 	onPaste?: (e: React.ClipboardEvent) => void;
 }
 
-export const voidChatArea: React.FC<voidChatAreaProps> = ({
+const IndexingStatusIndicator: React.FC = () => {
+	const accessor = useAccessor();
+	const [status, setStatus] = useState<{ state: string; totalFiles: number; indexedFiles: number; progress: number }>({ state: 'idle', totalFiles: 0, indexedFiles: 0, progress: 0 });
+
+	useEffect(() => {
+		const embeddingsService = accessor.get('IEmbeddingsService');
+		const updateStatus = () => {
+			setStatus(embeddingsService.getIndexStatus());
+		};
+		updateStatus();
+		const disposable = embeddingsService.onDidChangeIndexStatus(() => updateStatus());
+		return () => disposable.dispose();
+	}, [accessor]);
+
+	if (status.state === 'idle') return null;
+
+	if (status.state === 'indexing') {
+		return (
+			<div
+				className="p-1 rounded text-yellow-400"
+				data-tooltip-id='void-tooltip'
+				data-tooltip-content={`Indexing: ${status.indexedFiles}/${status.totalFiles} files (${status.progress}%)`}
+				data-tooltip-place='top'
+			>
+				<Loader2 size={16} className="animate-spin" />
+			</div>
+		);
+	}
+
+	return (
+		<div
+			className="p-1 rounded text-green-400"
+			data-tooltip-id='void-tooltip'
+			data-tooltip-content={`${status.totalFiles} files indexed`}
+			data-tooltip-place='top'
+		>
+			<Search size={16} />
+		</div>
+	);
+};
+
+export const VoidChatArea: React.FC<VoidChatAreaProps> = ({
 	children,
 	onSubmit,
 	onAbort,
@@ -402,7 +557,7 @@ export const voidChatArea: React.FC<voidChatAreaProps> = ({
 				max-h-[80vh] overflow-y-auto
                 ${className}
             `}
-			style={isDragOver ? undefined : { border: '1px solid rgba(0,0,0,0.15)', boxShadow: '0 1px 4px rgba(0,0,0,0.12)' }}
+			style={isDragOver ? undefined : { border: '1px solid rgba(0,0,0,0.10)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
 			onClick={(e) => {
 				onClickAnywhere?.()
 			}}
@@ -506,45 +661,27 @@ export const voidChatArea: React.FC<voidChatAreaProps> = ({
 			/>
 
 			{/* Bottom row */}
-			<div className='flex flex-row justify-between items-end gap-1'>
-				{showModelDropdown && (
-					<div className='flex flex-col gap-y-1'>
-						<ReasoningOptionSlider featureName={featureName} />
-
-						<div className='flex items-center flex-wrap gap-x-2 gap-y-1 text-nowrap '>
-							{featureName === 'Chat' && <ChatModeDropdown className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-2 rounded py-0.5 px-1' />}
-							<ModelDropdown featureName={featureName} className='text-xs text-void-fg-3 bg-void-bg-1 rounded' />
-						</div>
-					</div>
-				)}
-
-				<div className="flex items-center gap-1">
-
-					{isStreaming && loadingIcon}
-
-					{/* Globe icon - web search toggle */}
-					<button
-						type='button'
-						className={`p-1 rounded transition-colors ${webSearchEnabled ? 'text-blue-400 bg-blue-500/10' : 'text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-2-hover'}`}
-						onClick={onToggleWebSearch}
-						data-tooltip-id='void-tooltip'
-						data-tooltip-content={webSearchEnabled ? 'Web Search (On)' : 'Web Search'}
-						data-tooltip-place='top'
-					>
-						<Globe size={16} />
-					</button>
-
-					{/* Image icon */}
+			<div className='flex flex-row justify-between items-center gap-1'>
+				<div className='flex items-center gap-x-2 text-nowrap'>
+					{/* + button for attachments */}
 					<button
 						type='button'
 						className="p-1 rounded text-void-fg-3 hover:text-void-fg-1 hover:bg-void-bg-2-hover transition-colors"
-						onClick={() => imageInputRef.current?.click()}
+						onClick={(e) => { e.stopPropagation(); imageInputRef.current?.click() }}
 						data-tooltip-id='void-tooltip'
-						data-tooltip-content='Attach Image'
+						data-tooltip-content='Attach files'
 						data-tooltip-place='top'
 					>
-						<ImageIcon size={16} />
+						<Plus size={16} />
 					</button>
+
+					{/* Chat mode + Model selector — always visible */}
+					{featureName === 'Chat' && <ChatModeDropdown />}
+					<InlineChatModelSelector featureName={featureName} />
+				</div>
+
+				<div className="flex items-center gap-1">
+					{isStreaming && loadingIcon}
 
 					{/* Mic icon (voice input) */}
 					{speechRecognitionAvailable && (
@@ -579,34 +716,36 @@ export const voidChatArea: React.FC<voidChatAreaProps> = ({
 
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement>
-const DEFAULT_BUTTON_SIZE = 22;
+const DEFAULT_BUTTON_SIZE = 24;
 export const ButtonSubmit = ({ className, disabled, ...props }: ButtonProps & Required<Pick<ButtonProps, 'disabled'>>) => {
 
 	return <button
 		type='button'
-		className={`rounded-full flex-shrink-0 flex-grow-0 flex items-center justify-center
-			${disabled ? 'bg-vscode-disabled-fg cursor-default' : 'bg-white cursor-pointer'}
+		className={`rounded-full flex-shrink-0 flex-grow-0 flex items-center justify-center transition-colors
+			${disabled ? 'bg-gray-300 cursor-default opacity-40' : 'bg-blue-500 hover:bg-blue-600 cursor-pointer'}
 			${className}
 		`}
-		// data-tooltip-id='void-tooltip'
-		// data-tooltip-content={'Send'}
-		// data-tooltip-place='left'
+		disabled={disabled}
 		{...props}
 	>
-		<IconArrowUp size={DEFAULT_BUTTON_SIZE} className="stroke-[2] p-[2px]" />
+		<svg width={DEFAULT_BUTTON_SIZE} height={DEFAULT_BUTTON_SIZE} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+			<path d="M12 4L12 20M12 4L6 10M12 4L18 10" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+		</svg>
 	</button>
 }
 
 export const ButtonStop = ({ className, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => {
 	return <button
-		className={`rounded-full flex-shrink-0 flex-grow-0 cursor-pointer flex items-center justify-center
-			bg-white
+		className={`rounded-full flex-shrink-0 flex-grow-0 cursor-pointer flex items-center justify-center transition-colors
+			bg-red-500 hover:bg-red-600
 			${className}
 		`}
 		type='button'
 		{...props}
 	>
-		<IconSquare size={DEFAULT_BUTTON_SIZE} className="stroke-[3] p-[7px]" />
+		<svg width={DEFAULT_BUTTON_SIZE} height={DEFAULT_BUTTON_SIZE} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+			<rect x="7" y="7" width="10" height="10" rx="2" fill="white" />
+		</svg>
 	</button>
 }
 
@@ -814,13 +953,15 @@ export const SelectedFiles = (
 				const thisKey = selection.type === 'CodeSelection' ? selection.type + selection.language + selection.range + selection.state.wasAddedAsCurrentFile + selection.uri.fsPath
 					: selection.type === 'File' ? selection.type + selection.language + selection.state.wasAddedAsCurrentFile + selection.uri.fsPath
 						: selection.type === 'Folder' ? selection.type + selection.language + selection.state + selection.uri.fsPath
-							: i
+							: selection.type === 'Branch' ? selection.type + selection.branchName
+								: i
 
 				const SelectionIcon = (
 					selection.type === 'File' ? File
 						: selection.type === 'Folder' ? Folder
 							: selection.type === 'CodeSelection' ? Text
-								: (undefined as never)
+								: selection.type === 'Branch' ? GitBranch
+									: (undefined as never)
 				)
 
 				return <div // container for summarybox and code
@@ -830,7 +971,7 @@ export const SelectedFiles = (
 					{/* tooltip for file path */}
 					<span className="truncate overflow-hidden text-ellipsis"
 						data-tooltip-id='void-tooltip'
-						data-tooltip-content={getRelative(selection.uri, accessor)}
+						data-tooltip-content={selection.type === 'Branch' ? `Branch diff: ${selection.branchName}` : getRelative(selection.uri, accessor)}
 						data-tooltip-place='top'
 						data-tooltip-delay-show={3000}
 					>
@@ -876,13 +1017,18 @@ export const SelectedFiles = (
 								else if (selection.type === 'Folder') {
 									// TODO!!! reveal in tree
 								}
+								else if (selection.type === 'Branch') {
+									// Branch selections are informational, no click action
+								}
 							}}
 						>
 							{<SelectionIcon size={10} />}
 
 							{ // file name and range
-								getBasename(selection.uri.fsPath)
-								+ (selection.type === 'CodeSelection' ? ` (${selection.range[0]}-${selection.range[1]})` : '')
+								selection.type === 'Branch'
+									? `Branch: ${selection.branchName}`
+									: getBasename(selection.uri.fsPath)
+									+ (selection.type === 'CodeSelection' ? ` (${selection.range[0]}-${selection.range[1]})` : '')
 							}
 
 							{selection.type === 'File' && selection.state.wasAddedAsCurrentFile && messageIdx === undefined && currentURI?.fsPath === selection.uri.fsPath ?
@@ -1230,7 +1376,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 			_mustInitialize.current = false
 		}
 
-	}, [chatMessage, mode, _justEnabledEdit, textAreaRefState, textAreaFnsRef.current, _justEnabledEdit.current, _mustInitialize.current])
+	}, [mode, textAreaRefState])
 
 	const onOpenEdit = () => {
 		setIsBeingEdited(true)
@@ -1313,7 +1459,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 			return null
 		}
 
-		chatbubbleContents = <voidChatArea
+		chatbubbleContents = <VoidChatArea
 			featureName='Chat'
 			onSubmit={onSubmit}
 			onAbort={onAbort}
@@ -1324,7 +1470,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 			selections={stagingSelections}
 			setSelections={setStagingSelections}
 		>
-			<voidInputBox2
+			<VoidInputBox2
 				enableAtToMention
 				ref={setTextAreaRef}
 				className='min-h-[81px] max-h-[500px] px-0.5'
@@ -1341,7 +1487,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 				fnsRef={textAreaFnsRef}
 				multiline={true}
 			/>
-		</voidChatArea>
+		</VoidChatArea>
 	}
 
 	const isMsgAfterCheckpoint = currCheckpointIdx !== undefined && currCheckpointIdx === messageIdx - 1
@@ -1516,6 +1662,13 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 	const isEmpty = !chatMessage.displayContent && !chatMessage.reasoning
 	if (isEmpty) return null
 
+	// Detect and extract implementation summary from the end of the response
+	const summaryMatch = isCommitted && chatMessage.displayContent
+		? chatMessage.displayContent.match(/\n---\n\*\*Summary\*\*\n([\s\S]*?)\n---\s*$/)
+		: null
+	const mainContent = summaryMatch ? chatMessage.displayContent.slice(0, summaryMatch.index) : chatMessage.displayContent
+	const summaryContent = summaryMatch ? summaryMatch[1] : null
+
 	return <>
 		{/* reasoning token */}
 		{hasReasoning &&
@@ -1534,16 +1687,32 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 		}
 
 		{/* assistant message */}
-		{chatMessage.displayContent &&
+		{mainContent &&
 			<div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
 				<ProseWrapper>
 					<ChatMarkdownRender
-						string={chatMessage.displayContent || ''}
+						string={mainContent || ''}
 						chatMessageLocation={chatMessageLocation}
 						isApplyEnabled={true}
 						isLinkDetectionEnabled={true}
 					/>
 				</ProseWrapper>
+			</div>
+		}
+
+		{/* implementation summary card */}
+		{summaryContent &&
+			<div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
+				<SummaryWrapper>
+					<SmallProseWrapper>
+						<ChatMarkdownRender
+							string={summaryContent}
+							chatMessageLocation={chatMessageLocation}
+							isApplyEnabled={false}
+							isLinkDetectionEnabled={true}
+						/>
+					</SmallProseWrapper>
+				</SummaryWrapper>
 			</div>
 		}
 	</>
@@ -1553,21 +1722,96 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 const ReasoningWrapper = ({ isDoneReasoning, isStreaming, children }: { isDoneReasoning: boolean, isStreaming: boolean, children: React.ReactNode }) => {
 	const isDone = isDoneReasoning || !isStreaming
 	const isWriting = !isDone
+	const [userToggled, setUserToggled] = useState(false)
 	const [isOpen, setIsOpen] = useState(isWriting)
+	const [startTime] = useState(() => Date.now())
+	const [elapsedMs, setElapsedMs] = useState(0)
+
 	useEffect(() => {
-		if (!isWriting) setIsOpen(false) // if just finished reasoning, close
-	}, [isWriting])
-	return <ToolHeaderWrapper title='Reasoning' desc1={isWriting ? <IconLoading /> : ''} isOpen={isOpen} onClick={() => setIsOpen(v => !v)}>
-		<ToolChildrenWrapper>
+		if (isWriting) {
+			const interval = setInterval(() => setElapsedMs(Date.now() - startTime), 500)
+			return () => clearInterval(interval)
+		}
+	}, [isWriting, startTime])
+
+	useEffect(() => {
+		if (!isWriting && !userToggled) setIsOpen(false)
+	}, [isWriting, userToggled])
+
+	const durationSec = Math.round(elapsedMs / 1000)
+	const durationLabel = isWriting
+		? null
+		: durationSec > 0 ? `${durationSec}s` : '<1s'
+
+	return <div className='thought-bubble'>
+		<div
+			className='thought-bubble-header'
+			onClick={() => { setUserToggled(true); setIsOpen(v => !v) }}
+		>
+			<ChevronRight
+				size={14}
+				className='thought-bubble-chevron'
+				style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
+			/>
+			<svg className='thought-bubble-icon' width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+				<path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/>
+				<line x1="9" y1="21" x2="15" y2="21"/>
+				<line x1="10" y1="23" x2="14" y2="23"/>
+			</svg>
+			<span className='thought-bubble-label'>Reasoning</span>
+			{isWriting
+				? <span className='thought-bubble-thinking'>Thinking...</span>
+				: <span className='thought-bubble-duration'>Thought for {durationLabel}</span>
+			}
+		</div>
+		<div
+			className='thought-bubble-content'
+			style={{
+				maxHeight: isOpen ? '2000px' : '0px',
+				opacity: isOpen ? 1 : 0,
+				padding: isOpen ? undefined : '0 10px',
+			}}
+		>
 			<div className='!select-text cursor-auto'>
 				{children}
 			</div>
-		</ToolChildrenWrapper>
-	</ToolHeaderWrapper>
+		</div>
+	</div>
 }
 
 
 
+
+const SummaryWrapper = ({ children }: { children: React.ReactNode }) => {
+	const [isOpen, setIsOpen] = useState(true) // default expanded
+
+	return <div className='thought-bubble' style={{ borderLeft: '2px solid rgba(59, 130, 246, 0.5)' }}>
+		<div
+			className='thought-bubble-header'
+			onClick={() => setIsOpen(v => !v)}
+		>
+			<ChevronRight
+				size={14}
+				className='thought-bubble-chevron'
+				style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
+			/>
+			<Check size={14} style={{ opacity: 0.7 }} />
+			<span className='thought-bubble-label'>Summary</span>
+		</div>
+		<div
+			className='thought-bubble-content'
+			style={{
+				maxHeight: isOpen ? '2000px' : '0px',
+				opacity: isOpen ? 1 : 0,
+				padding: isOpen ? undefined : '0 10px',
+			}}
+		>
+			<div className='!select-text cursor-auto'>
+				{children}
+			</div>
+		</div>
+	</div>
+}
 
 // should either be past or "-ing" tense, not present tense. Eg. when the LLM searches for something, the user expects it to say "I searched for X" or "I am searching for X". Not "I search X".
 
@@ -1596,8 +1840,53 @@ const titleOfBuiltinToolName = {
 
 	'read_lint_errors': { done: `Read lint errors`, proposed: 'Read lint errors', running: loadingTitleWrapper('Reading lint errors') },
 	'search_in_file': { done: 'Searched in file', proposed: 'Search in file', running: loadingTitleWrapper('Searching in file') },
+	'web_search': { done: 'Searched web', proposed: 'Search web', running: loadingTitleWrapper('Searching web') },
+	'spawn_subagent': { done: 'Spawned subagent', proposed: 'Spawn subagent', running: loadingTitleWrapper('Spawning subagent') },
+	'fetch_rules': { done: 'Fetched rules', proposed: 'Fetch rules', running: loadingTitleWrapper('Fetching rules') },
+	'codebase_search': { done: 'Searched codebase', proposed: 'Search codebase', running: loadingTitleWrapper('Searching codebase') },
+	'run_verification': { done: 'Ran verification', proposed: 'Run verification', running: loadingTitleWrapper('Running verification') },
+	'git_create_branch': { done: 'Created branch', proposed: 'Create branch', running: loadingTitleWrapper('Creating branch') },
+	'git_commit': { done: 'Committed', proposed: 'Commit', running: loadingTitleWrapper('Committing') },
+	'git_push': { done: 'Pushed', proposed: 'Push', running: loadingTitleWrapper('Pushing') },
+	'create_pull_request': { done: 'Created PR', proposed: 'Create PR', running: loadingTitleWrapper('Creating PR') },
+	'create_diagram': { done: 'Created diagram', proposed: 'Create diagram', running: loadingTitleWrapper('Creating diagram') },
+	'edit_notebook': { done: 'Edited notebook', proposed: 'Edit notebook', running: loadingTitleWrapper('Editing notebook') },
+	'reapply_edit': { done: 'Reapplied edit', proposed: 'Reapply edit', running: loadingTitleWrapper('Reapplying edit') },
+	'ask_user': { done: 'Asked user', proposed: 'Ask user', running: loadingTitleWrapper('Asking user') },
+	'grep': { done: 'Searched (grep)', proposed: 'Search (grep)', running: loadingTitleWrapper('Searching (grep)') },
+	'update_memory': { done: 'Updated memory', proposed: 'Update memory', running: loadingTitleWrapper('Updating memory') },
+	'todo_write': { done: 'Updated todos', proposed: 'Update todos', running: loadingTitleWrapper('Updating todos') },
 } as const satisfies Record<BuiltinToolName, { done: any, proposed: any, running: any }>
 
+
+// Compact pill for read-only tools (read_file, ls_dir, search, etc.)
+type ToolPillStatus = 'running' | 'success' | 'error' | 'pending'
+const ToolPill = ({ toolName, detail, status, onClick, children }: {
+	toolName: string, detail?: string, status: ToolPillStatus, onClick?: () => void, children?: React.ReactNode
+}) => {
+	const [isOpen, setIsOpen] = useState(false)
+	const dotClass = status === 'success' ? 'tool-pill-dot-success'
+		: status === 'running' ? 'tool-pill-dot-running'
+			: status === 'error' ? 'tool-pill-dot-error'
+				: 'tool-pill-dot-pending'
+
+	return <div>
+		<div
+			className={`tool-pill ${status === 'running' ? 'tool-pill-shimmer' : ''}`}
+			onClick={() => { if (children) setIsOpen(v => !v); if (onClick) onClick() }}
+		>
+			{children !== undefined && <ChevronRight
+				size={12}
+				className='tool-pill-icon'
+				style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }}
+			/>}
+			<span className='tool-pill-name'>{toolName}</span>
+			{detail && <span className='tool-pill-detail'>{detail}</span>}
+			<span className={`tool-pill-dot ${dotClass}`} />
+		</div>
+		{children && isOpen && <div className='mt-1'>{children}</div>}
+	</div>
+}
 
 const getTitle = (toolMessage: Pick<ChatMessage & { role: 'tool' }, 'name' | 'type' | 'mcpServerName'>): React.ReactNode => {
 	const t = toolMessage
@@ -1731,9 +2020,10 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
 		},
 		'read_lint_errors': () => {
 			const toolParams = _toolParams as BuiltinToolCallParams['read_lint_errors']
+			const firstUri = toolParams.uris?.[0]
 			return {
-				desc1: getBasename(toolParams.uri.fsPath),
-				desc1Info: getRelative(toolParams.uri, accessor),
+				desc1: firstUri ? getBasename(firstUri.fsPath) : 'multiple files',
+				desc1Info: firstUri ? getRelative(firstUri, accessor) : `${toolParams.uris?.length ?? 0} files`,
 			}
 		}
 	}
@@ -1746,15 +2036,39 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
 	}
 }
 
+const RiskBadge = ({ riskLevel }: { riskLevel: string }) => {
+	const badgeClass = riskLevel === 'safe' ? 'risk-badge-safe'
+		: riskLevel === 'moderate' ? 'risk-badge-moderate'
+			: riskLevel === 'dangerous' ? 'risk-badge-dangerous'
+				: 'risk-badge-critical'
+	const label = riskLevel === 'safe' ? 'Safe'
+		: riskLevel === 'moderate' ? 'Moderate'
+			: riskLevel === 'dangerous' ? 'Risky'
+				: 'Critical'
+	return <span className={`risk-badge ${badgeClass}`}>
+		{riskLevel === 'critical' && <AlertTriangle size={10} />}
+		{label}
+	</span>
+}
+
+const SandboxBadge = ({ mode }: { mode: string }) => {
+	if (mode === 'off') return null
+	const isE2B = mode === 'e2b'
+	return <span className={`sandbox-badge ${isE2B ? 'sandbox-badge-e2b' : 'sandbox-badge-local'}`}>
+		{isE2B ? '☁ E2B' : '🛡 Sandboxed'}
+	</span>
+}
+
 const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) => {
 	const accessor = useAccessor()
 	const chatThreadsService = accessor.get('IChatThreadService')
 	const metricsService = accessor.get('IMetricsService')
 	const voidSettingsService = accessor.get('IvoidSettingsService')
+	const sandboxService = accessor.get('ISandboxService')
 	const voidSettingsState = useSettingsState()
 
 	const onAccept = useCallback(() => {
-		try { // this doesn't need to be wrapped in try/catch anymore
+		try {
 			const threadId = chatThreadsService.state.currentThreadId
 			chatThreadsService.approveLatestToolRequest(threadId)
 			metricsService.capture('Tool Request Accepted', {})
@@ -1768,6 +2082,23 @@ const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) =>
 		} catch (e) { console.error('Error while approving message in chat:', e) }
 		metricsService.capture('Tool Request Rejected', {})
 	}, [chatThreadsService, metricsService])
+
+	const approvalType = isABuiltinToolName(toolName) ? approvalTypeOfBuiltinToolName[toolName] : 'MCP tools'
+
+	// Risk badge for terminal commands
+	let riskBadge: React.ReactNode = null
+	let sandboxBadge: React.ReactNode = null
+	if (approvalType === 'terminal') {
+		const thread = chatThreadsService.getCurrentThread()
+		const lastToolMsg = thread.messages.findLast(m => m.role === 'tool' && m.name === toolName && m.type === 'tool_request')
+		if (lastToolMsg && lastToolMsg.role === 'tool' && ('params' in lastToolMsg) && lastToolMsg.params && 'command' in (lastToolMsg.params as any)) {
+			const command = (lastToolMsg.params as any).command as string
+			const risk = sandboxService.classifyRisk(command)
+			riskBadge = <RiskBadge riskLevel={risk} />
+		}
+		const sandboxMode = sandboxService.getSandboxMode()
+		sandboxBadge = <SandboxBadge mode={sandboxMode} />
+	}
 
 	const approveButton = (
 		<button
@@ -1801,15 +2132,68 @@ const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) =>
 		</button>
 	)
 
-	const approvalType = isABuiltinToolName(toolName) ? approvalTypeOfBuiltinToolName[toolName] : 'MCP tools'
 	const approvalToggle = approvalType ? <div key={approvalType} className="flex items-center ml-2 gap-x-1">
 		<ToolApprovalTypeSwitch size='xs' approvalType={approvalType} desc={`Auto-approve ${approvalType}`} />
 	</div> : null
 
-	return <div className="flex gap-2 mx-0.5 items-center">
+	return <div className="flex gap-2 mx-0.5 items-center flex-wrap">
 		{approveButton}
 		{cancelButton}
+		{riskBadge}
+		{sandboxBadge}
 		{approvalToggle}
+	</div>
+}
+
+
+// ask_user clarification tool — shows a text input instead of Accept/Reject buttons
+const AskUserInput = ({ question }: { question: string }) => {
+	const accessor = useAccessor()
+	const chatThreadsService = accessor.get('IChatThreadService')
+	const [response, setResponse] = useState('')
+
+	const onSubmit = useCallback(() => {
+		if (!response.trim()) return
+		const threadId = chatThreadsService.state.currentThreadId
+		chatThreadsService.respondToAskUser(threadId, response.trim())
+		setResponse('')
+	}, [response, chatThreadsService])
+
+	const onKeyDown = useCallback((e: React.KeyboardEvent) => {
+		if (e.key === 'Enter' && !e.shiftKey) {
+			e.preventDefault()
+			onSubmit()
+		}
+	}, [onSubmit])
+
+	return <div className="mx-0.5 mt-1">
+		<div className="p-3 rounded border border-[#8b5cf6]/30 bg-[#8b5cf6]/5">
+			<div className="text-sm text-[var(--void-fg-3)] mb-2 font-medium">🤔 Clarification needed</div>
+			<div className="text-sm text-[var(--void-fg-2)] mb-3">{question}</div>
+			<div className="flex gap-2">
+				<textarea
+					value={response}
+					onChange={e => setResponse(e.target.value)}
+					onKeyDown={onKeyDown}
+					placeholder="Type your response..."
+					rows={2}
+					className="flex-1 p-2 text-sm rounded border border-[var(--void-border-2)] bg-[var(--void-bg-1)] text-[var(--void-fg-2)] resize-none focus:outline-none focus:border-[#8b5cf6]"
+				/>
+				<button
+					onClick={onSubmit}
+					disabled={!response.trim()}
+					className={`
+						px-3 py-1 self-end
+						bg-[#8b5cf6] text-white
+						hover:bg-[#7c3aed]
+						disabled:opacity-40 disabled:cursor-not-allowed
+						rounded text-sm font-medium
+					`}
+				>
+					Send
+				</button>
+			</div>
+		</div>
 	</div>
 }
 
@@ -1847,7 +2231,7 @@ export const ListableToolItem = ({ name, onClick, isSmall, className, showDot }:
 const EditToolChildren = ({ uri, code, type }: { uri: URI | undefined, code: string, type: 'diff' | 'rewrite' }) => {
 
 	const content = type === 'diff' ?
-		<voidDiffEditor uri={uri} searchReplaceBlocks={code} />
+		<VoidDiffEditor uri={uri} searchReplaceBlocks={code} />
 		: <ChatMarkdownRender string={`\`\`\`\n${code}\n\`\`\``} codeURI={uri} chatMessageLocation={undefined} />
 
 	return <div className='!select-text cursor-auto'>
@@ -1945,6 +2329,7 @@ const CommandTool = ({ toolMessage, type, threadId }: { threadId: string } & ({
 	const commandService = accessor.get('ICommandService')
 	const terminalToolsService = accessor.get('ITerminalToolService')
 	const toolsService = accessor.get('IToolsService')
+	const sandboxService = accessor.get('ISandboxService')
 	const isError = false
 	const title = getTitle(toolMessage)
 	const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
@@ -1955,7 +2340,12 @@ const CommandTool = ({ toolMessage, type, threadId }: { threadId: string } & ({
 
 	const isRejected = toolMessage.type === 'rejected'
 	const { rawParams, params } = toolMessage
-	const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError, icon, isRejected, }
+	// Sandbox mode info badge
+	const sandboxMode = sandboxService.getSandboxMode()
+	const sandboxInfo = sandboxMode !== 'off'
+		? (sandboxMode === 'e2b' ? '☁ E2B Cloud Sandbox' : '🛡 Sandboxed')
+		: undefined
+	const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError, icon, isRejected, info: sandboxInfo, }
 
 
 	const effect = async () => {
@@ -2046,7 +2436,7 @@ const MCPToolWrapper = ({ toolMessage }: WrapperProps<string>) => {
 	const icon = null
 
 
-	if (toolMessage.type === 'running_now') return null // do not show running
+	if (toolMessage.type === 'running_now') return <ToolPill toolName={`Calling ${toolMessage.mcpServerName || 'MCP'}`} detail={removeMCPToolNamePrefix(toolMessage.name)} status='running' />
 
 	const isError = false
 	const isRejected = toolMessage.type === 'rejected'
@@ -2054,7 +2444,7 @@ const MCPToolWrapper = ({ toolMessage }: WrapperProps<string>) => {
 	const componentParams: ToolHeaderParams = { title, desc1, isError, icon, isRejected, }
 
 	const paramsStr = JSON.stringify(params, null, 2)
-	componentParams.desc2 = <CopyButton codeStr={paramsStr} toolTipName={`Copy inputs: ${paramsStr}`} />
+	componentParams.desc2 = <CopyButton codeStr={paramsStr} toolTipName={`Copy inputs: ${paramsStr.slice(0, 80)}${paramsStr.length > 80 ? '...' : ''}`} />
 
 	componentParams.info = !toolMessage.mcpServerName ? 'MCP tool not found' : undefined
 
@@ -2101,8 +2491,8 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
 			const icon = null
 
-			if (toolMessage.type === 'tool_request') return null // do not show past requests
-			if (toolMessage.type === 'running_now') return null // do not show running
+			if (toolMessage.type === 'tool_request') return null
+			if (toolMessage.type === 'running_now') return <ToolPill toolName='Reading' detail={String(desc1)} status='running' />
 
 			const isError = false
 			const isRejected = toolMessage.type === 'rejected'
@@ -2148,8 +2538,8 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
 			const icon = null
 
-			if (toolMessage.type === 'tool_request') return null // do not show past requests
-			if (toolMessage.type === 'running_now') return null // do not show running
+			if (toolMessage.type === 'tool_request') return null
+			if (toolMessage.type === 'running_now') return <ToolPill toolName='Inspecting tree' detail={String(desc1)} status='running' />
 
 			const isError = false
 			const isRejected = toolMessage.type === 'rejected'
@@ -2196,8 +2586,8 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
 			const icon = null
 
-			if (toolMessage.type === 'tool_request') return null // do not show past requests
-			if (toolMessage.type === 'running_now') return null // do not show running
+			if (toolMessage.type === 'tool_request') return null
+			if (toolMessage.type === 'running_now') return <ToolPill toolName='Inspecting' detail={String(desc1)} status='running' />
 
 			const isError = false
 			const isRejected = toolMessage.type === 'rejected'
@@ -2251,8 +2641,8 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
 			const icon = null
 
-			if (toolMessage.type === 'tool_request') return null // do not show past requests
-			if (toolMessage.type === 'running_now') return null // do not show running
+			if (toolMessage.type === 'tool_request') return null
+			if (toolMessage.type === 'running_now') return <ToolPill toolName='Searching files' detail={String(desc1)} status='running' />
 
 			const { rawParams, params } = toolMessage
 			const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError, icon, isRejected, }
@@ -2300,8 +2690,8 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
 			const icon = null
 
-			if (toolMessage.type === 'tool_request') return null // do not show past requests
-			if (toolMessage.type === 'running_now') return null // do not show running
+			if (toolMessage.type === 'tool_request') return null
+			if (toolMessage.type === 'running_now') return <ToolPill toolName='Searching' detail={String(desc1)} status='running' />
 
 			const { rawParams, params } = toolMessage
 			const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError, icon, isRejected, }
@@ -2355,8 +2745,8 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor);
 			const icon = null;
 
-			if (toolMessage.type === 'tool_request') return null // do not show past requests
-			if (toolMessage.type === 'running_now') return null // do not show running
+			if (toolMessage.type === 'tool_request') return null
+			if (toolMessage.type === 'running_now') return <ToolPill toolName='Searching in file' detail={String(desc1)} status='running' />
 
 			const { rawParams, params } = toolMessage;
 			const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError, icon, isRejected };
@@ -2399,25 +2789,27 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 
 			const title = getTitle(toolMessage)
 
-			const { uri } = toolMessage.params ?? {}
+			const uris = (toolMessage.params as any)?.uris ?? []
+			const firstUri = uris?.[0]
 			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
 			const icon = null
 
-			if (toolMessage.type === 'tool_request') return null // do not show past requests
-			if (toolMessage.type === 'running_now') return null // do not show running
+			if (toolMessage.type === 'tool_request') return null
+			if (toolMessage.type === 'running_now') return <ToolPill toolName='Reading lint errors' detail={String(desc1)} status='running' />
 
 			const isError = false
 			const isRejected = toolMessage.type === 'rejected'
 			const { rawParams, params } = toolMessage
 			const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError, icon, isRejected, }
 
-			componentParams.info = getRelative(uri, accessor) // full path
+			if (firstUri) componentParams.info = getRelative(firstUri, accessor)
 
 			if (toolMessage.type === 'success') {
 				const { result } = toolMessage
-				componentParams.onClick = () => { voidOpenFileFn(params.uri, accessor) }
-				if (result.lintErrors)
-					componentParams.children = <LintErrorChildren lintErrors={result.lintErrors} />
+				if (params.uris?.[0]) componentParams.onClick = () => { voidOpenFileFn(params.uris[0], accessor) }
+				const allErrors = result.allLintErrors?.flatMap(e => e.lintErrors) ?? []
+				if (allErrors.length > 0)
+					componentParams.children = <LintErrorChildren lintErrors={allErrors} />
 				else
 					componentParams.children = `No lint errors found.`
 
@@ -2670,29 +3062,48 @@ const Checkpoint = ({ message, threadId, messageIdx, isCheckpointGhost, threadIs
 
 // ==================== Plan Message Component ====================
 
-const PlanTaskStatusIcon = ({ status }: { status?: PlanItem['status'] }) => {
+const PlanTaskStatusIcon = ({ status, size = 16 }: { status?: PlanItem['status'], size?: number }) => {
 	switch (status) {
 		case 'in_progress':
-			return <Loader2 size={14} className='text-blue-400 animate-spin' />
+			return <Loader2 size={size} className='text-blue-400 animate-spin' />
 		case 'complete':
-			return <Check size={14} className='text-green-500' />
+			return <div className='plan-check-icon'>
+				<Check size={size - 2} className='text-white' strokeWidth={3} />
+			</div>
 		case 'failed':
-			return <X size={14} className='text-red-500' />
+			return <div className='plan-fail-icon'>
+				<X size={size - 2} className='text-white' strokeWidth={3} />
+			</div>
 		case 'skipped':
-			return <Minus size={14} className='text-void-fg-3' />
+			return <Minus size={size} className='text-void-fg-3 opacity-50' />
 		default: // pending or undefined
-			return <Circle size={14} className='text-void-fg-3' />
+			return <Circle size={size} className='text-void-fg-3 opacity-40' />
 	}
 }
 
 const PlanSizeBadge = ({ size }: { size?: PlanItem['size'] }) => {
 	if (!size) return null
-	const colors = {
-		S: 'bg-green-900/50 text-green-400',
-		M: 'bg-yellow-900/50 text-yellow-400',
-		L: 'bg-red-900/50 text-red-400',
+	const styles = {
+		S: 'plan-size-badge-s',
+		M: 'plan-size-badge-m',
+		L: 'plan-size-badge-l',
 	}
-	return <span className={`px-1.5 py-0.5 text-[10px] font-mono font-medium rounded ${colors[size]}`}>{size}</span>
+	return <span className={`plan-size-badge ${styles[size]}`}>{size}</span>
+}
+
+const PlanProgressBar = ({ completed, total }: { completed: number, total: number }) => {
+	const pct = total > 0 ? Math.round((completed / total) * 100) : 0
+	return (
+		<div className='plan-progress-container'>
+			<div className='plan-progress-track'>
+				<div
+					className='plan-progress-fill'
+					style={{ width: `${pct}%` }}
+				/>
+			</div>
+			<span className='plan-progress-label'>{completed}/{total} steps · {pct}%</span>
+		</div>
+	)
 }
 
 const PlanMessageComponent = ({ chatMessage, isCheckpointGhost, threadId, messageIdx }: {
@@ -2705,9 +3116,6 @@ const PlanMessageComponent = ({ chatMessage, isCheckpointGhost, threadId, messag
 	const chatThreadsService = accessor.get('IChatThreadService')
 	const streamState = useChatThreadsStreamState(threadId)
 
-	const statusLabel = chatMessage.status === 'draft' ? 'Draft' : chatMessage.status === 'executing' ? 'Executing...' : 'Completed'
-	const statusColor = chatMessage.status === 'draft' ? 'text-yellow-500' : chatMessage.status === 'executing' ? 'text-blue-400' : 'text-green-500'
-
 	const completedCount = chatMessage.items.filter(item => item.completed || item.status === 'complete').length
 	const totalCount = chatMessage.items.length
 
@@ -2719,129 +3127,125 @@ const PlanMessageComponent = ({ chatMessage, isCheckpointGhost, threadId, messag
 	// Check if we're in a step-by-step pause (awaiting_user during plan execution)
 	const isAwaitingContinue = streamState?.isRunning === 'awaiting_user' && chatMessage.status === 'executing'
 
-	return <div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
-		<div className='flex flex-col gap-2'>
-			{/* Plan header with status */}
-			<div className='flex items-center justify-between'>
-				<div className='flex items-center gap-2'>
-					<Flag size={14} className={statusColor} />
-					<span className={`text-xs font-medium ${statusColor}`}>{statusLabel}</span>
-					{totalCount > 0 && (
-						<span className='text-xs text-void-fg-3'>({completedCount}/{totalCount})</span>
-					)}
-				</div>
+	const isDraft = chatMessage.status === 'draft'
+	const isExecuting = chatMessage.status === 'executing'
+	const isCompleted = chatMessage.status === 'completed'
+
+	return <div className={`plan-card ${isCheckpointGhost ? 'opacity-50 pointer-events-none' : ''}`}>
+
+		{/* ── Sticky Action Header ── */}
+		<div className='plan-header'>
+			{/* Left: status */}
+			<div className='plan-header-left'>
+				<div className={`plan-status-dot ${isDraft ? 'plan-status-draft' : isExecuting ? 'plan-status-executing' : 'plan-status-completed'}`} />
+				<span className='plan-header-title'>Plan</span>
+				<span className={`plan-status-badge ${isDraft ? 'plan-badge-draft' : isExecuting ? 'plan-badge-executing' : 'plan-badge-completed'}`}>
+					{isDraft ? 'Awaiting Approval' : isExecuting ? 'Executing…' : 'Completed'}
+				</span>
 			</div>
 
-			{/* Interactive task list */}
-			{chatMessage.items.length > 0 && (
-				<div className='flex flex-col gap-1 py-1'>
-					{chatMessage.items.map((item, idx) => (
-						<div key={item.id ?? idx} className={`flex items-start gap-2 py-0.5 ${item.status === 'complete' ? 'opacity-60' : ''}`}>
-							<div className='mt-0.5 flex-shrink-0'>
-								<PlanTaskStatusIcon status={item.status} />
-							</div>
-							<div className='flex-1 min-w-0'>
-								<span className={`text-xs ${item.status === 'complete' ? 'line-through text-void-fg-3' : 'text-void-fg-1'}`}>
-									{item.text}
-								</span>
-								<div className='flex items-center gap-1 mt-0.5 flex-wrap'>
-									{item.size && <PlanSizeBadge size={item.size} />}
-									{item.files?.map((file, fIdx) => (
-										<span key={fIdx} className='text-[10px] text-blue-400 bg-blue-900/30 px-1 py-0.5 rounded font-mono'>
-											{file.split('/').pop()}
-										</span>
-									))}
-								</div>
-							</div>
-						</div>
-					))}
-				</div>
-			)}
-
-			{/* Plan content rendered as markdown (collapsed behind details for rich plans) */}
-			<details className='text-xs'>
-				<summary className='cursor-pointer text-void-fg-3 hover:text-void-fg-2 select-none'>Full plan details</summary>
-				<div className='mt-1'>
-					<ProseWrapper>
-						<ChatMarkdownRender
-							string={chatMessage.displayContent || chatMessage.content}
-							chatMessageLocation={chatMessageLocation}
-							isApplyEnabled={false}
-							isLinkDetectionEnabled={true}
-						/>
-					</ProseWrapper>
-				</div>
-			</details>
-
-			{/* Action buttons */}
-			<div className='flex items-center gap-2'>
-				{/* Build button - execute all at once */}
-				{chatMessage.status === 'draft' && (
-					<button
-						className='px-3 py-1.5 text-xs font-medium rounded
-							bg-green-600 hover:bg-green-700 text-white
-							transition-colors cursor-pointer select-none'
-						onClick={() => {
-							chatThreadsService.executePlan(threadId, messageIdx)
-						}}
-					>
-						Build
-					</button>
+			{/* Right: action buttons */}
+			<div className='plan-header-actions'>
+				{isDraft && (
+					<>
+						<button
+							className='plan-btn plan-btn-primary'
+							onClick={() => chatThreadsService.executePlan(threadId, messageIdx)}
+						>
+							<Check size={13} strokeWidth={2.5} />
+							<span>Approve & Implement</span>
+						</button>
+						<button
+							className='plan-btn plan-btn-secondary'
+							onClick={() => chatThreadsService.executePlanStepByStep(threadId, messageIdx)}
+						>
+							<ChevronRight size={13} strokeWidth={2.5} />
+							<span>Step-by-Step</span>
+						</button>
+						<button
+							className='plan-btn plan-btn-outline'
+							onClick={async () => await chatThreadsService.focusCurrentChat()}
+						>
+							<Pencil size={12} strokeWidth={2} />
+							<span>Revise</span>
+						</button>
+					<CopyButton
+						codeStr={chatMessage.items.map((item: PlanItem) => `- [ ] ${item.text}${item.files?.length ? ` (${item.files.join(', ')})` : ''}`).join('\n')}
+						toolTipName='Copy plan as markdown'
+					/>
+					</>
 				)}
-
-				{/* Build Step-by-Step button */}
-				{chatMessage.status === 'draft' && (
-					<button
-						className='px-3 py-1.5 text-xs font-medium rounded
-							bg-blue-600 hover:bg-blue-700 text-white
-							transition-colors cursor-pointer select-none'
-						onClick={() => {
-							chatThreadsService.executePlanStepByStep(threadId, messageIdx)
-						}}
-					>
-						Build Step-by-Step
-					</button>
-				)}
-
-				{/* Revise button - focuses chat input for revision feedback */}
-				{chatMessage.status === 'draft' && (
-					<button
-						className='px-3 py-1.5 text-xs font-medium rounded
-							bg-void-bg-2 hover:bg-void-bg-3 text-void-fg-2
-							transition-colors cursor-pointer select-none'
-						onClick={async () => {
-							await chatThreadsService.focusCurrentChat()
-						}}
-					>
-						Revise
-					</button>
-				)}
-
-				{/* Continue button - shown during step-by-step pause */}
 				{isAwaitingContinue && (
 					<button
-						className='px-3 py-1.5 text-xs font-medium rounded
-							bg-blue-600 hover:bg-blue-700 text-white
-							transition-colors cursor-pointer select-none'
-						onClick={() => {
-							chatThreadsService.continuePlanExecution(threadId)
-						}}
+						className='plan-btn plan-btn-primary'
+						onClick={() => chatThreadsService.continuePlanExecution(threadId)}
 					>
-						Continue
+						<ChevronRight size={13} strokeWidth={2.5} />
+						<span>Continue</span>
 					</button>
 				)}
+				{isCompleted && (
+					<div className='plan-completed-badge'>
+						<Check size={14} strokeWidth={2.5} />
+						<span>All steps completed</span>
+					</div>
+				)}
 			</div>
-
-			{/* Progress bar during execution */}
-			{chatMessage.status === 'executing' && totalCount > 0 && (
-				<div className='w-full h-1.5 bg-void-bg-2 rounded-full overflow-hidden'>
-					<div
-						className='h-full bg-blue-500 transition-all duration-300 rounded-full'
-						style={{ width: `${(completedCount / totalCount) * 100}%` }}
-					/>
-				</div>
-			)}
 		</div>
+
+		{/* ── Progress Bar (executing) ── */}
+		{(isExecuting || isCompleted) && totalCount > 0 && (
+			<PlanProgressBar completed={completedCount} total={totalCount} />
+		)}
+
+		{/* ── Interactive Task List ── */}
+		{chatMessage.items.length > 0 && (
+			<div className='plan-task-list'>
+				{chatMessage.items.map((item, idx) => {
+					const isItemComplete = item.status === 'complete' || item.completed
+					const isItemActive = item.status === 'in_progress'
+					return (
+						<div
+							key={item.id ?? idx}
+							className={`plan-task-item ${isItemComplete ? 'plan-task-done' : ''} ${isItemActive ? 'plan-task-active' : ''}`}
+						>
+							<div className='plan-task-icon'>
+								<PlanTaskStatusIcon status={item.status} size={16} />
+							</div>
+							<div className='plan-task-content'>
+								<span className={`plan-task-text ${isItemComplete ? 'plan-task-text-done' : ''}`}>
+									{item.text}
+								</span>
+								{(item.size || (item.files && item.files.length > 0)) && (
+									<div className='plan-task-meta'>
+										{item.size && <PlanSizeBadge size={item.size} />}
+										{item.files?.map((file, fIdx) => (
+											<span key={fIdx} className='plan-file-chip'>
+												{file.split('/').pop()}
+											</span>
+										))}
+									</div>
+								)}
+							</div>
+						</div>
+					)
+				})}
+			</div>
+		)}
+
+		{/* ── Full Markdown Content ── */}
+		{(chatMessage.displayContent || chatMessage.content) && (
+			<div className='plan-body'>
+				<ProseWrapper>
+					<ChatMarkdownRender
+						string={chatMessage.displayContent || chatMessage.content}
+						chatMessageLocation={chatMessageLocation}
+						isApplyEnabled={false}
+						isLinkDetectionEnabled={true}
+					/>
+				</ProseWrapper>
+			</div>
+		)}
 	</div>
 }
 
@@ -2908,7 +3312,10 @@ const _ChatBubble = ({ threadId, chatMessage, currCheckpointIdx, isCommitted, me
 				</div>
 				{chatMessage.type === 'tool_request' ?
 					<div className={`${isCheckpointGhost ? 'opacity-50 pointer-events-none' : ''}`}>
-						<ToolRequestAcceptRejectButtons toolName={chatMessage.name} />
+						{chatMessage.name === 'ask_user' && 'params' in chatMessage && chatMessage.params
+							? <AskUserInput question={(chatMessage.params as any).question || chatMessage.content || 'The AI needs clarification.'} />
+							: <ToolRequestAcceptRejectButtons toolName={chatMessage.name} />
+						}
 					</div> : null}
 			</>
 		return null
@@ -2941,194 +3348,74 @@ const CommandBarInChat = () => {
 
 	const accessor = useAccessor()
 	const editCodeService = accessor.get('IEditCodeService')
-	const commandService = accessor.get('ICommandService')
+	const voidSettingsService = accessor.get('IvoidSettingsService')
 	const chatThreadsState = useChatThreadsState()
 	const commandBarState = useCommandBarState()
 	const chatThreadsStreamState = useChatThreadsStreamState(chatThreadsState.currentThreadId)
+	const settingsState = useSettingsState()
 
-	// (
-	// 	<IconShell1
-	// 		Icon={CopyIcon}
-	// 		onClick={copyChatToClipboard}
-	// 		data-tooltip-id='void-tooltip'
-	// 		data-tooltip-place='top'
-	// 		data-tooltip-content='Copy chat JSON'
-	// 	/>
-	// )
+	const autoAccept = settingsState.globalSettings.autoAcceptLLMChanges
 
 	const [fileDetailsOpenedState, setFileDetailsOpenedState] = useState<'auto-opened' | 'auto-closed' | 'user-opened' | 'user-closed'>('auto-closed');
 	const isFileDetailsOpened = fileDetailsOpenedState === 'auto-opened' || fileDetailsOpenedState === 'user-opened';
 
-
 	useEffect(() => {
-		// close the file details if there are no files
-		// this converts 'user-closed' to 'auto-closed'
 		if (numFilesChanged === 0) {
 			setFileDetailsOpenedState('auto-closed')
 		}
-		// open the file details if it hasnt been closed
-		if (numFilesChanged > 0 && fileDetailsOpenedState !== 'user-closed') {
-			setFileDetailsOpenedState('auto-opened')
+		if (numFilesChanged > 0) {
+			setFileDetailsOpenedState(prev => prev === 'user-closed' ? prev : 'auto-opened')
 		}
-	}, [fileDetailsOpenedState, setFileDetailsOpenedState, numFilesChanged])
-
+	}, [numFilesChanged])
 
 	const isFinishedMakingThreadChanges = (
-		// there are changed files
 		commandBarState.sortedURIs.length !== 0
-		// none of the files are streaming
 		&& commandBarState.sortedURIs.every(uri => !commandBarState.stateOfURI[uri.fsPath]?.isStreaming)
 	)
 
 	// ======== status of agent ========
-	// This icon answers the question "is the LLM doing work on this thread?"
-	// assume it is single threaded for now
-	// green = Running
-	// orange = Requires action
-	// dark = Done
-
 	const threadStatus = (
 		chatThreadsStreamState?.isRunning === 'awaiting_user' ? { title: 'Needs Approval', color: 'yellow', } as const
 			: chatThreadsStreamState?.isRunning ? { title: 'Running', color: 'orange', } as const
 				: { title: 'Done', color: 'dark', } as const
 	)
 
-
 	const threadStatusHTML = <StatusIndicator className='mx-1' indicatorColor={threadStatus.color} title={threadStatus.title} />
 
-
-	// ======== info about changes ========
-	// num files changed
-	// acceptall + rejectall
-	// popup info about each change (each with num changes + acceptall + rejectall of their own)
-
-	const numFilesChangedStr = numFilesChanged === 0 ? 'No files with changes'
-		: `${sortedCommandBarURIs.length} file${numFilesChanged === 1 ? '' : 's'} with changes`
-
-
-
-
-	const acceptRejectAllButtons = <div
-		// do this with opacity so that the height remains the same at all times
-		className={`flex items-center gap-0.5
-			${isFinishedMakingThreadChanges ? '' : 'opacity-0 pointer-events-none'}`
-		}
-	>
-		<IconShell1 // RejectAllButtonWrapper
-			// text="Reject All"
-			// className="text-xs"
-			Icon={X}
-			onClick={() => {
-				sortedCommandBarURIs.forEach(uri => {
-					editCodeService.acceptOrRejectAllDiffAreas({
-						uri,
-						removeCtrlKs: true,
-						behavior: "reject",
-						_addToHistory: true,
-					});
-				});
-			}}
-			data-tooltip-id='void-tooltip'
-			data-tooltip-place='top'
-			data-tooltip-content='Reject all'
-		/>
-
-		<IconShell1 // AcceptAllButtonWrapper
-			// text="Accept All"
-			// className="text-xs"
-			Icon={Check}
-			onClick={() => {
-				sortedCommandBarURIs.forEach(uri => {
-					editCodeService.acceptOrRejectAllDiffAreas({
-						uri,
-						removeCtrlKs: true,
-						behavior: "accept",
-						_addToHistory: true,
-					});
-				});
-			}}
-			data-tooltip-id='void-tooltip'
-			data-tooltip-place='top'
-			data-tooltip-content='Accept all'
-		/>
-
-
-
-	</div>
-
-
-	// !select-text cursor-auto
-	const fileDetailsContent = <div className="px-2 gap-1 w-full overflow-y-auto">
+	// ======== file pill list ========
+	const fileDetailsContent = <div className="review-bar-files">
 		{sortedCommandBarURIs.map((uri, i) => {
 			const basename = getBasename(uri.fsPath)
-
 			const { sortedDiffIds, isStreaming } = commandBarStateOfURI[uri.fsPath] ?? {}
 			const isFinishedMakingFileChanges = !isStreaming
-
 			const numDiffs = sortedDiffIds?.length || 0
 
-			const fileStatus = (isFinishedMakingFileChanges
-				? { title: 'Done', color: 'dark', } as const
-				: { title: 'Running', color: 'orange', } as const
-			)
-
-			const fileNameHTML = <div
-				className="flex items-center gap-1.5 text-void-fg-3 hover:brightness-125 transition-all duration-200 cursor-pointer"
-				onClick={() => voidOpenFileFn(uri, accessor)}
-			>
-				{/* <FileIcon size={14} className="text-void-fg-3" /> */}
-				<span className="text-void-fg-3">{basename}</span>
-			</div>
-
-
-
-
-			const detailsContent = <div className='flex px-4'>
-				<span className="text-void-fg-3 opacity-80">{numDiffs} diff{numDiffs !== 1 ? 's' : ''}</span>
-			</div>
-
-			const acceptRejectButtons = <div
-				// do this with opacity so that the height remains the same at all times
-				className={`flex items-center gap-0.5
-					${isFinishedMakingFileChanges ? '' : 'opacity-0 pointer-events-none'}
-				`}
-			>
-				{/* <JumpToFileButton
-					uri={uri}
-					data-tooltip-id='void-tooltip'
-					data-tooltip-place='top'
-					data-tooltip-content='Go to file'
-				/> */}
-				<IconShell1 // RejectAllButtonWrapper
-					Icon={X}
-					onClick={() => { editCodeService.acceptOrRejectAllDiffAreas({ uri, removeCtrlKs: true, behavior: "reject", _addToHistory: true, }); }}
-					data-tooltip-id='void-tooltip'
-					data-tooltip-place='top'
-					data-tooltip-content='Reject file'
-
-				/>
-				<IconShell1 // AcceptAllButtonWrapper
-					Icon={Check}
-					onClick={() => { editCodeService.acceptOrRejectAllDiffAreas({ uri, removeCtrlKs: true, behavior: "accept", _addToHistory: true, }); }}
-					data-tooltip-id='void-tooltip'
-					data-tooltip-place='top'
-					data-tooltip-content='Accept file'
-				/>
-
-			</div>
-
-			const fileStatusHTML = <StatusIndicator className='mx-1' indicatorColor={fileStatus.color} title={fileStatus.title} />
-
 			return (
-				// name, details
-				<div key={i} className="flex justify-between items-center">
-					<div className="flex items-center">
-						{fileNameHTML}
-						{detailsContent}
+				<div key={i} className="review-bar-file-row">
+					<div
+						className="review-bar-file-pill"
+						onClick={() => voidOpenFileFn(uri, accessor)}
+					>
+						<FileIcon size={13} className="review-bar-file-icon" />
+						<span className="review-bar-file-name">{basename}</span>
+						{numDiffs > 0 && <span className="review-bar-diff-badge">{numDiffs}</span>}
+						<span className={`review-bar-file-dot ${isFinishedMakingFileChanges ? 'review-bar-dot-done' : 'review-bar-dot-streaming'}`} />
 					</div>
-					<div className="flex items-center gap-2">
-						{acceptRejectButtons}
-						{fileStatusHTML}
+					<div className={`flex items-center gap-0.5 ${isFinishedMakingFileChanges ? '' : 'opacity-0 pointer-events-none'}`}>
+						<IconShell1
+							Icon={X}
+							onClick={() => { editCodeService.acceptOrRejectAllDiffAreas({ uri, removeCtrlKs: true, behavior: "reject", _addToHistory: true, }); }}
+							data-tooltip-id='void-tooltip'
+							data-tooltip-place='top'
+							data-tooltip-content='Reject file'
+						/>
+						<IconShell1
+							Icon={Check}
+							onClick={() => { editCodeService.acceptOrRejectAllDiffAreas({ uri, removeCtrlKs: true, behavior: "accept", _addToHistory: true, }); }}
+							data-tooltip-id='void-tooltip'
+							data-tooltip-place='top'
+							data-tooltip-content='Accept file'
+						/>
 					</div>
 				</div>
 			)
@@ -3150,9 +3437,11 @@ const CommandBarInChat = () => {
 				}}
 				xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"></polyline>
 			</svg>
-			{numFilesChangedStr}
+			{`${numFilesChanged} file${numFilesChanged === 1 ? '' : 's'} changed`}
 		</button>
 	)
+
+	if (numFilesChanged === 0) return null
 
 	return (
 		<>
@@ -3161,33 +3450,64 @@ const CommandBarInChat = () => {
 				<div
 					className={`
 						select-none
-						flex w-full rounded-t-lg bg-void-bg-3
+						flex flex-col w-full rounded-t-lg bg-void-bg-3
 						text-void-fg-3 text-xs text-nowrap
-
 						overflow-hidden transition-all duration-200 ease-in-out
-						${isFileDetailsOpened ? 'max-h-24' : 'max-h-0'}
+						${isFileDetailsOpened ? 'max-h-48' : 'max-h-0'}
 					`}
 				>
 					{fileDetailsContent}
 				</div>
 			</div>
-			{/* main content */}
-			<div
-				className={`
-					select-none
-					flex w-full rounded-t-lg bg-void-bg-3
-					text-void-fg-3 text-xs text-nowrap
-					border-t border-l border-r border-zinc-300/10
-
-					px-2 py-1
-					justify-between
-				`}
-			>
+			{/* review bar */}
+			<div className="review-bar">
 				<div className="flex gap-2 items-center">
 					{fileDetailsButton}
 				</div>
 				<div className="flex gap-2 items-center">
-					{acceptRejectAllButtons}
+					{/* auto-accept toggle */}
+					<div className="review-bar-auto-accept"
+						data-tooltip-id='void-tooltip'
+						data-tooltip-place='top'
+						data-tooltip-content={autoAccept ? 'Auto-accept is ON' : 'Auto-accept is OFF'}
+					>
+						<span className="text-void-fg-4 text-[10px] mr-1">Auto</span>
+						<button
+							type='button'
+							className={`review-bar-toggle ${autoAccept ? 'review-bar-toggle-on' : 'review-bar-toggle-off'}`}
+							onClick={() => {
+								voidSettingsService.setGlobalSetting('autoAcceptLLMChanges', !autoAccept)
+							}}
+						>
+							<span className={`review-bar-toggle-thumb ${autoAccept ? 'review-bar-toggle-thumb-on' : ''}`} />
+						</button>
+					</div>
+					{/* reject all */}
+					<button
+						type='button'
+						className={`review-bar-btn review-bar-btn-reject ${isFinishedMakingThreadChanges ? '' : 'opacity-40 pointer-events-none'}`}
+						onClick={() => {
+							sortedCommandBarURIs.forEach(uri => {
+								editCodeService.acceptOrRejectAllDiffAreas({ uri, removeCtrlKs: true, behavior: "reject", _addToHistory: true });
+							});
+						}}
+					>
+						<X size={13} />
+						Reject All
+					</button>
+					{/* accept all */}
+					<button
+						type='button'
+						className={`review-bar-btn review-bar-btn-keep ${isFinishedMakingThreadChanges ? '' : 'opacity-40 pointer-events-none'}`}
+						onClick={() => {
+							sortedCommandBarURIs.forEach(uri => {
+								editCodeService.acceptOrRejectAllDiffAreas({ uri, removeCtrlKs: true, behavior: "accept", _addToHistory: true });
+							});
+						}}
+					>
+						<Check size={13} />
+						Keep All
+					</button>
 					{threadStatusHTML}
 				</div>
 			</div>
@@ -3235,7 +3555,7 @@ const EditToolSoFar = ({ toolCallSoFar, }: { toolCallSoFar: RawToolCallObj }) =>
 
 // ==================== Chat Header ====================
 
-const ChatHeader = () => {
+const ChatHeader = ({ onOpenSentinel }: { onOpenSentinel?: () => void }) => {
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const accessor = useAccessor();
 	const chatThreadsService = accessor.get('IChatThreadService');
@@ -3253,7 +3573,7 @@ const ChatHeader = () => {
 
 	const hasMessages = (currentThread?.messages.length ?? 0) > 0;
 
-	return (
+	return (<>
 		<div className="relative flex items-center justify-between px-2 py-1.5 select-none flex-shrink-0">
 			{/* Left: Thread title tabs */}
 			<div className="flex items-center gap-0.5 min-w-0 flex-1 overflow-hidden">
@@ -3287,6 +3607,27 @@ const ChatHeader = () => {
 			<div className="flex items-center gap-0.5">
 				<button
 					className="p-1 rounded hover:bg-void-bg-2-hover text-void-fg-3 hover:text-void-fg-1 transition-colors"
+					onClick={async () => {
+						const prReviewService = accessor.get('IPRReviewService')
+						if (prReviewService.isReviewing()) return
+						chatThreadsService.openNewThread()
+						await chatThreadsService.focusCurrentChat()
+						// Trigger review via chat message
+						const threadId = chatThreadsService.state.currentThreadId
+						chatThreadsService.addUserMessageAndStreamResponse({
+							userMessage: 'Review my current changes and find issues. Analyze all modified files for bugs, security issues, missing error handling, race conditions, and code quality problems. Provide specific line-by-line feedback.',
+							threadId,
+						})
+					}}
+					data-tooltip-id='void-tooltip'
+					data-tooltip-content='Find Issues (Review Changes)'
+					data-tooltip-place='bottom'
+				>
+					<Search size={14} />
+				</button>
+
+				<button
+					className="p-1 rounded hover:bg-void-bg-2-hover text-void-fg-3 hover:text-void-fg-1 transition-colors"
 					onClick={() => {
 						chatThreadsService.openNewThread();
 						chatThreadsService.focusCurrentChat();
@@ -3307,6 +3648,18 @@ const ChatHeader = () => {
 				>
 					<Clock size={14} />
 				</button>
+
+				{onOpenSentinel && (
+					<button
+						className="p-1 rounded hover:bg-void-bg-2-hover text-void-fg-3 hover:text-emerald-400 transition-colors"
+						onClick={onOpenSentinel}
+						data-tooltip-id='void-tooltip'
+						data-tooltip-content='Sentinel - Code Review'
+						data-tooltip-place='bottom'
+					>
+						<Shield size={14} />
+					</button>
+				)}
 
 				<button
 					className="p-1 rounded hover:bg-void-bg-2-hover text-void-fg-3 hover:text-void-fg-1 transition-colors"
@@ -3333,14 +3686,15 @@ const ChatHeader = () => {
 				</button>
 			</div>
 
-			{/* History dropdown */}
-			<HistoryDropdown isOpen={historyOpen} onClose={() => setHistoryOpen(false)} />
 		</div>
-	);
+
+		{/* History modal — rendered as a centered overlay */}
+		<HistoryDropdown isOpen={historyOpen} onClose={() => setHistoryOpen(false)} />
+	</>);
 };
 
 
-export const SidebarChat = () => {
+export const SidebarChat = ({ onOpenSentinel }: { onOpenSentinel?: () => void }) => {
 	const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
 	const textAreaFnsRef = useRef<TextAreaFns | null>(null)
 
@@ -3500,7 +3854,17 @@ export const SidebarChat = () => {
 			key={'curr-streaming-tool'}
 			toolCallSoFar={toolCallSoFar}
 		/>
-			: null
+			: isABuiltinToolName(toolCallSoFar.name) ? <ToolPill
+				key={'curr-streaming-tool'}
+				toolName={titleOfBuiltinToolName[toolCallSoFar.name as BuiltinToolName].proposed as string}
+				detail={toolCallSoFar.rawParams.uri ? getBasename(toolCallSoFar.rawParams.uri) : toolCallSoFar.rawParams.query || toolCallSoFar.rawParams.command || ''}
+				status='running'
+			/>
+				: <ToolPill
+					key={'curr-streaming-tool'}
+					toolName={`Calling ${toolCallSoFar.name}`}
+					status='running'
+				/>
 		: null
 
 	const messagesHTML = <ScrollToBottomContainer
@@ -3788,7 +4152,7 @@ export const SidebarChat = () => {
 	const onKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
 		if (e.shiftKey && e.key === 'Tab') {
 			e.preventDefault()
-			const modes: ChatMode[] = ['agent', 'ask', 'plan', 'debug']
+			const modes: ChatMode[] = ['auto', 'build', 'plan', 'ask']
 			const currentIdx = modes.indexOf(settingsState.globalSettings.chatMode)
 			const nextIdx = (currentIdx + 1) % modes.length
 			voidSettingsService.setGlobalSetting('chatMode', modes[nextIdx])
@@ -3801,7 +4165,7 @@ export const SidebarChat = () => {
 		}
 	}, [onSubmit, onAbort, isRunning, settingsState.globalSettings.chatMode, voidSettingsService])
 
-	const inputChatArea = <voidChatArea
+	const inputChatArea = <VoidChatArea
 		featureName='Chat'
 		onSubmit={() => onSubmit()}
 		onAbort={onAbort}
@@ -3826,9 +4190,9 @@ export const SidebarChat = () => {
 		onDrop={onDrop}
 		onPaste={onPaste}
 	>
-		<voidInputBox2
+		<VoidInputBox2
 			enableAtToMention
-			className={`min-h-[140px] px-0.5 py-0.5`}
+			className={`min-h-[50px] px-0.5 py-0.5`}
 			placeholder={`Plan, @ for context, / for commands`}
 			onChangeText={onChangeText}
 			onKeyDown={onKeyDown}
@@ -3838,7 +4202,7 @@ export const SidebarChat = () => {
 			multiline={true}
 		/>
 
-	</voidChatArea>
+	</VoidChatArea>
 
 
 	const isLandingPage = previousMessages.length === 0
@@ -3876,7 +4240,10 @@ export const SidebarChat = () => {
 		ref={sidebarRef}
 		className='w-full h-full max-h-full flex flex-col overflow-auto'
 	>
-		{/* Input at top */}
+		{/* Flexible space above input to center it */}
+		<div className='flex-1' />
+
+		{/* Input centered */}
 		<ErrorBoundary>
 			{landingPageInput}
 		</ErrorBoundary>
@@ -3885,7 +4252,7 @@ export const SidebarChat = () => {
 		<div className='flex-1' />
 
 		{/* Past Chats pinned at bottom */}
-		<div className='px-4 pb-3'>
+		<div className='px-4 pb-0'>
 			{Object.keys(chatThreadsState.allThreads).length > 1 ?
 				<ErrorBoundary>
 					<PastThreadsList />
@@ -3921,18 +4288,45 @@ export const SidebarChat = () => {
 		<ErrorBoundary>
 			{messagesHTML}
 		</ErrorBoundary>
+		{/* Stop indicator removed — stop is handled by the submit button area */}
+		{/* Review bar for file changes */}
+		<ErrorBoundary>
+			<CommandBarInChat />
+		</ErrorBoundary>
 		<ErrorBoundary>
 			{threadPageInput}
 		</ErrorBoundary>
 	</div>
 
 
+	const [activeTab, setActiveTab] = useState<'chat' | 'changes'>('chat')
+	const commandBarState = useCommandBarState()
+	const changesCount = commandBarState.sortedURIs.length
+
 	return (
 		<div className='w-full h-full flex flex-col'>
-			<ChatHeader />
+			<ChatHeader onOpenSentinel={onOpenSentinel} />
+			{!isLandingPage && changesCount > 0 && (
+				<div className='flex border-b border-void-border-1 px-2'>
+					<button
+						className={`px-3 py-1.5 text-xs font-medium transition-colors ${activeTab === 'chat' ? 'text-void-fg-1 border-b-2 border-blue-400' : 'text-void-fg-3 hover:text-void-fg-1'}`}
+						onClick={() => setActiveTab('chat')}
+					>
+						Chat
+					</button>
+					<button
+						className={`px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1.5 ${activeTab === 'changes' ? 'text-void-fg-1 border-b-2 border-blue-400' : 'text-void-fg-3 hover:text-void-fg-1'}`}
+						onClick={() => setActiveTab('changes')}
+					>
+						Changes
+						<span className='text-[10px] bg-void-bg-2 px-1.5 py-0.5 rounded-full'>{changesCount}</span>
+					</button>
+				</div>
+			)}
 			<Fragment key={threadId}>
 				{isLandingPage ?
 					landingPageContent
+					: activeTab === 'changes' && changesCount > 0 ? <ComposerView />
 					: threadPageContent}
 			</Fragment>
 		</div>

@@ -126,14 +126,17 @@ import ErrorTelemetry from '../../platform/telemetry/electron-main/errorTelemetr
 // in theory this is not allowed
 // ignore the eslint errors below
 import { IMetricsService } from '../../workbench/contrib/void/common/metricsService.js';
-import { IVoidUpdateService } from '../../workbench/contrib/void/common/voidUpdateService.js';
+import { IvoidUpdateService } from '../../workbench/contrib/void/common/voidUpdateService.js';
 import { MetricsMainService } from '../../workbench/contrib/void/electron-main/metricsMainService.js';
-import { VoidMainUpdateService } from '../../workbench/contrib/void/electron-main/voidUpdateMainService.js';
+import { voidMainUpdateService } from '../../workbench/contrib/void/electron-main/voidUpdateMainService.js';
 import { LLMMessageChannel } from '../../workbench/contrib/void/electron-main/sendLLMMessageChannel.js';
-import { VoidSCMService } from '../../workbench/contrib/void/electron-main/voidSCMMainService.js';
-import { IVoidSCMService } from '../../workbench/contrib/void/common/voidSCMTypes.js';
+import { voidSCMService } from '../../workbench/contrib/void/electron-main/voidSCMMainService.js';
+import { IvoidSCMService } from '../../workbench/contrib/void/common/voidSCMTypes.js';
 import { MCPChannel } from '../../workbench/contrib/void/electron-main/mcpChannel.js';
 import { AuthChannel } from '../../workbench/contrib/void/electron-main/authChannel.js';
+import { E2BSandboxChannel } from '../../workbench/contrib/void/electron-main/e2bSandboxChannel.js';
+import { EmbeddingGenerationService } from '../../workbench/contrib/void/electron-main/embeddingGenerationService.js';
+import { IEmbeddingGenerationService } from '../../workbench/contrib/void/common/embeddingsTypes.js';
 /**
  * The main VS Code application. There will only ever be one instance,
  * even if the user starts many instances (e.g. from the command line).
@@ -884,7 +887,7 @@ export class CodeApplication extends Disposable {
 
 			if (token && refreshToken && userJson) {
 				try {
-					const user = JSON.parse(decodeURIComponent(userJson));
+					const user = JSON.parse(userJson);
 					const authChannel = (this as any)._voidAuthChannel as import('../../workbench/contrib/void/electron-main/authChannel.js').AuthChannel | undefined;
 					if (authChannel) {
 						authChannel.handleOAuthCallback({
@@ -1129,8 +1132,9 @@ export class CodeApplication extends Disposable {
 
 		// Void main process services (required for services with a channel for comm between browser and electron-main (node))
 		services.set(IMetricsService, new SyncDescriptor(MetricsMainService, undefined, false));
-		services.set(IVoidUpdateService, new SyncDescriptor(VoidMainUpdateService, undefined, false));
-		services.set(IVoidSCMService, new SyncDescriptor(VoidSCMService, undefined, false));
+		services.set(IvoidUpdateService, new SyncDescriptor(voidMainUpdateService, undefined, false));
+		services.set(IvoidSCMService, new SyncDescriptor(voidSCMService, undefined, false));
+		services.set(IEmbeddingGenerationService, new SyncDescriptor(EmbeddingGenerationService, undefined, false));
 
 		// Default Extensions Profile Init
 		services.set(IExtensionsProfileScannerService, new SyncDescriptor(ExtensionsProfileScannerService, undefined, true));
@@ -1266,15 +1270,19 @@ export class CodeApplication extends Disposable {
 		const metricsChannel = ProxyChannel.fromService(accessor.get(IMetricsService), disposables);
 		mainProcessElectronServer.registerChannel('void-channel-metrics', metricsChannel);
 
-		const voidUpdatesChannel = ProxyChannel.fromService(accessor.get(IVoidUpdateService), disposables);
+		const voidUpdatesChannel = ProxyChannel.fromService(accessor.get(IvoidUpdateService), disposables);
 		mainProcessElectronServer.registerChannel('void-channel-update', voidUpdatesChannel);
 
 		const sendLLMMessageChannel = new LLMMessageChannel(accessor.get(IMetricsService));
 		mainProcessElectronServer.registerChannel('void-channel-llmMessage', sendLLMMessageChannel);
 
 		// Void added this
-		const voidSCMChannel = ProxyChannel.fromService(accessor.get(IVoidSCMService), disposables);
+		const voidSCMChannel = ProxyChannel.fromService(accessor.get(IvoidSCMService), disposables);
 		mainProcessElectronServer.registerChannel('void-channel-scm', voidSCMChannel);
+
+		// Void Embedding Generation
+		const embeddingChannel = ProxyChannel.fromService(accessor.get(IEmbeddingGenerationService), disposables);
+		mainProcessElectronServer.registerChannel('void-channel-embeddings', embeddingChannel);
 
 		// Void added this
 		const mcpChannel = new MCPChannel();
@@ -1286,6 +1294,10 @@ export class CodeApplication extends Disposable {
 
 		// Store authChannel on the app instance for OAuth callback handling
 		(this as any)._voidAuthChannel = authChannel;
+
+		// Void E2B Sandbox
+		const e2bSandboxChannel = new E2BSandboxChannel();
+		mainProcessElectronServer.registerChannel('void-channel-e2b-sandbox', e2bSandboxChannel);
 
 		// Extension Host Debug Broadcasting
 		const electronExtensionHostDebugBroadcastChannel = new ElectronExtensionHostDebugBroadcastChannel(accessor.get(IWindowsMainService));

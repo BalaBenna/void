@@ -24,3 +24,7 @@ export const void_REJECT_FILE_ACTION_ID = 'void.rejectFile'
 export const void_ACCEPT_ALL_DIFFS_ACTION_ID = 'void.acceptAllDiffs'
 
 export const void_REJECT_ALL_DIFFS_ACTION_ID = 'void.rejectAllDiffs'
+
+export const void_STOP_AGENT_ACTION_ID = 'void.stopAgent'
+
+export const void_SENTINEL_ACTION_ID = 'void.openSentinel'

@@ -7,7 +7,7 @@ const envSchema = z.object({
     .enum(["development", "production", "test"])
     .default("development"),
 
-  // Database
+  // Database (PostgreSQL — can be Supabase's PostgreSQL)
   DATABASE_URL: z
     .string()
     .default("postgresql://postgres:postgres@localhost:5432/void_dev"),
@@ -15,21 +15,18 @@ const envSchema = z.object({
   // Redis
   REDIS_URL: z.string().default("redis://localhost:6379"),
 
-  // Auth
-  GOOGLE_CLIENT_ID: z.string(),
-  GOOGLE_CLIENT_SECRET: z.string(),
+  // Supabase Auth (required)
+  SUPABASE_URL: z.string(),
+  SUPABASE_SERVICE_KEY: z.string(),
+
+  // Google OAuth Redirect (Supabase sends Google OAuth callback here)
   GOOGLE_REDIRECT_URI: z
     .string()
     .default("http://localhost:3456/auth/google/callback"),
 
-  // JWT
-  JWT_SECRET: z.string().min(32),
-  JWT_REFRESH_SECRET: z.string().min(32),
-  JWT_EXPIRY: z.string().default("1h"),
-  JWT_REFRESH_EXPIRY: z.string().default("30d"),
-
   // AI Providers
   ANTHROPIC_API_KEY: z.string(),
+  OPENAI_API_KEY: z.string().optional(),
   GOOGLE_AI_API_KEY: z.string().optional(),
 
   // Stripe

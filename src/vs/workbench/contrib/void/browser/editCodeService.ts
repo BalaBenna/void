@@ -110,6 +110,38 @@ const removeWhitespaceExceptNewlines = (str: string): string => {
 // finds block.orig in fileContents and return its range in file
 // startingAtLine is 1-indexed and inclusive
 // returns 1-indexed lines
+/**
+ * Compute line-level Levenshtein similarity between two texts.
+ * Returns a value between 0 and 1.
+ */
+const lineSimilarity = (a: string, b: string): number => {
+	const linesA = a.split('\n')
+	const linesB = b.split('\n')
+	const lenA = linesA.length
+	const lenB = linesB.length
+	if (lenA === 0 && lenB === 0) return 1
+	if (lenA === 0 || lenB === 0) return 0
+
+	// Simple matching: count how many lines in A have a close match in B
+	let matched = 0
+	const usedB = new Set<number>()
+	for (const lineA of linesA) {
+		const trimA = lineA.trim()
+		if (trimA.length === 0) { matched++; continue } // blank lines always match
+		for (let j = 0; j < lenB; j++) {
+			if (usedB.has(j)) continue
+			if (linesB[j].trim() === trimA) {
+				matched++
+				usedB.add(j)
+				break
+			}
+		}
+	}
+	return matched / Math.max(lenA, lenB)
+}
+
+const FUZZY_MATCH_THRESHOLD = 0.75
+
 const findTextInCode = (text: string, fileContents: string, canFallbackToRemoveWhitespace: boolean, opts: { startingAtLine?: number, returnType: 'lines' }) => {
 
 	const returnAns = (fileContents: string, idx: number) => {
@@ -136,15 +168,42 @@ const findTextInCode = (text: string, fileContents: string, canFallbackToRemoveW
 		return 'Not found' as const
 
 	// try to find it ignoring all whitespace this time
-	text = removeWhitespaceExceptNewlines(text)
-	fileContents = removeWhitespaceExceptNewlines(fileContents)
-	idx = fileContents.indexOf(text, startingAtLineIdx(fileContents));
+	const textNoWs = removeWhitespaceExceptNewlines(text)
+	const fileContentsNoWs = removeWhitespaceExceptNewlines(fileContents)
+	idx = fileContentsNoWs.indexOf(textNoWs, startingAtLineIdx(fileContentsNoWs));
 
-	if (idx === -1) return 'Not found' as const
-	const lastIdx = fileContents.lastIndexOf(text)
-	if (lastIdx !== idx) return 'Not unique' as const
+	if (idx !== -1) {
+		const lastIdx = fileContentsNoWs.lastIndexOf(textNoWs)
+		if (lastIdx !== idx) return 'Not unique' as const
+		return returnAns(fileContentsNoWs, idx)
+	}
 
-	return returnAns(fileContents, idx)
+	// Fuzzy matching fallback: slide a window over the file lines and find the best match
+	const textLines = text.split('\n')
+	const fileLines = fileContents.split('\n')
+	const windowSize = textLines.length
+	if (windowSize === 0 || fileLines.length === 0) return 'Not found' as const
+
+	let bestSimilarity = 0
+	let bestStartLine = -1
+	const startOffset = opts?.startingAtLine ?? 0
+
+	for (let i = startOffset; i <= fileLines.length - windowSize; i++) {
+		const window = fileLines.slice(i, i + windowSize).join('\n')
+		const sim = lineSimilarity(text, window)
+		if (sim > bestSimilarity) {
+			bestSimilarity = sim
+			bestStartLine = i
+		}
+	}
+
+	if (bestSimilarity >= FUZZY_MATCH_THRESHOLD && bestStartLine >= 0) {
+		const startLine = bestStartLine + 1 // 1-indexed
+		const endLine = startLine + windowSize - 1
+		return [startLine, endLine] as const
+	}
+
+	return 'Not found' as const
 }
 
 

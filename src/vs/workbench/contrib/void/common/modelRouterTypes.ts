@@ -7,6 +7,12 @@ import { ModelSelection } from './voidSettingsTypes.js';
 
 export type ComplexityLevel = 'simple' | 'moderate' | 'complex';
 
+export interface LatencyRecord {
+	avgMs: number;
+	errorRate: number;
+	samples: number;
+}
+
 export interface RouterConfig {
 	mode: 'manual' | 'auto';
 	modelMapping: {
@@ -14,6 +20,9 @@ export interface RouterConfig {
 		moderate: ModelSelection | null;
 		complex: ModelSelection | null;
 	};
+	fallbackChain: ModelSelection[];
+	costAware: boolean;
+	latencyTracking: { [modelKey: string]: LatencyRecord };
 }
 
 export const defaultRouterConfig: RouterConfig = {
@@ -23,4 +32,7 @@ export const defaultRouterConfig: RouterConfig = {
 		moderate: null,
 		complex: null,
 	},
+	fallbackChain: [],
+	costAware: false,
+	latencyTracking: {},
 };

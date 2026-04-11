@@ -8,7 +8,7 @@ import { URI } from '../../../../base/common/uri.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { RawToolCallObj, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
 import { ChatMode } from '../common/voidSettingsTypes.js';
-import { ChatMessage, CodespanLocationLink, ImageAttachment, StagingSelectionItem } from '../common/chatThreadServiceTypes.js';
+import { BranchPoint, ChatMessage, CodespanLocationLink, ImageAttachment, StagingSelectionItem } from '../common/chatThreadServiceTypes.js';
 import { ToolCallParams, ToolName } from '../common/toolsServiceTypes.js';
 
 
@@ -127,6 +127,7 @@ export interface IChatThreadService {
 
 	deleteThread(threadId: string): void;
 	duplicateThread(threadId: string): void;
+	forkThread(threadId: string, fromMessageIdx: number): string | null;
 
 	getCurrentMessageState: (messageIdx: number) => UserMessageState
 	setCurrentMessageState: (messageIdx: number, newState: Partial<UserMessageState>) => void
@@ -153,10 +154,11 @@ export interface IChatThreadService {
 
 	editUserMessageAndStreamResponse({ userMessage, messageIdx, threadId }: { userMessage: string, messageIdx: number, threadId: string }): Promise<void>;
 
-	addUserMessageAndStreamResponse({ userMessage, threadId, webSearchEnabled, images }: { userMessage: string, threadId: string, webSearchEnabled?: boolean, images?: ImageAttachment[] }): Promise<void>;
+	addUserMessageAndStreamResponse({ userMessage, threadId, webSearchEnabled, images, immediate }: { userMessage: string, threadId: string, webSearchEnabled?: boolean, images?: ImageAttachment[], immediate?: boolean }): Promise<void>;
 
 	approveLatestToolRequest(threadId: string): void;
 	rejectLatestToolRequest(threadId: string): void;
+	respondToAskUser(threadId: string, userResponse: string): void;
 
 	executePlan(threadId: string, planMessageIdx: number): void;
 	executePlanStepByStep(threadId: string, planMessageIdx: number): void;
@@ -172,6 +174,12 @@ export interface IChatThreadService {
 		maxIterations?: number;
 		timeoutMs?: number;
 	}): Promise<{ result: string; status: 'completed' | 'failed' }>;
+
+	/**
+	 * Branch from a checkpoint: fork the thread at the checkpoint, restore file snapshots,
+	 * and create a new git branch.
+	 */
+	branchFromCheckpoint(threadId: string, checkpointMessageIdx: number): Promise<BranchPoint | null>;
 
 	focusCurrentChat: () => Promise<void>
 	blurCurrentChat: () => Promise<void>

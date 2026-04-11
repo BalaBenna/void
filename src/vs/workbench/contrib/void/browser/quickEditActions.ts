@@ -14,6 +14,9 @@ import { void_CTRL_K_ACTION_ID } from './actionIDs.js';
 import { localize2 } from '../../../../nls.js';
 import { IMetricsService } from '../common/metricsService.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
+import { IChatThreadService } from './chatThreadService.js';
+import { IViewsService } from '../../../services/views/common/viewsService.js';
+import { void_VIEW_CONTAINER_ID } from './sidebarPane.js';
 
 export type QuickEditPropsType = {
 	diffareaid: number,
@@ -41,7 +44,7 @@ registerAction2(class extends Action2 {
 			title: localize2('voidQuickEditAction', 'void: Quick Edit'),
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyCode.KeyK,
-				weight: KeybindingWeight.voidExtension,
+				weight: KeybindingWeight.VoidExtension,
 				when: ContextKeyExpr.deserialize('editorFocus && !terminalFocus'),
 			}
 		});
@@ -65,5 +68,55 @@ registerAction2(class extends Action2 {
 
 		const editCodeService = accessor.get(IEditCodeService)
 		editCodeService.addCtrlKZone({ startLine, endLine, editor })
+	}
+});
+
+
+// Question Mode: Alt+Return opens sidebar chat with selected code as a question (no edits)
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: 'void.questionModeAction',
+			f1: true,
+			title: localize2('voidQuestionMode', 'void: Ask About Selection'),
+			keybinding: {
+				primary: KeyMod.Alt | KeyCode.Enter,
+				weight: KeybindingWeight.VoidExtension,
+				when: ContextKeyExpr.deserialize('editorFocus && !terminalFocus'),
+			}
+		});
+	}
+
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const editorService = accessor.get(ICodeEditorService)
+		const metricsService = accessor.get(IMetricsService)
+		const chatThreadService = accessor.get(IChatThreadService)
+		const viewsService = accessor.get(IViewsService)
+
+		metricsService.capture('Question Mode', {})
+
+		const editor = editorService.getActiveCodeEditor()
+		if (!editor) return
+		const model = editor.getModel()
+		if (!model) return
+		const selection = roundRangeToLines(editor.getSelection(), { emptySelectionBehavior: 'line' })
+		if (!selection) return
+
+		// Open sidebar
+		if (!viewsService.isViewContainerVisible(void_VIEW_CONTAINER_ID)) {
+			viewsService.openViewContainer(void_VIEW_CONTAINER_ID)
+		}
+
+		// Add the code selection to chat
+		chatThreadService.addNewStagingSelection({
+			type: 'CodeSelection',
+			uri: model.uri,
+			language: model.getLanguageId(),
+			range: [selection.startLineNumber, selection.endLineNumber],
+			state: { wasAddedAsCurrentFile: false },
+		})
+
+		// Focus chat and let user type their question
+		await chatThreadService.focusCurrentChat()
 	}
 });

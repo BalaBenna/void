@@ -918,6 +918,7 @@ const geminiSettings: voidStaticProviderInfo = {
 const deepseekModelOptions = {
 	'deepseek-chat': {
 		...openSourceModelOptions_assumingOAICompat.deepseekR1,
+		supportsFIM: true, // DeepSeek supports OpenAI-compatible completions API for FIM
 		contextWindow: 64_000, // https://api-docs.deepseek.com/quick_start/pricing
 		reservedOutputTokenSpace: 8_000, // 8_000,
 		cost: { cache_read: .07, input: .27, output: 1.10, },
@@ -925,6 +926,7 @@ const deepseekModelOptions = {
 	},
 	'deepseek-reasoner': {
 		...openSourceModelOptions_assumingOAICompat.deepseekCoderV2,
+		supportsFIM: true,
 		contextWindow: 64_000,
 		reservedOutputTokenSpace: 8_000, // 8_000,
 		cost: { cache_read: .14, input: .55, output: 2.19, },

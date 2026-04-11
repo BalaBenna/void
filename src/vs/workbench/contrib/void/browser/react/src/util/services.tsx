@@ -59,6 +59,10 @@ import { IAgentRegistryService } from '../../../agentRegistryService.js'
 import { IRulesService } from '../../../rulesService.js'
 import { IEmbeddingsService } from '../../../embeddingsService.js'
 import { IEnvFileService } from '../../../envFileService.js'
+import { IPRReviewService } from '../../../prReviewService.js'
+import { ISentinelService } from '../../../sentinelService.js'
+import { ISandboxService } from '../../../sandboxService.js'
+import { IMemoryService } from '../../../memoryService.js'
 import { voidAgentDefinition } from '../../../../common/agentRegistryTypes.js'
 import { voidRule } from '../../../../common/rulesTypes.js'
 import { IndexStatus } from '../../../../common/embeddingsTypes.js'
@@ -105,7 +109,7 @@ const indexStatusListeners: Set<(s: IndexStatus) => void> = new Set()
 
 const envFileListeners: Set<() => void> = new Set()
 
-let authState: AuthState = { isAuthenticated: false, session: null, isLoading: true, error: null }
+let authState: AuthState = { isAuthenticated: false, isGuest: false, session: null, isLoading: true, error: null }
 const authStateListeners: Set<(s: AuthState) => void> = new Set()
 
 
@@ -308,6 +312,10 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 
 		IStorageService: accessor.get(IStorageService),
 		IvoidAuthService: accessor.get(IvoidAuthService),
+		IPRReviewService: accessor.get(IPRReviewService),
+		ISentinelService: (() => { try { return accessor.get(ISentinelService); } catch { return null as any; } })(),
+		ISandboxService: accessor.get(ISandboxService),
+		IMemoryService: accessor.get(IMemoryService),
 
 	} as const
 	return reactAccessor
@@ -341,7 +349,7 @@ export const useSettingsState = () => {
 		ss(settingsState)
 		settingsStateListeners.add(ss)
 		return () => { settingsStateListeners.delete(ss) }
-	}, [ss])
+	}, [])
 	return s
 }
 
@@ -351,7 +359,7 @@ export const useChatThreadsState = () => {
 		ss(chatThreadsState)
 		chatThreadsStateListeners.add(ss)
 		return () => { chatThreadsStateListeners.delete(ss) }
-	}, [ss])
+	}, [])
 	return s
 	// allow user to set state natively in react
 	// const ss: React.Dispatch<React.SetStateAction<ThreadsState>> = (action)=>{
@@ -379,7 +387,7 @@ export const useChatThreadsStreamState = (threadId: string) => {
 		}
 		chatThreadsStreamStateListeners.add(listener)
 		return () => { chatThreadsStreamStateListeners.delete(listener) }
-	}, [ss, threadId])
+	}, [threadId])
 	return s
 }
 
@@ -390,7 +398,7 @@ export const useFullChatThreadsStreamState = () => {
 		const listener = () => { ss(chatThreadsStreamState) }
 		chatThreadsStreamStateListeners.add(listener)
 		return () => { chatThreadsStreamStateListeners.delete(listener) }
-	}, [ss])
+	}, [])
 	return s
 }
 
@@ -402,7 +410,7 @@ export const useRefreshModelState = () => {
 		ss(refreshModelState)
 		refreshModelStateListeners.add(ss)
 		return () => { refreshModelStateListeners.delete(ss) }
-	}, [ss])
+	}, [])
 	return s
 }
 
@@ -427,7 +435,7 @@ export const useIsDark = () => {
 		ss(colorThemeState)
 		colorThemeStateListeners.add(ss)
 		return () => { colorThemeStateListeners.delete(ss) }
-	}, [ss])
+	}, [])
 
 	// s is the theme, return isDark instead of s
 	const isDark = s === ColorScheme.DARK || s === ColorScheme.HIGH_CONTRAST_DARK

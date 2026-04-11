@@ -9,7 +9,7 @@ import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { FolderOpen, GitBranch, Monitor } from 'lucide-react'
 import { UsageStats } from '../../../../common/authTypes.js'
 
-const voidIcon = () => {
+const VoidIcon = () => {
 	const isDark = useIsDark()
 	return (
 		<div
@@ -150,7 +150,7 @@ export const voidLanding = () => {
 				<ErrorBoundary>
 					<div className="flex flex-col items-center gap-8">
 						{/* Logo */}
-						<voidIcon />
+						<VoidIcon />
 
 						{/* Plan info + usage */}
 						<div className="flex flex-col items-center gap-2">

@@ -150,6 +150,7 @@ export type SendLLMMessageParams = {
 
 	settingsOfProvider: SettingsOfProvider;
 	mcpTools: InternalToolInfo[] | undefined;
+	privacyMode?: boolean;
 } & SendLLMType
 
 

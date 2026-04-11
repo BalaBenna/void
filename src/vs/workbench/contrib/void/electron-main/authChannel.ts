@@ -22,6 +22,8 @@ type GetUserParams = { accessToken: string; backendUrl: string }
 type GetUsageParams = { accessToken: string; backendUrl: string }
 type LogoutParams = { accessToken: string; backendUrl: string }
 type GetStoredSessionParams = {}
+type EmailLoginParams = { email: string; password: string; backendUrl: string }
+type EmailSignupParams = { email: string; password: string; name: string; backendUrl: string }
 
 export class AuthChannel implements IServerChannel {
 
@@ -41,6 +43,8 @@ export class AuthChannel implements IServerChannel {
 	async call(_: unknown, command: string, params: any): Promise<any> {
 		try {
 			if (command === 'initiateLogin') return await this._initiateLogin(params)
+			if (command === 'emailLogin') return await this._emailLogin(params)
+			if (command === 'emailSignup') return await this._emailSignup(params)
 			if (command === 'refreshToken') return await this._refreshToken(params)
 			if (command === 'getUser') return await this._getUser(params)
 			if (command === 'getUsage') return await this._getUsage(params)
@@ -83,6 +87,44 @@ export class AuthChannel implements IServerChannel {
 		} catch (e: any) {
 			return { error: e.message || 'Failed to open browser' }
 		}
+	}
+
+	private async _emailAuth(url: string, body: object): Promise<{ success: boolean; session: AuthSession } | { error: string }> {
+		try {
+			const response = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(body),
+			})
+
+			const data = await response.json() as any
+			if (!response.ok) return { error: data.error || 'Authentication failed' }
+
+			const expiresAt = Math.floor(Date.now() / 1000) + 3600
+
+			const session: AuthSession = {
+				accessToken: data.token,
+				refreshToken: data.refreshToken,
+				expiresAt,
+				user: data.user as AuthUser,
+			}
+
+			this._storeSession(session)
+			this._onAuthStateChanged.fire({ session })
+			return { success: true, session }
+		} catch (e: any) {
+			return { error: e.message || 'Network error' }
+		}
+	}
+
+	private async _emailLogin(params: EmailLoginParams): Promise<{ success: boolean } | { error: string }> {
+		const { email, password, backendUrl } = params
+		return this._emailAuth(`${backendUrl}/auth/email/login`, { email, password })
+	}
+
+	private async _emailSignup(params: EmailSignupParams): Promise<{ success: boolean } | { error: string }> {
+		const { email, password, name, backendUrl } = params
+		return this._emailAuth(`${backendUrl}/auth/email/signup`, { email, password, name })
 	}
 
 	private async _refreshToken(params: RefreshTokenParams): Promise<{ session: AuthSession } | { error: string }> {

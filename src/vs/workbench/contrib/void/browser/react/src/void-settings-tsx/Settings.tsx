@@ -6,7 +6,7 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'; // Added useRef import just in case it was missed, though likely already present
 import { ProviderName, SettingName, displayInfoOfSettingName, providerNames, voidStatefulModelInfo, customSettingNamesOfProvider, displayInfoOfProviderName, GlobalSettingName, featureNames, displayInfoOfFeatureName, isProviderNameDisabled, FeatureName, subTextMdOfProviderName } from '../../../../common/voidSettingsTypes.js'
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
-import { voidButtonBgDarken, voidCustomDropdownBox, voidInputBox2, voidSimpleInputBox, voidSwitch } from '../util/inputs.js'
+import { VoidButtonBgDarken, VoidCustomDropdownBox, VoidInputBox2, VoidSimpleInputBox, VoidSwitch } from '../util/inputs.js'
 import { useAccessor, useIsDark, useIsOptedOut, useRefreshModelListener, useRefreshModelState, useSettingsState, useAgentRegistry, useRules, useIndexStatus, useEnvFileVars, useAuthState } from '../util/services.js'
 import { X, RefreshCw, Loader2, Check, Asterisk, Plus } from 'lucide-react'
 import { URI } from '../../../../../../../base/common/uri.js'
@@ -25,6 +25,7 @@ import { MCPServer } from '../../../../common/mcpServiceTypes.js';
 import { useMCPServiceState } from '../util/services.js';
 import { OPT_OUT_KEY } from '../../../../common/storageKeys.js';
 import { StorageScope, StorageTarget } from '../../../../../../../platform/storage/common/storage.js';
+import { Memory } from '../../../../common/memoryTypes.js';
 
 type Tab =
 	| 'account'
@@ -122,7 +123,7 @@ const ConfirmButton = ({ children, onConfirm, className }: { children: React.Rea
 	}, [confirm]);
 	return (
 		<div ref={ref} className={`inline-block`}>
-			<voidButtonBgDarken className={className} onClick={() => {
+			<VoidButtonBgDarken className={className} onClick={() => {
 				if (!confirm) {
 					setConfirm(true);
 				} else {
@@ -131,7 +132,7 @@ const ConfirmButton = ({ children, onConfirm, className }: { children: React.Rea
 				}
 			}}>
 				{confirm ? `Confirm Reset` : children}
-			</voidButtonBgDarken>
+			</VoidButtonBgDarken>
 		</div>
 	);
 };
@@ -268,7 +269,7 @@ const SimpleModelSettingsDialog = ({
 
 				{/* override toggle */}
 				<div className="flex items-center gap-2 mb-4">
-					<voidSwitch size='xs' value={overrideEnabled} onChange={setOverrideEnabled} />
+					<VoidSwitch size='xs' value={overrideEnabled} onChange={setOverrideEnabled} />
 					<span className="text-void-fg-3 text-sm">Override model defaults</span>
 				</div>
 
@@ -291,15 +292,15 @@ const SimpleModelSettingsDialog = ({
 
 
 				<div className="flex justify-end gap-2 mt-4">
-					<voidButtonBgDarken onClick={onClose} className="px-3 py-1">
+					<VoidButtonBgDarken onClick={onClose} className="px-3 py-1">
 						Cancel
-					</voidButtonBgDarken>
-					<voidButtonBgDarken
+					</VoidButtonBgDarken>
+					<VoidButtonBgDarken
 						onClick={onSave}
 						className="px-3 py-1 bg-[#0e70c0] text-white"
 					>
 						Save
-					</voidButtonBgDarken>
+					</VoidButtonBgDarken>
 				</div>
 			</div>
 		</div>
@@ -430,7 +431,7 @@ export const ModelDump = ({ filteredProviders }: { filteredProviders?: ProviderN
 
 
 					{/* Switch */}
-					<voidSwitch
+					<VoidSwitch
 						value={value}
 						onChange={() => { settingsStateService.toggleModelHidden(providerName, modelName); }}
 						disabled={disabled}
@@ -468,7 +469,7 @@ export const ModelDump = ({ filteredProviders }: { filteredProviders?: ProviderN
 
 					{/* Provider dropdown */}
 					<ErrorBoundary>
-						<voidCustomDropdownBox
+						<VoidCustomDropdownBox
 							options={providersToShow}
 							selectedOption={userChosenProviderName}
 							onChangeOption={(pn) => setUserChosenProviderName(pn)}
@@ -482,7 +483,7 @@ export const ModelDump = ({ filteredProviders }: { filteredProviders?: ProviderN
 
 					{/* Model name input */}
 					<ErrorBoundary>
-						<voidSimpleInputBox
+						<VoidSimpleInputBox
 							value={modelName}
 							compact={true}
 							onChangeValue={setModelName}
@@ -567,7 +568,7 @@ const ProviderSetting = ({ providerName, settingName, subTextMd }: { providerNam
 
 	return <ErrorBoundary>
 		<div className='my-1'>
-			<voidSimpleInputBox
+			<VoidSimpleInputBox
 				value={settingValue}
 				onChangeValue={handleChangeValue}
 				placeholder={`${settingTitle} (${placeholder})`}
@@ -600,7 +601,7 @@ const ProviderSetting = ({ providerName, settingName, subTextMd }: { providerNam
 // 			{showProviderTitle && <h3 className='text-xl truncate'>{providerTitle}</h3>}
 
 // 			{/* enable provider switch */}
-// 			{/* <voidSwitch
+// 			{/* <VoidSwitch
 // 				value={!!enabled}
 // 				onChange={
 // 					useCallback(() => {
@@ -646,7 +647,7 @@ export const SettingsForProvider = ({ providerName, showProviderTitle, showProvi
 			{showProviderTitle && <h3 className='text-xl truncate'>{providerTitle}</h3>}
 
 			{/* enable provider switch */}
-			{/* <voidSwitch
+			{/* <VoidSwitch
 				value={!!enabled}
 				onChange={
 					useCallback(() => {
@@ -678,7 +679,7 @@ export const SettingsForProvider = ({ providerName, showProviderTitle, showProvi
 }
 
 
-export const voidProviderSettings = ({ providerNames }: { providerNames: ProviderName[] }) => {
+export const VoidProviderSettings = ({ providerNames }: { providerNames: ProviderName[] }) => {
 	return <>
 		{providerNames.map(providerName =>
 			<SettingsForProvider key={providerName} providerName={providerName} showProviderTitle={true} showProviderSuggestions={true} />
@@ -691,7 +692,7 @@ export const AIInstructionsBox = () => {
 	const accessor = useAccessor()
 	const voidSettingsService = accessor.get('IvoidSettingsService')
 	const voidSettingsState = useSettingsState()
-	return <voidInputBox2
+	return <VoidInputBox2
 		className='min-h-[81px] p-3 rounded-sm'
 		initValue={voidSettingsState.globalSettings.aiInstructions}
 		placeholder={`Do not change my indentation or delete my comments. When writing TS or JS, do not add ;'s. Write new code using Rust if possible. `}
@@ -712,7 +713,7 @@ const FastApplyMethodDropdown = () => {
 		voidSettingsService.setGlobalSetting('enableFastApply', newVal)
 	}, [voidSettingsService])
 
-	return <voidCustomDropdownBox
+	return <VoidCustomDropdownBox
 		className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-1 rounded p-0.5 px-1'
 		options={options}
 		selectedOption={voidSettingsService.state.globalSettings.enableFastApply}
@@ -761,7 +762,7 @@ export const ToolApprovalTypeSwitch = ({ approvalType, size, desc }: { approvalT
 	}, [voidSettingsService, metricsService])
 
 	return <>
-		<voidSwitch
+		<VoidSwitch
 			size={size}
 			value={voidSettingsState.globalSettings.autoApprove[approvalType] ?? false}
 			onChange={(newVal) => onToggleAutoApprove(approvalType, newVal)}
@@ -799,13 +800,13 @@ export const OneClickSwitchButton = ({ fromEditor = 'VS Code', className = '' }:
 	}
 
 	return <>
-		<voidButtonBgDarken className={`max-w-48 p-4 ${className}`} disabled={transferState.type !== 'done'} onClick={onClick}>
+		<VoidButtonBgDarken className={`max-w-48 p-4 ${className}`} disabled={transferState.type !== 'done'} onClick={onClick}>
 			{transferState.type === 'done' ? `Transfer from ${fromEditor}`
 				: transferState.type === 'loading' ? <span className='text-nowrap flex flex-nowrap'>Transferring<IconLoading /></span>
 					: transferState.type === 'justfinished' ? <AnimatedCheckmarkButton text='Settings Transferred' className='bg-none' />
 						: null
 			}
-		</voidButtonBgDarken>
+		</VoidButtonBgDarken>
 		{transferState.type === 'done' && transferState.error ? <WarningBox text={transferState.error} /> : null}
 	</>
 }
@@ -842,7 +843,7 @@ const MCPServerComponent = ({ name, server }: { name: string, server: MCPServer 
 				</div>
 
 				{/* Right side - power toggle switch */}
-				<voidSwitch
+				<VoidSwitch
 					value={isOn ?? false}
 					size='xs'
 					disabled={server.status === 'error'}
@@ -957,6 +958,88 @@ const OpenButton = ({ onClick, text = 'Open' }: { onClick: () => void; text?: st
 	</button>
 );
 
+// ─── Memory Viewer ──────────────────────────────────
+
+const memoryTypeBadgeColor: Record<string, string> = {
+	project_fact: 'bg-blue-500/20 text-blue-400',
+	decision: 'bg-purple-500/20 text-purple-400',
+	pattern: 'bg-green-500/20 text-green-400',
+	preference: 'bg-amber-500/20 text-amber-400',
+}
+
+const MemoryViewer = () => {
+	const accessor = useAccessor()
+	const memoryService = accessor.get('IMemoryService')
+	const [memories, setMemories] = useState<Memory[]>([])
+	const [expanded, setExpanded] = useState(false)
+
+	const refreshMemories = useCallback(async () => {
+		setMemories(await memoryService.getAllMemories())
+	}, [memoryService])
+
+	useEffect(() => {
+		if (expanded) refreshMemories()
+	}, [expanded, refreshMemories])
+
+	return (
+		<>
+			<div className='flex items-center justify-between px-3 py-2 border-t border-void-border-1'>
+				<div className='flex items-center gap-2'>
+					<span className='text-xs text-void-fg-1'>Stored Memories</span>
+					<span className='text-[10px] text-void-fg-3 bg-void-bg-2 rounded px-1.5 py-0.5'>{memories.length}</span>
+				</div>
+				<div className='flex items-center gap-2'>
+					<button
+						onClick={() => { setExpanded(!expanded); if (!expanded) refreshMemories() }}
+						className='px-2 py-0.5 text-[10px] border border-void-border-1 rounded hover:bg-void-bg-2 text-void-fg-3 cursor-pointer transition-colors'
+					>
+						{expanded ? 'Hide' : 'View'}
+					</button>
+					<ConfirmButton
+						className='px-2 py-0.5 text-[10px] border border-red-500/30 rounded hover:bg-red-500/10 text-red-400 cursor-pointer transition-colors'
+						onConfirm={() => { memoryService.clearAll(); setMemories([]); setExpanded(false) }}
+					>
+						Clear All
+					</ConfirmButton>
+				</div>
+			</div>
+			{expanded && memories.length > 0 && (
+				<div className='mx-3 mb-2 max-h-60 overflow-y-auto border border-void-border-1 rounded-md'>
+					{memories.map((memory) => (
+						<div key={memory.id} className='flex items-start gap-2 px-2 py-1.5 border-b border-void-border-1 last:border-b-0'>
+							<span className={`text-[9px] px-1.5 py-0.5 rounded-sm shrink-0 mt-0.5 ${memoryTypeBadgeColor[memory.type] ?? 'bg-void-bg-2 text-void-fg-3'}`}>
+								{memory.type.replace('_', ' ')}
+							</span>
+							<div className='flex-1 min-w-0'>
+								<p className='text-xs text-void-fg-1 break-words'>{memory.content}</p>
+								{memory.tags.length > 0 && (
+									<div className='flex gap-1 mt-0.5 flex-wrap'>
+										{memory.tags.map((tag, i) => (
+											<span key={i} className='text-[9px] text-void-fg-3 bg-void-bg-2 rounded px-1'>{tag}</span>
+										))}
+									</div>
+								)}
+								<span className='text-[9px] text-void-fg-3'>{new Date(memory.createdAt).toLocaleDateString()}</span>
+							</div>
+							<button
+								onClick={() => { memoryService.removeMemory(memory.id); refreshMemories() }}
+								className='shrink-0 mt-0.5 text-void-fg-3 hover:text-red-400 cursor-pointer transition-colors'
+							>
+								<X size={12} />
+							</button>
+						</div>
+					))}
+				</div>
+			)}
+			{expanded && memories.length === 0 && (
+				<div className='mx-3 mb-2 px-3 py-3 text-xs text-void-fg-3 text-center border border-void-border-1 rounded-md'>
+					No memories stored yet. Memories are extracted from conversations when auto-extract is enabled.
+				</div>
+			)}
+		</>
+	)
+}
+
 // ─── Agents & Rules Tab ─────────────────────────────
 
 const AgentsAndRulesTab = () => {
@@ -1068,7 +1151,7 @@ Describe your rule here.
 			<SectionLabel label="Memory" />
 			<SettingCard>
 				<SettingRow title="Enable Memory" description="Allow the AI to remember context across sessions">
-					<voidSwitch size='sm' value={settingsState.globalSettings.memoryConfig?.enabled ?? false} onChange={(newVal) => {
+					<VoidSwitch size='sm' value={settingsState.globalSettings.memoryConfig?.enabled ?? false} onChange={(newVal) => {
 						voidSettingsService.setGlobalSetting('memoryConfig', {
 							...settingsState.globalSettings.memoryConfig,
 							enabled: newVal,
@@ -1078,7 +1161,7 @@ Describe your rule here.
 				{settingsState.globalSettings.memoryConfig?.enabled && (
 					<>
 						<SettingRow title="Max Memories" description="Maximum number of stored memories (10-500)">
-							<voidSimpleInputBox
+							<VoidSimpleInputBox
 								className='w-16 text-xs text-center'
 								placeholder='100'
 								value={String(settingsState.globalSettings.memoryConfig?.maxMemories ?? 100)}
@@ -1091,14 +1174,15 @@ Describe your rule here.
 								}}
 							/>
 						</SettingRow>
-						<SettingRow title="Auto-Extract Memories" description="Automatically extract memories after each agent loop" noBorder>
-							<voidSwitch size='sm' value={settingsState.globalSettings.memoryConfig?.autoExtract ?? false} onChange={(newVal) => {
+						<SettingRow title="Auto-Extract Memories" description="Automatically extract memories after each agent loop">
+							<VoidSwitch size='sm' value={settingsState.globalSettings.memoryConfig?.autoExtract ?? false} onChange={(newVal) => {
 								voidSettingsService.setGlobalSetting('memoryConfig', {
 									...settingsState.globalSettings.memoryConfig,
 									autoExtract: newVal,
 								})
 							}} />
 						</SettingRow>
+						<MemoryViewer />
 					</>
 				)}
 			</SettingCard>
@@ -1107,7 +1191,7 @@ Describe your rule here.
 			<SectionLabel label="Self-Healing" />
 			<SettingCard>
 				<SettingRow title="Enable Self-Healing" description="Automatically enrich terminal errors with file context for smarter fixes">
-					<voidSwitch size='sm' value={settingsState.globalSettings.selfHealingConfig?.enabled ?? true} onChange={(newVal) => {
+					<VoidSwitch size='sm' value={settingsState.globalSettings.selfHealingConfig?.enabled ?? true} onChange={(newVal) => {
 						voidSettingsService.setGlobalSetting('selfHealingConfig', {
 							...settingsState.globalSettings.selfHealingConfig,
 							enabled: newVal,
@@ -1117,7 +1201,7 @@ Describe your rule here.
 				{settingsState.globalSettings.selfHealingConfig?.enabled && (
 					<>
 						<SettingRow title="Max Healing Attempts" description="Maximum attempts before escalating to user (1-5)">
-							<voidSimpleInputBox
+							<VoidSimpleInputBox
 								className='w-16 text-xs text-center'
 								placeholder='3'
 								value={String(settingsState.globalSettings.selfHealingConfig?.maxHealingAttempts ?? 3)}
@@ -1130,11 +1214,19 @@ Describe your rule here.
 								}}
 							/>
 						</SettingRow>
-						<SettingRow title="Auto-Read Error Context" description="Automatically read source files at error locations" noBorder>
-							<voidSwitch size='sm' value={settingsState.globalSettings.selfHealingConfig?.autoReadErrorContext ?? true} onChange={(newVal) => {
+						<SettingRow title="Auto-Read Error Context" description="Automatically read source files at error locations">
+							<VoidSwitch size='sm' value={settingsState.globalSettings.selfHealingConfig?.autoReadErrorContext ?? true} onChange={(newVal) => {
 								voidSettingsService.setGlobalSetting('selfHealingConfig', {
 									...settingsState.globalSettings.selfHealingConfig,
 									autoReadErrorContext: newVal,
+								})
+							}} />
+						</SettingRow>
+						<SettingRow title="Verify After Fix" description="Run verification pipeline after applying a fix" noBorder>
+							<VoidSwitch size='sm' value={settingsState.globalSettings.selfHealingConfig?.verifyAfterFix ?? true} onChange={(newVal) => {
+								voidSettingsService.setGlobalSetting('selfHealingConfig', {
+									...settingsState.globalSettings.selfHealingConfig,
+									verifyAfterFix: newVal,
 								})
 							}} />
 						</SettingRow>
@@ -1146,30 +1238,70 @@ Describe your rule here.
 			<SectionLabel label="Verification Pipeline" />
 			<SettingCard>
 				<SettingRow title="Enable Verification Pipeline" description="Enable the run_verification tool for build/test pipeline execution">
-					<voidSwitch size='sm' value={settingsState.globalSettings.verificationPipelineConfig?.enabled ?? false} onChange={(newVal) => {
+					<VoidSwitch size='sm' value={settingsState.globalSettings.verificationPipelineConfig?.enabled ?? false} onChange={(newVal) => {
 						voidSettingsService.setGlobalSetting('verificationPipelineConfig', {
 							...settingsState.globalSettings.verificationPipelineConfig,
 							enabled: newVal,
 						})
 					}} />
 				</SettingRow>
-				{settingsState.globalSettings.verificationPipelineConfig?.enabled && (
-					<SettingRow title="Stop on First Failure" description="Stop the pipeline when the first step fails" noBorder>
-						<voidSwitch size='sm' value={settingsState.globalSettings.verificationPipelineConfig?.stopOnFirstFailure ?? true} onChange={(newVal) => {
+				{settingsState.globalSettings.verificationPipelineConfig?.enabled && (<>
+					<SettingRow title="Stop on First Failure" description="Stop the pipeline when the first step fails">
+						<VoidSwitch size='sm' value={settingsState.globalSettings.verificationPipelineConfig?.stopOnFirstFailure ?? true} onChange={(newVal) => {
 							voidSettingsService.setGlobalSetting('verificationPipelineConfig', {
 								...settingsState.globalSettings.verificationPipelineConfig,
 								stopOnFirstFailure: newVal,
 							})
 						}} />
 					</SettingRow>
-				)}
+					<SettingRow title="Verification Steps" description="Commands to run in sequence (name: command)" noBorder>
+						<div className='flex flex-col gap-1 w-48'>
+							{(settingsState.globalSettings.verificationPipelineConfig?.steps ?? []).map((step: any, idx: number) => (
+								<div key={idx} className='flex items-center gap-1'>
+									<input
+										className='flex-1 text-xs bg-void-bg-1 text-void-fg-1 border border-void-border-1 rounded px-1 py-0.5'
+										placeholder='name'
+										value={step.name ?? ''}
+										onChange={(e) => {
+											const steps = [...(settingsState.globalSettings.verificationPipelineConfig?.steps ?? [])]
+											steps[idx] = { ...steps[idx], name: e.target.value }
+											voidSettingsService.setGlobalSetting('verificationPipelineConfig', { ...settingsState.globalSettings.verificationPipelineConfig, steps })
+										}}
+									/>
+									<input
+										className='flex-1 text-xs bg-void-bg-1 text-void-fg-1 border border-void-border-1 rounded px-1 py-0.5'
+										placeholder='command'
+										value={step.command ?? ''}
+										onChange={(e) => {
+											const steps = [...(settingsState.globalSettings.verificationPipelineConfig?.steps ?? [])]
+											steps[idx] = { ...steps[idx], command: e.target.value }
+											voidSettingsService.setGlobalSetting('verificationPipelineConfig', { ...settingsState.globalSettings.verificationPipelineConfig, steps })
+										}}
+									/>
+									<button className='text-void-fg-3 hover:text-void-fg-1 text-xs' onClick={() => {
+										const steps = [...(settingsState.globalSettings.verificationPipelineConfig?.steps ?? [])]
+										steps.splice(idx, 1)
+										voidSettingsService.setGlobalSetting('verificationPipelineConfig', { ...settingsState.globalSettings.verificationPipelineConfig, steps })
+									}}>x</button>
+								</div>
+							))}
+							<button
+								className='text-xs text-void-fg-3 hover:text-void-fg-1 border border-void-border-1 rounded px-2 py-0.5 w-fit'
+								onClick={() => {
+									const steps = [...(settingsState.globalSettings.verificationPipelineConfig?.steps ?? []), { name: '', command: '', optional: false, timeout: 60 }]
+									voidSettingsService.setGlobalSetting('verificationPipelineConfig', { ...settingsState.globalSettings.verificationPipelineConfig, steps })
+								}}
+							>+ Add Step</button>
+						</div>
+					</SettingRow>
+				</>)}
 			</SettingCard>
 
 			{/* Parallel Agents */}
 			<SectionLabel label="Parallel Agents" />
 			<SettingCard>
 				<SettingRow title="Enable Parallel Agents" description="Allow spawning parallel agents in separate worktrees">
-					<voidSwitch size='sm' value={settingsState.globalSettings.parallelAgentConfig?.enabled ?? false} onChange={(newVal) => {
+					<VoidSwitch size='sm' value={settingsState.globalSettings.parallelAgentConfig?.enabled ?? false} onChange={(newVal) => {
 						voidSettingsService.setGlobalSetting('parallelAgentConfig', {
 							...settingsState.globalSettings.parallelAgentConfig,
 							enabled: newVal,
@@ -1179,7 +1311,7 @@ Describe your rule here.
 				{settingsState.globalSettings.parallelAgentConfig?.enabled && (
 					<>
 						<SettingRow title="Max Parallel Agents" description="Maximum concurrent worktree agents (1-10)">
-							<voidSimpleInputBox
+							<VoidSimpleInputBox
 								className='w-16 text-xs text-center'
 								placeholder='3'
 								value={String(settingsState.globalSettings.parallelAgentConfig?.maxParallelAgents ?? 3)}
@@ -1193,7 +1325,7 @@ Describe your rule here.
 							/>
 						</SettingRow>
 						<SettingRow title="Cleanup After Merge" description="Auto-remove worktrees after merge or rejection" noBorder>
-							<voidSwitch size='sm' value={settingsState.globalSettings.parallelAgentConfig?.cleanupAfterMerge ?? true} onChange={(newVal) => {
+							<VoidSwitch size='sm' value={settingsState.globalSettings.parallelAgentConfig?.cleanupAfterMerge ?? true} onChange={(newVal) => {
 								voidSettingsService.setGlobalSetting('parallelAgentConfig', {
 									...settingsState.globalSettings.parallelAgentConfig,
 									cleanupAfterMerge: newVal,
@@ -1208,7 +1340,7 @@ Describe your rule here.
 			<SectionLabel label="Background Agents" />
 			<SettingCard>
 				<SettingRow title="Enable Background Agents" description="Allow agents to run in the background">
-					<voidSwitch size='sm' value={settingsState.globalSettings.backgroundAgentConfig?.enabled ?? false} onChange={(newVal) => {
+					<VoidSwitch size='sm' value={settingsState.globalSettings.backgroundAgentConfig?.enabled ?? false} onChange={(newVal) => {
 						voidSettingsService.setGlobalSetting('backgroundAgentConfig', {
 							...settingsState.globalSettings.backgroundAgentConfig,
 							enabled: newVal,
@@ -1218,7 +1350,7 @@ Describe your rule here.
 				{settingsState.globalSettings.backgroundAgentConfig?.enabled && (
 					<>
 						<SettingRow title="Max Background Agents" description="Maximum concurrent background agents (1-20)">
-							<voidSimpleInputBox
+							<VoidSimpleInputBox
 								className='w-16 text-xs text-center'
 								placeholder='5'
 								value={String(settingsState.globalSettings.backgroundAgentConfig?.maxBackgroundAgents ?? 5)}
@@ -1232,7 +1364,7 @@ Describe your rule here.
 							/>
 						</SettingRow>
 						<SettingRow title="Notify on Completion" description="Show notification when a background agent finishes" noBorder>
-							<voidSwitch size='sm' value={settingsState.globalSettings.backgroundAgentConfig?.notifyOnCompletion ?? true} onChange={(newVal) => {
+							<VoidSwitch size='sm' value={settingsState.globalSettings.backgroundAgentConfig?.notifyOnCompletion ?? true} onChange={(newVal) => {
 								voidSettingsService.setGlobalSetting('backgroundAgentConfig', {
 									...settingsState.globalSettings.backgroundAgentConfig,
 									notifyOnCompletion: newVal,
@@ -1290,7 +1422,7 @@ build/
 			<SectionLabel label="Codebase Search" />
 			<SettingCard>
 				<SettingRow title="Enable Codebase Indexing" description="Index workspace for semantic code search">
-					<voidSwitch size='sm' value={embeddingsConfig?.enabled ?? false} onChange={(newVal) => {
+					<VoidSwitch size='sm' value={embeddingsConfig?.enabled ?? false} onChange={(newVal) => {
 						voidSettingsService.setGlobalSetting('embeddingsConfig', {
 							...embeddingsConfig,
 							enabled: newVal,
@@ -1321,15 +1453,15 @@ build/
 							)}
 						</SettingRow>
 						<SettingRow title="Re-index on Save" description="Automatically update index when files change">
-							<voidSwitch size='sm' value={embeddingsConfig?.reindexOnSave ?? true} onChange={(newVal) => {
+							<VoidSwitch size='sm' value={embeddingsConfig?.reindexOnSave ?? true} onChange={(newVal) => {
 								voidSettingsService.setGlobalSetting('embeddingsConfig', {
 									...embeddingsConfig,
 									reindexOnSave: newVal,
 								})
 							}} />
 						</SettingRow>
-						<SettingRow title="Max Search Results" description="Maximum number of search results returned (1-50)" noBorder>
-							<voidSimpleInputBox
+						<SettingRow title="Max Search Results" description="Maximum number of search results returned (1-50)">
+							<VoidSimpleInputBox
 								className='w-16 text-xs text-center'
 								placeholder='10'
 								value={String(embeddingsConfig?.maxResults ?? 10)}
@@ -1342,6 +1474,51 @@ build/
 								}}
 							/>
 						</SettingRow>
+						<SettingRow title="Vector Embeddings" description="Use AI embedding models for more accurate semantic search (requires OpenAI API key)">
+							<VoidSwitch size='sm' value={embeddingsConfig?.useVectorEmbeddings ?? false} onChange={(newVal) => {
+								voidSettingsService.setGlobalSetting('embeddingsConfig', {
+									...embeddingsConfig,
+									useVectorEmbeddings: newVal,
+								})
+							}} />
+						</SettingRow>
+						{embeddingsConfig?.useVectorEmbeddings && (<>
+							<SettingRow title="Embedding Provider" description="Provider for generating code embeddings">
+								<VoidCustomDropdownBox
+									options={['none', 'openAI']}
+									selectedOption={embeddingsConfig?.embeddingProvider ?? 'none'}
+									onChangeOption={(newVal) => {
+										voidSettingsService.setGlobalSetting('embeddingsConfig', {
+											...embeddingsConfig,
+											embeddingProvider: newVal,
+										})
+									}}
+									getOptionDisplayName={(opt: string) => {
+										const names: Record<string, string> = { none: 'None', openAI: 'OpenAI' }
+										return names[opt] ?? opt
+									}}
+									getOptionDropdownName={(opt: string) => {
+										const names: Record<string, string> = { none: 'None', openAI: 'OpenAI' }
+										return names[opt] ?? opt
+									}}
+									getOptionsEqual={(a, b) => a === b}
+									className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-1 rounded p-0.5 px-1'
+								/>
+							</SettingRow>
+							<SettingRow title="Embedding Model" description="Model for generating embeddings (e.g. text-embedding-3-small)" noBorder>
+								<VoidSimpleInputBox
+									className='w-48 text-xs'
+									placeholder='text-embedding-3-small'
+									value={embeddingsConfig?.embeddingModel ?? 'text-embedding-3-small'}
+									onChangeValue={(newVal) => {
+										voidSettingsService.setGlobalSetting('embeddingsConfig', {
+											...embeddingsConfig,
+											embeddingModel: newVal,
+										})
+									}}
+								/>
+							</SettingRow>
+						</>)}
 					</>
 				)}
 			</SettingCard>
@@ -1361,10 +1538,7 @@ build/
 const AccountTab = () => {
 	const accessor = useAccessor()
 	const authService = accessor.get('IvoidAuthService')
-	const voidSettingsService = accessor.get('IvoidSettingsService')
 	const authState = useAuthState()
-	const settingsState = useSettingsState()
-	const backendUrl = settingsState.globalSettings.backendUrl || 'http://localhost:3456'
 
 	const [usage, setUsage] = useState<{ messagesUsedToday: number; messagesLimit: number; tokensUsedToday: number; plan: string } | null>(null)
 
@@ -1385,17 +1559,6 @@ const AccountTab = () => {
 						<p className="text-void-fg-3 mb-4">You are not logged in.</p>
 						<p className="text-void-fg-3 text-sm">Close this settings panel and the login screen will appear.</p>
 					</div>
-				</SettingCard>
-
-				<SectionLabel label="Backend" />
-				<SettingCard>
-					<SettingRow title="Backend URL" description="URL for the void backend server" noBorder>
-						<voidSimpleInputBox
-							value={backendUrl}
-							onChangeValue={(val: string) => voidSettingsService.setGlobalSetting('backendUrl', val)}
-							placeholder="http://localhost:3456"
-						/>
-					</SettingRow>
 				</SettingCard>
 			</div>
 		)
@@ -1468,18 +1631,6 @@ const AccountTab = () => {
 						</div>
 					)}
 				</div>
-			</SettingCard>
-
-			{/* Backend Configuration */}
-			<SectionLabel label="Backend" />
-			<SettingCard>
-				<SettingRow title="Backend URL" description="URL for the void backend server" noBorder>
-					<voidSimpleInputBox
-						value={backendUrl}
-						onChangeValue={(val: string) => voidSettingsService.setGlobalSetting('backendUrl', val)}
-						placeholder="http://localhost:3456"
-					/>
-				</SettingRow>
 			</SettingCard>
 		</div>
 	)
@@ -1667,7 +1818,7 @@ export const Settings = () => {
 										title="Metrics Opt-out"
 										description="Disable anonymous usage tracking (requires restart)"
 									>
-										<voidSwitch size='sm' value={isOptedOut} onChange={(newVal) => {
+										<VoidSwitch size='sm' value={isOptedOut} onChange={(newVal) => {
 											storageService.store(OPT_OUT_KEY, newVal, StorageScope.APPLICATION, StorageTarget.MACHINE)
 											metricsService.capture(`Set metrics opt-out to ${newVal}`, {})
 										}} />
@@ -1675,9 +1826,15 @@ export const Settings = () => {
 									<SettingRow
 										title="Disable System Message"
 										description="Only include your custom AI instructions, no built-in system message"
+									>
+										<VoidSwitch size='sm' value={!!settingsState.globalSettings.disableSystemMessage} onChange={(newVal) => voidSettingsService.setGlobalSetting('disableSystemMessage', newVal)} />
+									</SettingRow>
+									<SettingRow
+										title="Privacy Mode"
+										description="Request providers not to store or train on your data (sets store:false for OpenAI)"
 										noBorder
 									>
-										<voidSwitch size='sm' value={!!settingsState.globalSettings.disableSystemMessage} onChange={(newVal) => voidSettingsService.setGlobalSetting('disableSystemMessage', newVal)} />
+										<VoidSwitch size='sm' value={!!settingsState.globalSettings.privacyMode} onChange={(newVal) => voidSettingsService.setGlobalSetting('privacyMode', newVal)} />
 									</SettingRow>
 								</SettingCard>
 
@@ -1700,12 +1857,30 @@ export const Settings = () => {
 										description="Enable web search across all modes. Get your API key at app.tavily.com"
 										noBorder
 									>
-										<voidSimpleInputBox
+										<VoidSimpleInputBox
 											className='w-48 text-xs'
 											placeholder='tvly-...'
 											passwordBlur
 											value={settingsState.globalSettings.tavilyApiKey ?? ''}
 											onChangeValue={(newVal) => voidSettingsService.setGlobalSetting('tavilyApiKey', newVal)}
+										/>
+									</SettingRow>
+								</SettingCard>
+
+								{/* GitHub Integration */}
+								<SectionLabel label="GitHub Integration" />
+								<SettingCard>
+									<SettingRow
+										title="GitHub Token"
+										description="Personal access token for PR creation. Used by git tools and gh CLI."
+										noBorder
+									>
+										<VoidSimpleInputBox
+											className='w-48 text-xs'
+											placeholder='ghp_...'
+											passwordBlur
+											value={settingsState.globalSettings.githubToken ?? ''}
+											onChangeValue={(newVal) => voidSettingsService.setGlobalSetting('githubToken', newVal)}
 										/>
 									</SettingRow>
 								</SettingCard>
@@ -1717,7 +1892,7 @@ export const Settings = () => {
 										title="Enable Subagents"
 										description="Allow the AI to spawn specialized sub-agents for parallel tasks"
 									>
-										<voidSwitch size='sm' value={settingsState.globalSettings.subagentConfig?.enabled ?? true} onChange={(newVal) => {
+										<VoidSwitch size='sm' value={settingsState.globalSettings.subagentConfig?.enabled ?? true} onChange={(newVal) => {
 											voidSettingsService.setGlobalSetting('subagentConfig', {
 												...settingsState.globalSettings.subagentConfig,
 												enabled: newVal,
@@ -1729,7 +1904,7 @@ export const Settings = () => {
 										description="Maximum number of subagents that can run simultaneously (1-8)"
 										noBorder
 									>
-										<voidSimpleInputBox
+										<VoidSimpleInputBox
 											className='w-16 text-xs text-center'
 											placeholder='3'
 											value={String(settingsState.globalSettings.subagentConfig?.maxConcurrent ?? 3)}
@@ -1748,7 +1923,7 @@ export const Settings = () => {
 								<SectionLabel label="Agent Loop" />
 								<SettingCard>
 									<SettingRow title="Max Agent Iterations" description="Maximum iterations before the agent loop stops (1-200)">
-										<voidSimpleInputBox
+										<VoidSimpleInputBox
 											className='w-16 text-xs text-center'
 											placeholder='50'
 											value={String(settingsState.globalSettings.maxAgentIterations ?? 50)}
@@ -1758,8 +1933,8 @@ export const Settings = () => {
 											}}
 										/>
 									</SettingRow>
-									<SettingRow title="Lint Retry Limit" description="Number of times to retry fixing lint errors (0-10)" noBorder>
-										<voidSimpleInputBox
+									<SettingRow title="Lint Retry Limit" description="Number of times to retry fixing lint errors (0-10)">
+										<VoidSimpleInputBox
 											className='w-16 text-xs text-center'
 											placeholder='3'
 											value={String(settingsState.globalSettings.lintRetryLimit ?? 3)}
@@ -1769,13 +1944,53 @@ export const Settings = () => {
 											}}
 										/>
 									</SettingRow>
+									<SettingRow title="Implementation Summary" description="Show a structured summary of changes at the end of each agent run" noBorder>
+										<VoidSwitch size='sm' value={settingsState.globalSettings.enableImplementationSummary ?? true} onChange={(newVal) => voidSettingsService.setGlobalSetting('enableImplementationSummary', newVal)} />
+									</SettingRow>
+								</SettingCard>
+
+								{/* Context Management */}
+								<SectionLabel label="Context Management" />
+								<SettingCard>
+									<SettingRow title="Auto-Compact Conversations" description="Automatically summarize old messages when conversation gets long">
+										<VoidSwitch size='sm' value={settingsState.globalSettings.contextManagement?.autoCompact ?? false} onChange={(newVal) => {
+											voidSettingsService.setGlobalSetting('contextManagement', {
+												...settingsState.globalSettings.contextManagement,
+												autoCompact: newVal,
+											})
+										}} />
+									</SettingRow>
+									{settingsState.globalSettings.contextManagement?.autoCompact && (
+										<SettingRow title="Compact Threshold" description="Number of messages before compaction kicks in (10-200)">
+											<VoidSimpleInputBox
+												className='w-16 text-xs text-center'
+												placeholder='50'
+												value={String(settingsState.globalSettings.contextManagement?.compactThreshold ?? 50)}
+												onChangeValue={(newVal) => {
+													const num = Math.max(10, Math.min(200, parseInt(newVal) || 50))
+													voidSettingsService.setGlobalSetting('contextManagement', {
+														...settingsState.globalSettings.contextManagement,
+														compactThreshold: num,
+													})
+												}}
+											/>
+										</SettingRow>
+									)}
+									<SettingRow title="Preserve System Messages" description="Keep system messages during conversation compaction" noBorder>
+										<VoidSwitch size='sm' value={settingsState.globalSettings.contextManagement?.preserveSystemMessages ?? true} onChange={(newVal) => {
+											voidSettingsService.setGlobalSetting('contextManagement', {
+												...settingsState.globalSettings.contextManagement,
+												preserveSystemMessages: newVal,
+											})
+										}} />
+									</SettingRow>
 								</SettingCard>
 
 								{/* Sandbox */}
 								<SectionLabel label="Sandbox" />
 								<SettingCard>
 									<SettingRow title="Sandbox Mode" description="Control command execution sandboxing">
-										<voidCustomDropdownBox
+										<VoidCustomDropdownBox
 											options={['off', 'auto_run', 'strict'] as SandboxMode[]}
 											selectedOption={settingsState.globalSettings.sandboxMode}
 											onChangeOption={(newVal) => voidSettingsService.setGlobalSetting('sandboxMode', newVal as SandboxMode)}
@@ -1791,8 +2006,50 @@ export const Settings = () => {
 											className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-1 rounded p-0.5 px-1'
 										/>
 									</SettingRow>
-									<SettingRow title="Secret Detection" description="Scan for accidentally exposed secrets in tool output" noBorder>
-										<voidSwitch size='sm' value={settingsState.globalSettings.secretDetectionEnabled ?? true} onChange={(newVal) => voidSettingsService.setGlobalSetting('secretDetectionEnabled', newVal)} />
+									<SettingRow title="Secret Detection" description="Scan for accidentally exposed secrets in tool output">
+										<VoidSwitch size='sm' value={settingsState.globalSettings.secretDetectionEnabled ?? true} onChange={(newVal) => voidSettingsService.setGlobalSetting('secretDetectionEnabled', newVal)} />
+									</SettingRow>
+									<SettingRow title="YOLO Mode" description="Auto-approve safe commands matching the allowlist below">
+										<VoidSwitch size='sm' value={settingsState.globalSettings.yoloConfig?.enabled ?? false} onChange={(newVal) => {
+											voidSettingsService.setGlobalSetting('yoloConfig', { ...settingsState.globalSettings.yoloConfig, enabled: newVal })
+										}} />
+									</SettingRow>
+									{settingsState.globalSettings.yoloConfig?.enabled && (<>
+										<SettingRow title="Command Allowlist" description="Glob patterns for auto-approved commands (one per line)">
+											<textarea
+												className='w-48 h-16 text-xs bg-void-bg-1 text-void-fg-1 border border-void-border-1 rounded p-1 resize-y'
+												value={(settingsState.globalSettings.yoloConfig?.allowlist ?? []).join('\n')}
+												onChange={(e) => {
+													voidSettingsService.setGlobalSetting('yoloConfig', {
+														...settingsState.globalSettings.yoloConfig,
+														allowlist: e.target.value.split('\n').filter(s => s.trim()),
+													})
+												}}
+											/>
+										</SettingRow>
+										<SettingRow title="Command Denylist" description="Glob patterns for always-blocked commands (one per line)">
+											<textarea
+												className='w-48 h-16 text-xs bg-void-bg-1 text-void-fg-1 border border-void-border-1 rounded p-1 resize-y'
+												value={(settingsState.globalSettings.yoloConfig?.denylist ?? []).join('\n')}
+												onChange={(e) => {
+													voidSettingsService.setGlobalSetting('yoloConfig', {
+														...settingsState.globalSettings.yoloConfig,
+														denylist: e.target.value.split('\n').filter(s => s.trim()),
+													})
+												}}
+											/>
+										</SettingRow>
+									</>)}
+									<SettingRow title="E2B API Key" description="API key for E2B cloud sandbox (when sandbox mode is E2B)" noBorder>
+										<VoidSimpleInputBox
+											className='w-48 text-xs'
+											placeholder='e2b_...'
+											passwordBlur
+											value={settingsState.globalSettings.e2bSandboxConfig?.apiKey ?? ''}
+											onChangeValue={(newVal) => {
+												voidSettingsService.setGlobalSetting('e2bSandboxConfig', { ...settingsState.globalSettings.e2bSandboxConfig, apiKey: newVal })
+											}}
+										/>
 									</SettingRow>
 								</SettingCard>
 							</div>
@@ -1810,14 +2067,14 @@ export const Settings = () => {
 										title="Enable Autocomplete"
 										description="Works with all providers. Uses native FIM when available, falls back to chat-based completion."
 									>
-										<voidSwitch size='sm' value={settingsState.globalSettings.enableAutocomplete} onChange={(newVal) => voidSettingsService.setGlobalSetting('enableAutocomplete', newVal)} />
+										<VoidSwitch size='sm' value={settingsState.globalSettings.enableAutocomplete} onChange={(newVal) => voidSettingsService.setGlobalSetting('enableAutocomplete', newVal)} />
 									</SettingRow>
 									{settingsState.globalSettings.enableAutocomplete && (<>
 										<SettingRow title="Autocomplete Model" description="Select the model used for autocomplete">
 											<ModelDropdown featureName={'Autocomplete'} className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-1 rounded p-0.5 px-1' />
 										</SettingRow>
 										<SettingRow title="Debounce (ms)" description="Delay before triggering autocomplete after typing (50-500)">
-											<voidSimpleInputBox
+											<VoidSimpleInputBox
 												className='w-16 text-xs text-center'
 												placeholder='150'
 												value={String(settingsState.globalSettings.autocompleteConfig?.debounceMs ?? 150)}
@@ -1828,7 +2085,7 @@ export const Settings = () => {
 											/>
 										</SettingRow>
 										<SettingRow title="Max Suggestion Lines" description="Maximum number of lines in a suggestion (1-50)">
-											<voidSimpleInputBox
+											<VoidSimpleInputBox
 												className='w-16 text-xs text-center'
 												placeholder='10'
 												value={String(settingsState.globalSettings.autocompleteConfig?.maxSuggestionLines ?? 10)}
@@ -1838,9 +2095,19 @@ export const Settings = () => {
 												}}
 											/>
 										</SettingRow>
-										<SettingRow title="Post-Accept Prediction" description="Immediately predict next completion after accepting (Tab-Tab flow)" noBorder>
-											<voidSwitch size='sm' value={settingsState.globalSettings.autocompleteConfig?.enablePostAcceptPredict ?? true} onChange={(newVal) => {
+										<SettingRow title="Post-Accept Prediction" description="Immediately predict next completion after accepting (Tab-Tab flow)">
+											<VoidSwitch size='sm' value={settingsState.globalSettings.autocompleteConfig?.enablePostAcceptPredict ?? true} onChange={(newVal) => {
 												voidSettingsService.setGlobalSetting('autocompleteConfig', { ...settingsState.globalSettings.autocompleteConfig, enablePostAcceptPredict: newVal })
+											}} />
+										</SettingRow>
+										<SettingRow title="Suggest in Comments" description="Show completions inside code comments">
+											<VoidSwitch size='sm' value={settingsState.globalSettings.autocompleteConfig?.enableInComments ?? true} onChange={(newVal) => {
+												voidSettingsService.setGlobalSetting('autocompleteConfig', { ...settingsState.globalSettings.autocompleteConfig, enableInComments: newVal })
+											}} />
+										</SettingRow>
+										<SettingRow title="Suggest in Strings" description="Show completions inside string literals" noBorder>
+											<VoidSwitch size='sm' value={settingsState.globalSettings.autocompleteConfig?.enableInStrings ?? true} onChange={(newVal) => {
+												voidSettingsService.setGlobalSetting('autocompleteConfig', { ...settingsState.globalSettings.autocompleteConfig, enableInStrings: newVal })
 											}} />
 										</SettingRow>
 									</>)}
@@ -1853,7 +2120,7 @@ export const Settings = () => {
 										title="Sync Apply to Chat"
 										description="Use the same model for Apply as for Chat"
 									>
-										<voidSwitch size='sm' value={settingsState.globalSettings.syncApplyToChat} onChange={(newVal) => voidSettingsService.setGlobalSetting('syncApplyToChat', newVal)} />
+										<VoidSwitch size='sm' value={settingsState.globalSettings.syncApplyToChat} onChange={(newVal) => voidSettingsService.setGlobalSetting('syncApplyToChat', newVal)} />
 									</SettingRow>
 									{!settingsState.globalSettings.syncApplyToChat && (
 										<SettingRow title="Apply Model" description="Select a separate model for Apply">
@@ -1864,7 +2131,7 @@ export const Settings = () => {
 										<FastApplyMethodDropdown />
 									</SettingRow>
 									<SettingRow title="Apply Retries" description="Number of retries when apply fails (0-5)">
-										<voidSimpleInputBox
+										<VoidSimpleInputBox
 											className='w-16 text-xs text-center'
 											placeholder='2'
 											value={String(settingsState.globalSettings.applyModelRetries ?? 2)}
@@ -1875,7 +2142,7 @@ export const Settings = () => {
 										/>
 									</SettingRow>
 									<SettingRow title="Fallback to Direct Apply" description="Fall back to full-file rewrite if fast apply fails" noBorder>
-										<voidSwitch size='sm' value={settingsState.globalSettings.applyFallbackToDirect ?? true} onChange={(newVal) => voidSettingsService.setGlobalSetting('applyFallbackToDirect', newVal)} />
+										<VoidSwitch size='sm' value={settingsState.globalSettings.applyFallbackToDirect ?? true} onChange={(newVal) => voidSettingsService.setGlobalSetting('applyFallbackToDirect', newVal)} />
 									</SettingRow>
 								</SettingCard>
 
@@ -1895,10 +2162,10 @@ export const Settings = () => {
 										))}
 									</ErrorBoundary>
 									<SettingRow title="Fix Lint Errors" description="Automatically include lint errors in tool context">
-										<voidSwitch size='sm' value={settingsState.globalSettings.includeToolLintErrors} onChange={(newVal) => voidSettingsService.setGlobalSetting('includeToolLintErrors', newVal)} />
+										<VoidSwitch size='sm' value={settingsState.globalSettings.includeToolLintErrors} onChange={(newVal) => voidSettingsService.setGlobalSetting('includeToolLintErrors', newVal)} />
 									</SettingRow>
 									<SettingRow title="Auto-Accept LLM Changes" description="Automatically accept all changes made by the LLM" noBorder>
-										<voidSwitch size='sm' value={settingsState.globalSettings.autoAcceptLLMChanges} onChange={(newVal) => voidSettingsService.setGlobalSetting('autoAcceptLLMChanges', newVal)} />
+										<VoidSwitch size='sm' value={settingsState.globalSettings.autoAcceptLLMChanges} onChange={(newVal) => voidSettingsService.setGlobalSetting('autoAcceptLLMChanges', newVal)} />
 									</SettingRow>
 								</SettingCard>
 
@@ -1906,7 +2173,7 @@ export const Settings = () => {
 								<SectionLabel label="Editor" />
 								<SettingCard>
 									<SettingRow title="Show Inline Suggestions" description="Show void suggestions in the code editor on select" noBorder>
-										<voidSwitch size='sm' value={settingsState.globalSettings.showInlineSuggestions} onChange={(newVal) => voidSettingsService.setGlobalSetting('showInlineSuggestions', newVal)} />
+										<VoidSwitch size='sm' value={settingsState.globalSettings.showInlineSuggestions} onChange={(newVal) => voidSettingsService.setGlobalSetting('showInlineSuggestions', newVal)} />
 									</SettingRow>
 								</SettingCard>
 
@@ -1914,7 +2181,7 @@ export const Settings = () => {
 								<SectionLabel label="Source Control" />
 								<SettingCard>
 									<SettingRow title="Sync SCM to Chat" description="Use the same model for commit messages as for Chat">
-										<voidSwitch size='sm' value={settingsState.globalSettings.syncSCMToChat} onChange={(newVal) => voidSettingsService.setGlobalSetting('syncSCMToChat', newVal)} />
+										<VoidSwitch size='sm' value={settingsState.globalSettings.syncSCMToChat} onChange={(newVal) => voidSettingsService.setGlobalSetting('syncSCMToChat', newVal)} />
 									</SettingRow>
 									{!settingsState.globalSettings.syncSCMToChat && (
 										<SettingRow title="SCM Model" description="Select a separate model for commit messages" noBorder>
@@ -1927,16 +2194,16 @@ export const Settings = () => {
 								<SectionLabel label="Chat Mode" />
 								<SettingCard>
 									<SettingRow title="Default Chat Mode" description="The mode selected when opening a new chat" noBorder>
-										<voidCustomDropdownBox
-											options={['agent', 'ask', 'plan', 'debug']}
+										<VoidCustomDropdownBox
+											options={['auto', 'build', 'plan', 'ask']}
 											selectedOption={settingsState.globalSettings.chatMode}
 											onChangeOption={(newVal) => voidSettingsService.setGlobalSetting('chatMode', newVal as any)}
 											getOptionDisplayName={(opt: string) => {
-												const names: Record<string, string> = { agent: 'Agent', ask: 'Ask', plan: 'Plan', debug: 'Debug' }
+												const names: Record<string, string> = { auto: 'Auto', build: 'Build', plan: 'Plan', ask: 'Ask' }
 												return names[opt] ?? opt
 											}}
 											getOptionDropdownName={(opt: string) => {
-												const names: Record<string, string> = { agent: 'Agent', ask: 'Ask', plan: 'Plan', debug: 'Debug' }
+												const names: Record<string, string> = { auto: 'Auto', build: 'Build', plan: 'Plan', ask: 'Ask' }
 												return names[opt] ?? opt
 											}}
 											getOptionsEqual={(a, b) => a === b}
@@ -1948,8 +2215,8 @@ export const Settings = () => {
 								{/* Model Router */}
 								<SectionLabel label="Model Router" />
 								<SettingCard>
-									<SettingRow title="Router Mode" description="Manual: you pick the model. Auto: routes by task complexity" noBorder>
-										<voidCustomDropdownBox
+									<SettingRow title="Router Mode" description="Manual: you pick the model. Auto: routes by task complexity">
+										<VoidCustomDropdownBox
 											options={['manual', 'auto']}
 											selectedOption={settingsState.globalSettings.routerConfig?.mode ?? 'manual'}
 											onChangeOption={(newVal) => voidSettingsService.setGlobalSetting('routerConfig', {
@@ -1962,6 +2229,17 @@ export const Settings = () => {
 											className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-1 rounded p-0.5 px-1'
 										/>
 									</SettingRow>
+									{settingsState.globalSettings.routerConfig?.mode === 'auto' && (<>
+										<SettingRow title="Simple Tasks Model" description="Model used for simple queries and quick lookups">
+											<ModelDropdown featureName={'Chat'} className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-1 rounded p-0.5 px-1' />
+										</SettingRow>
+										<SettingRow title="Moderate Tasks Model" description="Model used for moderate complexity tasks">
+											<ModelDropdown featureName={'Chat'} className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-1 rounded p-0.5 px-1' />
+										</SettingRow>
+										<SettingRow title="Complex Tasks Model" description="Model used for complex multi-step tasks" noBorder>
+											<ModelDropdown featureName={'Chat'} className='text-xs text-void-fg-3 bg-void-bg-1 border border-void-border-1 rounded p-0.5 px-1' />
+										</SettingRow>
+									</>)}
 								</SettingCard>
 							</div>
 						)}
@@ -1979,7 +2257,7 @@ export const Settings = () => {
 									<SectionLabel label="Providers" />
 									<div className='text-xs text-void-fg-3 px-4 mb-3'>void can access models from Anthropic, OpenAI, OpenRouter, and more.</div>
 									<ErrorBoundary>
-										<voidProviderSettings providerNames={providerNames} />
+										<VoidProviderSettings providerNames={providerNames} />
 									</ErrorBoundary>
 								</div>
 							</div>

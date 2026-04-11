@@ -23,6 +23,9 @@ export interface IvoidAuthService {
 	readonly onDidChangeAuthState: Event<AuthState>;
 
 	initiateLogin(): Promise<void>;
+	loginWithEmail(email: string, password: string): Promise<void>;
+	signUpWithEmail(email: string, password: string, name: string): Promise<void>;
+	continueAsGuest(): void;
 	logout(): Promise<void>;
 	refreshSession(): Promise<void>;
 	getUsage(): Promise<UsageStats | null>;
@@ -55,10 +58,13 @@ class voidAuthService extends Disposable implements IvoidAuthService {
 		this.channel = this.mainProcessService.getChannel('void-channel-auth');
 
 		// Provide global proxy config for all LLM messages across the app
+		// Guest users get undefined so LLM service falls back to direct provider calls
 		this.llmMessageService.registerProxyConfigProvider(() => {
-			const authToken = (this._state.isAuthenticated && this._state.session) ? this._state.session.accessToken : '';
+			if (this._state.isGuest || !this._state.isAuthenticated || !this._state.session) {
+				return undefined as any;
+			}
 			return {
-				authToken,
+				authToken: this._state.session.accessToken,
 				backendUrl: this.backendUrl,
 			};
 		});
@@ -68,6 +74,7 @@ class voidAuthService extends Disposable implements IvoidAuthService {
 			if (e.session) {
 				this._setState({
 					isAuthenticated: true,
+					isGuest: false,
 					session: e.session,
 					isLoading: false,
 					error: null,
@@ -75,6 +82,7 @@ class voidAuthService extends Disposable implements IvoidAuthService {
 			} else {
 				this._setState({
 					isAuthenticated: false,
+					isGuest: false,
 					session: null,
 					isLoading: false,
 					error: null,
@@ -96,12 +104,14 @@ class voidAuthService extends Disposable implements IvoidAuthService {
 					// Token still valid
 					this._setState({
 						isAuthenticated: true,
+						isGuest: false,
 						session: result.session,
 						isLoading: false,
 						error: null,
 					});
 				} else if (result.session.refreshToken) {
-					// Token expired, try refresh
+					// Set session in state so refreshSession() can read the refresh token
+					this._state = { ...this._state, session: result.session };
 					await this.refreshSession();
 				} else {
 					this._setState({ ...defaultAuthState, isLoading: false });
@@ -130,13 +140,74 @@ class voidAuthService extends Disposable implements IvoidAuthService {
 		// Keep isLoading true until the callback fires
 	}
 
+	async loginWithEmail(email: string, password: string): Promise<void> {
+		this._setState({ ...this._state, isLoading: true, error: null });
+
+		const result = await this.channel.call('emailLogin', {
+			email,
+			password,
+			backendUrl: this.backendUrl,
+		}) as { success?: boolean; session?: AuthSession; error?: string };
+
+		if (result.error) {
+			this._setState({ ...this._state, isLoading: false, error: result.error });
+		} else if (result.session) {
+			this._setState({
+				isAuthenticated: true,
+				isGuest: false,
+				session: result.session,
+				isLoading: false,
+				error: null,
+			});
+		}
+	}
+
+	async signUpWithEmail(email: string, password: string, name: string): Promise<void> {
+		this._setState({ ...this._state, isLoading: true, error: null });
+
+		const result = await this.channel.call('emailSignup', {
+			email,
+			password,
+			name,
+			backendUrl: this.backendUrl,
+		}) as { success?: boolean; session?: AuthSession; error?: string };
+
+		if (result.error) {
+			this._setState({ ...this._state, isLoading: false, error: result.error });
+		} else if (result.session) {
+			this._setState({
+				isAuthenticated: true,
+				isGuest: false,
+				session: result.session,
+				isLoading: false,
+				error: null,
+			});
+		}
+	}
+
+	continueAsGuest(): void {
+		this._setState({
+			isAuthenticated: false,
+			isGuest: true,
+			session: null,
+			isLoading: false,
+			error: null,
+		});
+	}
+
 	async logout(): Promise<void> {
 		const accessToken = this._state.session?.accessToken;
 		await this.channel.call('logout', {
 			accessToken: accessToken || '',
 			backendUrl: this.backendUrl,
 		});
-		// State will be cleared by the onAuthStateChanged event
+		this._setState({
+			isAuthenticated: false,
+			isGuest: false,
+			session: null,
+			isLoading: false,
+			error: null,
+		});
 	}
 
 	async refreshSession(): Promise<void> {
@@ -156,7 +227,15 @@ class voidAuthService extends Disposable implements IvoidAuthService {
 			return;
 		}
 
-		// Session will be set by the onAuthStateChanged event fired from the channel
+		if (result.session) {
+			this._setState({
+				isAuthenticated: true,
+				isGuest: false,
+				session: result.session,
+				isLoading: false,
+				error: null,
+			});
+		}
 	}
 
 	async getUsage(): Promise<UsageStats | null> {
@@ -175,6 +254,18 @@ class voidAuthService extends Disposable implements IvoidAuthService {
 	private _setState(state: AuthState): void {
 		this._state = state;
 		this._onDidChangeAuthState.fire(state);
+
+		// When authenticated, auto-configure providers so models are available
+		// The actual API keys live on the backend; sentinel values just enable providers in the UI
+		if (state.isAuthenticated && state.session) {
+			const settings = this.voidSettingsService.state.settingsOfProvider;
+			if (!settings['anthropic']?.apiKey || settings['anthropic']?.apiKey === '') {
+				this.voidSettingsService.setSettingOfProvider('anthropic', 'apiKey', 'void-backend-proxy');
+			}
+			if (!settings['openAI']?.apiKey || settings['openAI']?.apiKey === '') {
+				this.voidSettingsService.setSettingOfProvider('openAI', 'apiKey', 'void-backend-proxy');
+			}
+		}
 	}
 }
 

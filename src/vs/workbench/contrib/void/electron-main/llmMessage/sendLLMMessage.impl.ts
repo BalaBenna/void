@@ -41,6 +41,7 @@ type InternalCommonMessageParams = {
 	overridesOfModel: OverridesOfModel | undefined;
 	modelName: string;
 	_setAborter: (aborter: () => void) => void;
+	privacyMode?: boolean;
 }
 
 type SendChatParams_Internal = InternalCommonMessageParams & {
@@ -257,7 +258,7 @@ const rawToolCallObjOfAnthropicParams = (toolBlock: Anthropic.Messages.ToolUseBl
 // ------------ OPENAI-COMPATIBLE ------------
 
 
-const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onError, settingsOfProvider, modelSelectionOptions, modelName: modelName_, _setAborter, providerName, chatMode, separateSystemMessage, overridesOfModel, mcpTools }: SendChatParams_Internal) => {
+const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onError, settingsOfProvider, modelSelectionOptions, modelName: modelName_, _setAborter, providerName, chatMode, separateSystemMessage, overridesOfModel, mcpTools, privacyMode }: SendChatParams_Internal) => {
 	const {
 		modelName,
 		specialToolFormat,
@@ -288,12 +289,14 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 		// Required to select the model
 		(openai as AzureOpenAI).deploymentName = modelName;
 	}
+	const privacyOptions = privacyMode ? { store: false } : {}
 	const options: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
 		model: modelName,
 		messages: messages as any,
 		stream: true,
 		...nativeToolsObj,
-		...additionalOpenAIPayload
+		...additionalOpenAIPayload,
+		...privacyOptions,
 		// max_completion_tokens: maxTokens,
 	}
 
@@ -765,7 +768,7 @@ export const sendLLMMessageToProviderImplementation: CallFnOfProvider & { ollama
 	},
 	xAI: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
-		sendFIM: null,
+		sendFIM: (params) => _sendOpenAICompatibleFIM(params),
 		list: null,
 	},
 	gemini: {
@@ -790,12 +793,12 @@ export const sendLLMMessageToProviderImplementation: CallFnOfProvider & { ollama
 	},
 	deepseek: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
-		sendFIM: null,
+		sendFIM: (params) => _sendOpenAICompatibleFIM(params),
 		list: null,
 	},
 	groq: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
-		sendFIM: null,
+		sendFIM: (params) => _sendOpenAICompatibleFIM(params),
 		list: null,
 	},
 	liteLLM: {

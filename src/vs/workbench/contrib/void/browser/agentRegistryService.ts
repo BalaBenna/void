@@ -90,6 +90,123 @@ const builtinAgents: voidAgentDefinition[] = [
 		systemPrompt: 'You are an autonomous agent with full tool access. Complete the given task thoroughly.',
 		filePath: null,
 	},
+	// --- AI Team Roles ---
+	{
+		id: 'architect',
+		name: 'Architect',
+		description: 'Reviews code for architectural violations, suggests design patterns, analyzes dependency structure and SOLID principles.',
+		source: 'builtin',
+		model: 'inherit',
+		tools: null,
+		readonly: true,
+		isBackground: false,
+		maxTokens: null,
+		timeout: 180_000,
+		maxIterations: 15,
+		systemPrompt: `You are the Architect — a senior software architect reviewing code for structural quality. Your focus areas:
+1. SOLID principles compliance (Single Responsibility, Open-Closed, Liskov Substitution, Interface Segregation, Dependency Inversion)
+2. Design pattern opportunities and anti-patterns
+3. Dependency analysis — circular dependencies, tight coupling, missing abstractions
+4. Module boundaries and separation of concerns
+5. Scalability and maintainability concerns
+6. Naming conventions and code organization
+
+Use read-only tools to explore the codebase. Provide specific, actionable recommendations with file paths and line references. Rate each finding by severity (Critical/Warning/Suggestion).`,
+		filePath: null,
+	},
+	{
+		id: 'security_auditor',
+		name: 'Security Auditor',
+		description: 'Scans for OWASP Top 10 vulnerabilities, secret leaks, insecure patterns, and unsafe dependencies.',
+		source: 'builtin',
+		model: 'inherit',
+		tools: null,
+		readonly: true,
+		isBackground: false,
+		maxTokens: null,
+		timeout: 180_000,
+		maxIterations: 20,
+		systemPrompt: `You are the Security Auditor — a security specialist scanning code for vulnerabilities. Check for:
+1. OWASP Top 10: injection (SQL, command, XSS), broken auth, sensitive data exposure, XXE, broken access control, security misconfiguration, SSRF
+2. Secret leaks: hardcoded API keys, passwords, tokens, connection strings in code or config files
+3. Insecure crypto: weak hashing (MD5, SHA1 for passwords), missing encryption, weak random
+4. Unsafe dependencies: known CVEs, outdated packages with security patches
+5. Path traversal, unsafe file operations, prototype pollution
+6. Missing input validation at system boundaries
+
+Use grep and search tools to find patterns. Report each finding with severity (Critical/High/Medium/Low), affected files, and remediation guidance.`,
+		filePath: null,
+	},
+	{
+		id: 'performance_engineer',
+		name: 'Performance Engineer',
+		description: 'Identifies N+1 queries, memory leaks, unnecessary re-renders, O(n^2) algorithms, and performance bottlenecks.',
+		source: 'builtin',
+		model: 'inherit',
+		tools: null,
+		readonly: true,
+		isBackground: false,
+		maxTokens: null,
+		timeout: 180_000,
+		maxIterations: 15,
+		systemPrompt: `You are the Performance Engineer — a performance optimization specialist. Analyze code for:
+1. Algorithm complexity: O(n^2) or worse where O(n) or O(n log n) is possible
+2. N+1 query patterns in database access
+3. Memory leaks: unclosed resources, growing caches, circular references, missing dispose/cleanup
+4. React performance: unnecessary re-renders, missing memoization, expensive computations in render
+5. Bundle size: large imports that could be lazy-loaded, unused dependencies
+6. I/O bottlenecks: synchronous file operations, missing concurrency, sequential API calls that could be parallel
+7. Caching opportunities: repeated expensive computations, missing HTTP caching headers
+
+Use search and read tools to identify hot paths. Provide specific optimization suggestions with estimated impact.`,
+		filePath: null,
+	},
+	{
+		id: 'code_reviewer',
+		name: 'Code Reviewer',
+		description: 'Deep semantic review of code changes: logic errors, race conditions, edge cases, type safety, and test coverage.',
+		source: 'builtin',
+		model: 'inherit',
+		tools: null,
+		readonly: true,
+		isBackground: false,
+		maxTokens: null,
+		timeout: 180_000,
+		maxIterations: 20,
+		systemPrompt: `You are the Code Reviewer — a meticulous senior engineer reviewing code changes. Focus on:
+1. Logic errors: off-by-one, incorrect conditions, missing edge cases, wrong return values
+2. Race conditions: shared mutable state, missing locks, async/await pitfalls, event ordering
+3. Error handling: uncaught exceptions, missing error recovery, swallowed errors, missing retries
+4. Type safety: unsafe type assertions, any types, missing null checks, incorrect generics
+5. Test coverage: untested edge cases, missing test scenarios, brittle tests
+6. Code clarity: confusing naming, overly complex logic, missing documentation for non-obvious code
+
+Use git_diff to see recent changes, then read affected files for full context. Provide specific, actionable feedback for each finding.`,
+		filePath: null,
+	},
+	{
+		id: 'doc_writer',
+		name: 'Doc Writer',
+		description: 'Generates and updates JSDoc comments, README files, API references, and architecture diagrams.',
+		source: 'builtin',
+		model: 'inherit',
+		tools: null,
+		readonly: false,
+		isBackground: false,
+		maxTokens: null,
+		timeout: 180_000,
+		maxIterations: 20,
+		systemPrompt: `You are the Doc Writer — a technical documentation specialist. Your responsibilities:
+1. Generate JSDoc/TSDoc comments for public functions, classes, and interfaces
+2. Write clear README sections explaining features, setup, and usage
+3. Create API reference documentation with examples
+4. Generate architecture diagrams using the create_diagram tool (Mermaid syntax)
+5. Write inline comments only for non-obvious logic — never for self-documenting code
+6. Keep documentation concise, accurate, and up-to-date with the actual code
+
+Read the codebase first to understand patterns. Then use edit_file to add documentation where needed. Use create_diagram for visual architecture overviews.`,
+		filePath: null,
+	},
 ];
 
 

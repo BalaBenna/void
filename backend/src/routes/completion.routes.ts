@@ -1,14 +1,27 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { authMiddleware } from "../middleware/auth.middleware";
-import { checkUsageLimits, recordUsage } from "../services/usage.service";
+import { checkUsageLimits, recordUsage, recordError } from "../services/usage.service";
 import {
   createCompletion,
   streamCompletion,
 } from "../services/ai.service";
-import type { CompletionRequest } from "../shared/types";
+import {
+  type CompletionRequest,
+  type PlanType,
+  PLAN_LIMITS,
+  ERROR_CODES,
+} from "../shared/types";
 
-const completions = new Hono();
+type Env = {
+  Variables: {
+    userId: string;
+    email: string;
+    plan: string;
+  };
+};
+
+const completions = new Hono<Env>();
 
 // All routes require authentication
 completions.use("/*", authMiddleware);
@@ -20,8 +33,22 @@ completions.use("/*", authMiddleware);
 
 completions.post("/", async (c) => {
   const userId = c.get("userId");
-  const plan = c.get("plan");
+  const plan = c.get("plan") as PlanType;
   const body: CompletionRequest = await c.req.json();
+
+  // Gate tool calling by plan
+  if (body.tools && body.tools.length > 0) {
+    const limits = PLAN_LIMITS[plan];
+    if (!limits.agenticEnabled) {
+      return c.json(
+        {
+          error: "Tool calling requires a Pro plan or higher",
+          code: ERROR_CODES.MODEL_NOT_ALLOWED,
+        },
+        403
+      );
+    }
+  }
 
   const { allowed, reason, code } = await checkUsageLimits(
     userId,
@@ -47,6 +74,14 @@ completions.post("/", async (c) => {
     return c.json(response);
   } catch (error: any) {
     console.error("Completion error:", error);
+
+    await recordError(
+      userId,
+      body.model,
+      error.message || "AI completion failed",
+      Date.now() - startTime
+    );
+
     return c.json(
       { error: "AI completion failed", details: error.message },
       500
@@ -61,8 +96,22 @@ completions.post("/", async (c) => {
 
 completions.post("/stream", async (c) => {
   const userId = c.get("userId");
-  const plan = c.get("plan");
+  const plan = c.get("plan") as PlanType;
   const body: CompletionRequest = await c.req.json();
+
+  // Gate tool calling by plan
+  if (body.tools && body.tools.length > 0) {
+    const limits = PLAN_LIMITS[plan];
+    if (!limits.agenticEnabled) {
+      return c.json(
+        {
+          error: "Tool calling requires a Pro plan or higher",
+          code: ERROR_CODES.MODEL_NOT_ALLOWED,
+        },
+        403
+      );
+    }
+  }
 
   const { allowed, reason, code } = await checkUsageLimits(
     userId,
@@ -72,6 +121,8 @@ completions.post("/stream", async (c) => {
   if (!allowed) {
     return c.json({ error: reason, code }, 429);
   }
+
+  const startTime = Date.now();
 
   return streamSSE(c, async (stream) => {
     try {
@@ -92,9 +143,18 @@ completions.post("/stream", async (c) => {
       }
 
       if (totalInput > 0 || totalOutput > 0) {
-        await recordUsage(userId, totalInput, totalOutput, body.model, 0);
+        await recordUsage(userId, totalInput, totalOutput, body.model, Date.now() - startTime);
       }
     } catch (error: any) {
+      console.error("Stream completion error:", error);
+
+      await recordError(
+        userId,
+        body.model,
+        error.message || "Stream completion failed",
+        Date.now() - startTime
+      );
+
       await stream.write(
         `data: ${JSON.stringify({ type: "error", error: error.message })}\n\n`
       );

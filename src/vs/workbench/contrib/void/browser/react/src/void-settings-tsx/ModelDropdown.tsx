@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FeatureName, featureNames, isFeatureNameDisabled, ModelSelection, modelSelectionsEqual, ProviderName, providerNames, SettingsOfProvider } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js'
 import { useSettingsState, useRefreshModelState, useAccessor } from '../util/services.js'
-import { _voidSelectBox, voidCustomDropdownBox } from '../util/inputs.js'
+import { _voidSelectBox, VoidCustomDropdownBox } from '../util/inputs.js'
 import { SelectBox } from '../../../../../../../base/browser/ui/selectBox/selectBox.js'
 import { IconWarning } from '../sidebar-tsx/SidebarChat.js'
 import { void_OPEN_SETTINGS_ACTION_ID, void_TOGGLE_SETTINGS_ACTION_ID } from '../../../voidSettingsPane.js'
@@ -33,7 +33,7 @@ const ModelSelectBox = ({ options, featureName, className }: { options: ModelOpt
 		voidSettingsService.setModelSelectionOfFeature(featureName, newOption.selection)
 	}, [voidSettingsService, featureName])
 
-	return <voidCustomDropdownBox
+	return <VoidCustomDropdownBox
 		options={options}
 		selectedOption={selectedOption}
 		onChangeOption={onChangeOption}

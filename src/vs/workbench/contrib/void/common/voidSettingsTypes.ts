@@ -7,9 +7,10 @@
 import { defaultModelsOfProvider, defaultProviderSettings, ModelOverrides } from './modelCapabilities.js';
 import { ToolApprovalType } from './toolsServiceTypes.js';
 import { voidSettingsState } from './voidSettingsService.js'
-import { SandboxMode, SandboxPolicy, YoloConfig, defaultSandboxPolicy, defaultYoloConfig } from './sandboxTypes.js';
+import { SandboxMode, SandboxPolicy, YoloConfig, E2BSandboxConfig, defaultSandboxPolicy, defaultYoloConfig, defaultE2BSandboxConfig } from './sandboxTypes.js';
 import { RouterConfig, defaultRouterConfig } from './modelRouterTypes.js';
 import { MemoryConfig, defaultMemoryConfig } from './memoryTypes.js';
+import { AmbientAgentConfig, defaultAmbientAgentConfig } from './ambientAgentTypes.js';
 import { ParallelAgentConfig, defaultParallelAgentConfig } from './parallelAgentTypes.js';
 import { BackgroundAgentConfig, defaultBackgroundAgentConfig } from './backgroundAgentTypes.js';
 import { AutocompleteConfig, defaultAutocompleteConfig } from './autocompleteTypes.js';
@@ -410,7 +411,7 @@ export const isFeatureNameDisabled = (featureName: FeatureName, settingsState: v
 
 
 
-export type ChatMode = 'agent' | 'ask' | 'plan' | 'debug'
+export type ChatMode = 'auto' | 'build' | 'plan' | 'ask'
 
 export type SubagentConfig = {
 	enabled: boolean;
@@ -439,12 +440,13 @@ export type GlobalSettings = {
 	sandboxMode: SandboxMode;
 	sandboxPolicy: SandboxPolicy;
 	yoloConfig: YoloConfig;
+	e2bSandboxConfig: E2BSandboxConfig;
 	secretDetectionEnabled: boolean;
 	// Phase 4: Two-Model Apply
 	applyModelRetries: number;
 	applyFallbackToDirect: boolean;
 	// Phase 6: Embeddings
-	embeddingsConfig: { enabled: boolean; reindexOnSave: boolean; maxResults: number };
+	embeddingsConfig: { enabled: boolean; reindexOnSave: boolean; maxResults: number; useVectorEmbeddings: boolean; embeddingProvider: 'openAI' | 'local' | 'none'; embeddingModel: string };
 	// Phase 7: Model Router
 	routerConfig: RouterConfig;
 	// Phase 8: Memory System
@@ -461,6 +463,22 @@ export type GlobalSettings = {
 	verificationPipelineConfig: VerificationPipelineConfig;
 	// Backend Proxy
 	backendUrl: string;
+	// Privacy Mode - no data stored by providers
+	privacyMode: boolean;
+	// GitHub integration
+	githubToken: string;
+	// Implementation Summary
+	enableImplementationSummary: boolean;
+	// Cascade Mode - autonomous plan-execute-verify loop
+	cascadeMode: boolean;
+	// Context Management
+	contextManagement: {
+		autoCompact: boolean;
+		compactThreshold: number;
+		preserveSystemMessages: boolean;
+	};
+	// Ambient Agent
+	ambientAgentConfig: AmbientAgentConfig;
 }
 
 export const defaultGlobalSettings: GlobalSettings = {
@@ -469,13 +487,13 @@ export const defaultGlobalSettings: GlobalSettings = {
 	syncApplyToChat: true,
 	syncSCMToChat: true,
 	enableFastApply: true,
-	chatMode: 'agent',
+	chatMode: 'auto',
 	autoApprove: {},
 	showInlineSuggestions: true,
 	includeToolLintErrors: true,
 	isOnboardingComplete: false,
 	disableSystemMessage: false,
-	autoAcceptLLMChanges: false,
+	autoAcceptLLMChanges: true,
 	tavilyApiKey: '',
 	subagentConfig: { enabled: true, maxConcurrent: 3 },
 	// Phase 1: Agent Loop Hardening
@@ -485,12 +503,13 @@ export const defaultGlobalSettings: GlobalSettings = {
 	sandboxMode: 'off',
 	sandboxPolicy: defaultSandboxPolicy,
 	yoloConfig: defaultYoloConfig,
+	e2bSandboxConfig: defaultE2BSandboxConfig,
 	secretDetectionEnabled: true,
 	// Phase 4: Two-Model Apply
 	applyModelRetries: 2,
 	applyFallbackToDirect: true,
 	// Phase 6: Embeddings
-	embeddingsConfig: { enabled: false, reindexOnSave: true, maxResults: 10 },
+	embeddingsConfig: { enabled: true, reindexOnSave: true, maxResults: 10, useVectorEmbeddings: true, embeddingProvider: 'local', embeddingModel: 'all-MiniLM-L6-v2' },
 	// Phase 7: Model Router
 	routerConfig: defaultRouterConfig,
 	// Phase 8: Memory System
@@ -507,6 +526,22 @@ export const defaultGlobalSettings: GlobalSettings = {
 	verificationPipelineConfig: defaultVerificationPipelineConfig,
 	// Backend Proxy
 	backendUrl: 'http://localhost:3456',
+	// Privacy Mode
+	privacyMode: false,
+	// GitHub integration
+	githubToken: '',
+	// Implementation Summary
+	enableImplementationSummary: true,
+	// Cascade Mode
+	cascadeMode: true,
+	// Context Management
+	contextManagement: {
+		autoCompact: false,
+		compactThreshold: 50,
+		preserveSystemMessages: true,
+	},
+	// Ambient Agent
+	ambientAgentConfig: defaultAmbientAgentConfig,
 }
 
 export type GlobalSettingName = keyof GlobalSettings

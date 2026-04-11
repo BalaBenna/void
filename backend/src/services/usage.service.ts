@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { db, schema } from "../db";
 import { redis } from "../config/redis";
 import {
@@ -116,6 +116,7 @@ export async function recordUsage(
   durationMs: number
 ): Promise<void> {
   const today = getTodayString();
+  const totalTokens = inputTokens + outputTokens;
 
   // Upsert daily usage
   const [existing] = await db
@@ -159,6 +160,99 @@ export async function recordUsage(
     status: "success",
   });
 
+  // Update user lifetime stats and last active timestamp
+  await db
+    .update(schema.users)
+    .set({
+      lastActiveAt: new Date(),
+      totalMessagesAllTime: sql`${schema.users.totalMessagesAllTime} + 1`,
+      totalTokensAllTime: sql`${schema.users.totalTokensAllTime} + ${totalTokens}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.users.id, userId));
+
   // Invalidate cache
   await redis.del(`usage:${userId}:${today}`);
+}
+
+/**
+ * Record a failed request for tracking and debugging.
+ */
+export async function recordError(
+  userId: string,
+  model: string,
+  errorMessage: string,
+  durationMs: number,
+  metadata?: Record<string, unknown>
+): Promise<void> {
+  await db.insert(schema.requestLogs).values({
+    userId,
+    model,
+    inputTokens: 0,
+    outputTokens: 0,
+    durationMs,
+    status: "error",
+    errorMessage,
+    metadata: metadata || null,
+  });
+
+  // Update last active even on errors
+  await db
+    .update(schema.users)
+    .set({ lastActiveAt: new Date(), updatedAt: new Date() })
+    .where(eq(schema.users.id, userId));
+}
+
+/**
+ * Record or update a user session (device/login tracking).
+ */
+export async function recordSession(
+  userId: string,
+  deviceId?: string,
+  platform?: string,
+  appVersion?: string,
+  ipAddress?: string
+): Promise<void> {
+  if (!deviceId) {
+    // No device ID, just create a new session entry
+    await db.insert(schema.userSessions).values({
+      userId,
+      platform,
+      appVersion,
+      ipAddress,
+    });
+    return;
+  }
+
+  // Upsert by userId + deviceId
+  const [existing] = await db
+    .select()
+    .from(schema.userSessions)
+    .where(
+      and(
+        eq(schema.userSessions.userId, userId),
+        eq(schema.userSessions.deviceId, deviceId)
+      )
+    )
+    .limit(1);
+
+  if (existing) {
+    await db
+      .update(schema.userSessions)
+      .set({
+        lastSeenAt: new Date(),
+        platform: platform || existing.platform,
+        appVersion: appVersion || existing.appVersion,
+        ipAddress: ipAddress || existing.ipAddress,
+      })
+      .where(eq(schema.userSessions.id, existing.id));
+  } else {
+    await db.insert(schema.userSessions).values({
+      userId,
+      deviceId,
+      platform,
+      appVersion,
+      ipAddress,
+    });
+  }
 }

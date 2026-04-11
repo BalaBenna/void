@@ -11,8 +11,9 @@ import { IWorkspaceContextService } from '../../../../platform/workspace/common/
 import { URI } from '../../../../base/common/uri.js';
 import { VSBuffer } from '../../../../base/common/buffer.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
+import { Emitter, Event } from '../../../../base/common/event.js';
 
-import { Memory, MemoryStore, MemoryType } from '../common/memoryTypes.js';
+import { Memory, MemoryStore, MemoryType, MEMORY_DEDUP_THRESHOLD } from '../common/memoryTypes.js';
 import { IvoidSettingsService } from '../common/voidSettingsService.js';
 
 
@@ -21,9 +22,10 @@ export interface IMemoryService {
 
 	addMemory(opts: { type: MemoryType; content: string; context: string; tags: string[] }): Promise<Memory>;
 	removeMemory(id: string): Promise<void>;
-	queryMemories(query: string, maxResults?: number): Memory[];
-	getAllMemories(): Memory[];
-	getRelevantMemories(userMessage: string, maxResults?: number): Memory[];
+	queryMemories(query: string, maxResults?: number): Promise<Memory[]>;
+	getAllMemories(): Promise<Memory[]>;
+	getRelevantMemories(userMessage: string, maxResults?: number): Promise<Memory[]>;
+	getSharedContext(query: string, maxResults?: number): Promise<string>;
 	clearAll(): Promise<void>;
 
 	/**
@@ -31,6 +33,8 @@ export interface IMemoryService {
 	 * Parses structured JSON output from the LLM.
 	 */
 	extractAndStoreFromSummary(summaryJson: string): Promise<Memory[]>;
+
+	readonly onDidChange: Event<void>;
 }
 
 export const IMemoryService = createDecorator<IMemoryService>('voidMemoryService');
@@ -50,11 +54,30 @@ const STOP_WORDS = new Set([
 	'use', 'used', 'using', 'file', 'code', 'should', 'would',
 ])
 
+/**
+ * Compute similarity between two strings using token overlap (Jaccard-like).
+ */
+function computeSimilarity(a: string, b: string): number {
+	const tokensA = new Set(tokenize(a).filter(t => !STOP_WORDS.has(t)))
+	const tokensB = new Set(tokenize(b).filter(t => !STOP_WORDS.has(t)))
+	if (tokensA.size === 0 && tokensB.size === 0) return 1
+	if (tokensA.size === 0 || tokensB.size === 0) return 0
+
+	let intersection = 0
+	for (const t of tokensA) {
+		if (tokensB.has(t)) intersection++
+	}
+	const union = tokensA.size + tokensB.size - intersection
+	return union === 0 ? 0 : intersection / union
+}
+
 class MemoryService extends Disposable implements IMemoryService {
 	declare readonly _serviceBrand: undefined;
 
 	private _memoryStore: MemoryStore = { version: 1, memories: [] };
 	private _loaded = false;
+	private readonly _onDidChange = this._register(new Emitter<void>());
+	readonly onDidChange: Event<void> = this._onDidChange.event;
 
 	constructor(
 		@IFileService private readonly _fileService: IFileService,
@@ -62,6 +85,8 @@ class MemoryService extends Disposable implements IMemoryService {
 		@IvoidSettingsService private readonly _settingsService: IvoidSettingsService,
 	) {
 		super();
+		// Eagerly start loading memories at construction
+		void this._ensureLoaded();
 	}
 
 	private _getMemoryFileUri(): URI | null {
@@ -106,10 +131,40 @@ class MemoryService extends Disposable implements IMemoryService {
 		}
 	}
 
+	/**
+	 * Find a duplicate memory by content similarity.
+	 * Returns the existing memory if a duplicate is found, null otherwise.
+	 */
+	private _findDuplicate(content: string, type: MemoryType): Memory | null {
+		for (const existing of this._memoryStore.memories) {
+			if (existing.type !== type) continue
+			const similarity = computeSimilarity(existing.content, content)
+			if (similarity >= MEMORY_DEDUP_THRESHOLD) {
+				return existing
+			}
+		}
+		return null
+	}
+
 	async addMemory(opts: { type: MemoryType; content: string; context: string; tags: string[] }): Promise<Memory> {
 		await this._ensureLoaded();
 
 		const config = this._settingsService.state.globalSettings.memoryConfig;
+
+		// Check for duplicates — merge if found
+		const existing = this._findDuplicate(opts.content, opts.type)
+		if (existing) {
+			existing.lastAccessedAt = Date.now()
+			existing.accessCount++
+			// Merge tags (deduplicated)
+			const tagSet = new Set([...existing.tags, ...opts.tags])
+			existing.tags = [...tagSet]
+			// Update context if new one is more recent
+			if (opts.context) existing.context = opts.context
+			await this._persist()
+			this._onDidChange.fire()
+			return existing
+		}
 
 		const memory: Memory = {
 			id: generateUuid(),
@@ -131,6 +186,7 @@ class MemoryService extends Disposable implements IMemoryService {
 		}
 
 		await this._persist();
+		this._onDidChange.fire();
 		return memory;
 	}
 
@@ -138,13 +194,17 @@ class MemoryService extends Disposable implements IMemoryService {
 		await this._ensureLoaded();
 		this._memoryStore.memories = this._memoryStore.memories.filter(m => m.id !== id);
 		await this._persist();
+		this._onDidChange.fire();
 	}
 
-	getAllMemories(): Memory[] {
+	async getAllMemories(): Promise<Memory[]> {
+		await this._ensureLoaded();
 		return this._memoryStore.memories;
 	}
 
-	queryMemories(query: string, maxResults: number = 5): Memory[] {
+	async queryMemories(query: string, maxResults: number = 5): Promise<Memory[]> {
+		await this._ensureLoaded();
+
 		const queryTokens = tokenize(query).filter(t => !STOP_WORDS.has(t));
 		if (queryTokens.length === 0) return [];
 
@@ -175,13 +235,20 @@ class MemoryService extends Disposable implements IMemoryService {
 		return results;
 	}
 
-	getRelevantMemories(userMessage: string, maxResults: number = 5): Memory[] {
+	async getRelevantMemories(userMessage: string, maxResults: number = 5): Promise<Memory[]> {
 		return this.queryMemories(userMessage, maxResults);
+	}
+
+	async getSharedContext(query: string, maxResults: number = 5): Promise<string> {
+		const memories = await this.queryMemories(query, maxResults)
+		if (memories.length === 0) return ''
+		return memories.map(m => `[${m.type}] ${m.content}`).join('\n')
 	}
 
 	async clearAll(): Promise<void> {
 		this._memoryStore = { version: 1, memories: [] };
 		await this._persist();
+		this._onDidChange.fire();
 	}
 
 	async extractAndStoreFromSummary(summaryJson: string): Promise<Memory[]> {
@@ -210,7 +277,7 @@ class MemoryService extends Disposable implements IMemoryService {
 				const memory = await this.addMemory({
 					type,
 					content: item.content,
-					context: item.context ?? '',
+					context: item.context ?? 'auto-extracted from conversation',
 					tags: Array.isArray(item.tags) ? item.tags.map(String) : [],
 				});
 				added.push(memory);
@@ -232,4 +299,4 @@ class MemoryService extends Disposable implements IMemoryService {
 	}
 }
 
-registerSingleton(IMemoryService, MemoryService, InstantiationType.Delayed);
+registerSingleton(IMemoryService, MemoryService, InstantiationType.Eager);

@@ -28,7 +28,10 @@ export interface MemoryConfig {
 }
 
 export const defaultMemoryConfig: MemoryConfig = {
-	enabled: false,
+	enabled: true,
 	maxMemories: 100,
-	autoExtract: false,
+	autoExtract: true,
 };
+
+/** Minimum similarity score (0-1) to consider two memories as duplicates */
+export const MEMORY_DEDUP_THRESHOLD = 0.8;

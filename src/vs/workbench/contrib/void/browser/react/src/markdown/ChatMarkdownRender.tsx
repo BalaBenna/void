@@ -3,7 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import React, { JSX, useMemo, useState } from 'react'
+import React, { JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { marked, MarkedToken, Token } from 'marked'
 
 import { convertToVscodeLang, detectLanguage } from '../../../../common/helpers/languageHelpers.js'
@@ -16,6 +16,49 @@ import { BlockCode } from '../util/inputs.js'
 import { CodespanLocationLink } from '../../../../common/chatThreadServiceTypes.js'
 import { getBasename, getRelative, voidOpenFileFn } from '../sidebar-tsx/SidebarChat.js'
 
+
+// Mermaid diagram renderer - renders mermaid code blocks as SVG
+const MermaidDiagram = ({ code }: { code: string }) => {
+	const containerRef = useRef<HTMLDivElement>(null)
+	const [svg, setSvg] = useState<string>('')
+	const [error, setError] = useState<string>('')
+
+	useEffect(() => {
+		let cancelled = false
+		const renderMermaid = async () => {
+			try {
+				// Dynamically import mermaid
+				const mermaid = (await import('mermaid')).default
+				mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' })
+				const id = `mermaid-${Date.now()}-${Math.random().toString(36).slice(2)}`
+				const { svg: renderedSvg } = await mermaid.render(id, code)
+				if (!cancelled) setSvg(renderedSvg)
+			} catch (e: any) {
+				if (!cancelled) setError(e?.message || 'Failed to render diagram')
+			}
+		}
+		renderMermaid()
+		return () => { cancelled = true }
+	}, [code])
+
+	if (error) {
+		return <div className="text-void-fg-3 text-xs p-2 border border-void-border-1 rounded">
+			<div className="text-void-fg-2 mb-1">Mermaid diagram error:</div>
+			<pre className="text-xs">{error}</pre>
+			<pre className="text-xs mt-2 text-void-fg-3">{code}</pre>
+		</div>
+	}
+
+	if (!svg) {
+		return <div className="text-void-fg-3 text-xs p-2">Rendering diagram...</div>
+	}
+
+	return <div
+		ref={containerRef}
+		className="my-2 p-2 bg-void-bg-1 rounded overflow-auto"
+		dangerouslySetInnerHTML={{ __html: svg }}
+	/>
+}
 
 export type ChatMessageLocation = {
 	threadId: string;
@@ -34,59 +77,37 @@ function isValidUri(s: string): boolean {
 
 // renders contiguous string of latex eg $e^{i\pi}$
 const LatexRender = ({ latex }: { latex: string }) => {
-	return <span className="katex-error text-red-500">{latex}</span>
-	// try {
-	// 	let formula = latex;
-	// 	let displayMode = false;
+	let formula = latex;
+	let displayMode = false;
 
-	// 	// Extract the formula from delimiters
-	// 	if (latex.startsWith('$') && latex.endsWith('$')) {
-	// 		// Check if it's display math $$...$$
-	// 		if (latex.startsWith('$$') && latex.endsWith('$$')) {
-	// 			formula = latex.slice(2, -2);
-	// 			displayMode = true;
-	// 		} else {
-	// 			formula = latex.slice(1, -1);
-	// 		}
-	// 	} else if (latex.startsWith('\\(') && latex.endsWith('\\)')) {
-	// 		formula = latex.slice(2, -2);
-	// 	} else if (latex.startsWith('\\[') && latex.endsWith('\\]')) {
-	// 		formula = latex.slice(2, -2);
-	// 		displayMode = true;
-	// 	}
+	// Extract the formula from delimiters
+	if (latex.startsWith('$$') && latex.endsWith('$$')) {
+		formula = latex.slice(2, -2);
+		displayMode = true;
+	} else if (latex.startsWith('$') && latex.endsWith('$')) {
+		formula = latex.slice(1, -1);
+	} else if (latex.startsWith('\\[') && latex.endsWith('\\]')) {
+		formula = latex.slice(2, -2);
+		displayMode = true;
+	} else if (latex.startsWith('\\(') && latex.endsWith('\\)')) {
+		formula = latex.slice(2, -2);
+	}
 
-	// 	// Render LaTeX
-	// 	const html = katex.renderToString(formula, {
-	// 		displayMode: displayMode,
-	// 		throwOnError: false,
-	// 		output: 'html'
-	// 	});
+	// Render using a styled code block for mathematical formulas
+	// This provides a clear visual distinction without requiring katex library
+	if (displayMode) {
+		return (
+			<div className="my-2 text-center py-2 px-4 bg-void-bg-2 rounded font-mono text-sm">
+				{formula}
+			</div>
+		);
+	}
 
-	// 	// Sanitize the HTML output with DOMPurify
-	// 	const sanitizedHtml = dompurify.sanitize(html, {
-	// 		RETURN_TRUSTED_TYPE: true,
-	// 		USE_PROFILES: { html: true, svg: true, mathMl: true }
-	// 	});
-
-	// 	// Add proper styling based on mode
-	// 	const className = displayMode
-	// 		? 'katex-block my-2 text-center'
-	// 		: 'katex-inline';
-
-	// 	// Use the ref approach to avoid dangerouslySetInnerHTML
-	// 	const mathRef = React.useRef<HTMLSpanElement>(null);
-
-	// 	React.useEffect(() => {
-	// 		if (mathRef.current) {
-	// 			mathRef.current.innerHTML = sanitizedHtml as unknown as string;
-	// 		}
-	// 	}, [sanitizedHtml]);
-
-	// 	return <span ref={mathRef} className={className}></span>;
-	// } catch (error) {
-	// 	console.error('KaTeX rendering error:', error);
-	// 	return <span className="katex-error text-red-500">{latex}</span>;
-	// }
+	return (
+		<code className="px-1 py-0.5 bg-void-bg-2 rounded text-sm font-mono">
+			{formula}
+		</code>
+	);
 }
 
 const Codespan = ({ text, className, onClick, tooltip }: { text: string, className?: string, onClick?: () => void, tooltip?: string }) => {
@@ -306,6 +327,11 @@ const RenderToken = ({ token, inPTag, codeURI, chatMessageLocation, tokenIdx, ..
 		}
 		else { // no language provided - fallback - get lang from the uri and contents
 			language = detectLanguage(languageService, { uri, fileContents: contents })
+		}
+
+		// Render mermaid diagrams as SVG
+		if (t.lang === 'mermaid') {
+			return <MermaidDiagram code={contents} key={tokenIdx} />
 		}
 
 		if (options.isApplyEnabled && chatMessageLocation) {

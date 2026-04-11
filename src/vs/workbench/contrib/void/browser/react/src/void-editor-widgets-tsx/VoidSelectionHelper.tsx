@@ -15,20 +15,20 @@ import { voidSelectionHelperProps } from '../../../../../../contrib/void/browser
 import { void_OPEN_SETTINGS_ACTION_ID } from '../../../voidSettingsPane.js';
 
 
-export const voidSelectionHelperMain = (props: voidSelectionHelperProps) => {
+export const VoidSelectionHelperMain = (props: voidSelectionHelperProps) => {
 
 	const isDark = useIsDark()
 
 	return <div
 		className={`@@void-scope ${isDark ? 'dark' : ''}`}
 	>
-		<voidSelectionHelper {...props} />
+		<VoidSelectionHelper {...props} />
 	</div>
 }
 
 
 
-const voidSelectionHelper = ({ rerenderKey }: voidSelectionHelperProps) => {
+const VoidSelectionHelper = ({ rerenderKey }: voidSelectionHelperProps) => {
 
 
 	const accessor = useAccessor()

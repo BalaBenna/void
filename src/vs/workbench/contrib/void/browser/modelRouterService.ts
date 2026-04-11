@@ -18,6 +18,24 @@ export interface IModelRouterService {
 
 	assessComplexity(messages: ChatMessage[]): ComplexityLevel;
 	selectModel(messages: ChatMessage[], defaultModelSelection: ModelSelection | null): ModelSelection | null;
+
+	/**
+	 * Get the next fallback model after a failure.
+	 * @param failedModel The model that just failed
+	 * @param triedModels Set of model keys already tried this cycle
+	 * @returns The next model to try, or null if no fallbacks remain
+	 */
+	getNextFallback(failedModel: ModelSelection, triedModels: Set<string>): ModelSelection | null;
+
+	/**
+	 * Record latency for a model call (success or failure).
+	 */
+	recordLatency(model: ModelSelection, durationMs: number, success: boolean): void;
+
+	/**
+	 * Get a unique key for a model selection (for tracking).
+	 */
+	modelKey(model: ModelSelection): string;
 }
 
 export const IModelRouterService = createDecorator<IModelRouterService>('voidModelRouterService');
@@ -29,6 +47,10 @@ class ModelRouterService extends Disposable implements IModelRouterService {
 		@IvoidSettingsService private readonly _settingsService: IvoidSettingsService,
 	) {
 		super();
+	}
+
+	modelKey(model: ModelSelection): string {
+		return `${model.providerName}/${model.modelName}`
 	}
 
 	assessComplexity(messages: ChatMessage[]): ComplexityLevel {
@@ -78,6 +100,57 @@ class ModelRouterService extends Disposable implements IModelRouterService {
 
 		// If no model is mapped for this complexity, fall back to default
 		return mappedModel ?? defaultModelSelection
+	}
+
+	getNextFallback(failedModel: ModelSelection, triedModels: Set<string>): ModelSelection | null {
+		const routerConfig = this._settingsService.state.globalSettings.routerConfig
+		const failedKey = this.modelKey(failedModel)
+
+		// Add the failed model to tried set
+		triedModels.add(failedKey)
+
+		// Try fallback chain first
+		for (const fallback of routerConfig.fallbackChain ?? []) {
+			const key = this.modelKey(fallback)
+			if (!triedModels.has(key)) {
+				return fallback
+			}
+		}
+
+		// Try models from the complexity mapping that haven't been tried
+		for (const level of ['simple', 'moderate', 'complex'] as const) {
+			const mapped = routerConfig.modelMapping[level]
+			if (mapped) {
+				const key = this.modelKey(mapped)
+				if (!triedModels.has(key)) {
+					return mapped
+				}
+			}
+		}
+
+		return null
+	}
+
+	recordLatency(model: ModelSelection, durationMs: number, success: boolean): void {
+		const routerConfig = this._settingsService.state.globalSettings.routerConfig
+		if (!routerConfig.latencyTracking) {
+			routerConfig.latencyTracking = {}
+		}
+		const key = this.modelKey(model)
+		const existing = routerConfig.latencyTracking[key]
+
+		if (existing) {
+			const newSamples = existing.samples + 1
+			existing.avgMs = (existing.avgMs * existing.samples + durationMs) / newSamples
+			existing.errorRate = (existing.errorRate * existing.samples + (success ? 0 : 1)) / newSamples
+			existing.samples = newSamples
+		} else {
+			routerConfig.latencyTracking[key] = {
+				avgMs: durationMs,
+				errorRate: success ? 0 : 1,
+				samples: 1,
+			}
+		}
 	}
 }
 

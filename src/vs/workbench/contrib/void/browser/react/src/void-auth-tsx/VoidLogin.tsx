@@ -3,10 +3,11 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+import React, { useState } from 'react'
 import { useAccessor, useAuthState, useIsDark } from '../util/services.js'
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 
-const voidIcon = () => {
+const VoidIcon = () => {
 	const isDark = useIsDark()
 	return (
 		<div
@@ -26,7 +27,29 @@ export const voidLogin = () => {
 	const accessor = useAccessor()
 	const authService = accessor.get('IvoidAuthService')
 
-	const isVisible = !authState.isAuthenticated
+	const [mode, setMode] = useState<'signin' | 'signup'>('signin')
+	const [email, setEmail] = useState('')
+	const [password, setPassword] = useState('')
+	const [name, setName] = useState('')
+
+	const isVisible = !authState.isAuthenticated && !authState.isGuest
+
+	const handleEmailSubmit = async () => {
+		if (!email || !password) return
+		if (mode === 'signup') {
+			if (!name) return
+			await authService.signUpWithEmail(email, password, name)
+		} else {
+			await authService.loginWithEmail(email, password)
+		}
+	}
+
+	const handleKeyDown = (e: React.KeyboardEvent) => {
+		if (e.key === 'Enter') {
+			e.preventDefault()
+			handleEmailSubmit()
+		}
+	}
 
 	return (
 		<div className={`@@void-scope ${isDark ? 'dark' : ''}`}>
@@ -39,9 +62,9 @@ export const voidLogin = () => {
 				style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
 			>
 				<ErrorBoundary>
-					<div className="flex flex-col items-center gap-8 w-full max-w-sm px-6">
+					<div className="flex flex-col items-center gap-6 w-full max-w-sm px-6">
 						{/* Logo */}
-						<voidIcon />
+						<VoidIcon />
 
 						{/* Tagline */}
 						<div className="text-void-fg-3 text-sm text-center">
@@ -62,8 +85,83 @@ export const voidLogin = () => {
 									<path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
 								</svg>
 								<span className="text-sm font-medium">
-									{authState.isLoading ? 'Signing in...' : 'Continue with Google'}
+									Continue with Google
 								</span>
+							</button>
+						</div>
+
+						{/* Divider */}
+						<div className="flex items-center gap-3 w-full">
+							<div className="flex-1 h-px bg-void-border-2" />
+							<span className="text-void-fg-3 text-xs">or</span>
+							<div className="flex-1 h-px bg-void-border-2" />
+						</div>
+
+						{/* Email Form */}
+						<div className="flex flex-col gap-3 w-full">
+							{/* Mode Toggle */}
+							<div className="flex gap-1 w-full rounded-lg bg-void-bg-2 p-1">
+								<button
+									onClick={() => setMode('signin')}
+									className={`flex-1 text-xs py-1.5 rounded-md transition-all ${mode === 'signin'
+										? 'bg-void-bg-1 text-void-fg-1'
+										: 'text-void-fg-3 hover:text-void-fg-2'
+									}`}
+								>
+									Sign In
+								</button>
+								<button
+									onClick={() => setMode('signup')}
+									className={`flex-1 text-xs py-1.5 rounded-md transition-all ${mode === 'signup'
+										? 'bg-void-bg-1 text-void-fg-1'
+										: 'text-void-fg-3 hover:text-void-fg-2'
+									}`}
+								>
+									Sign Up
+								</button>
+							</div>
+
+							{/* Name (signup only) */}
+							{mode === 'signup' && (
+								<input
+									type="text"
+									placeholder="Name"
+									value={name}
+									onChange={(e) => setName(e.target.value)}
+									onKeyDown={handleKeyDown}
+									className="w-full px-3 py-2.5 rounded-lg border border-void-border-2 bg-void-bg-2 text-void-fg-1 text-sm placeholder:text-void-fg-3 focus:outline-none focus:border-void-border-1"
+								/>
+							)}
+
+							<input
+								type="email"
+								placeholder="Email"
+								value={email}
+								onChange={(e) => setEmail(e.target.value)}
+								onKeyDown={handleKeyDown}
+								className="w-full px-3 py-2.5 rounded-lg border border-void-border-2 bg-void-bg-2 text-void-fg-1 text-sm placeholder:text-void-fg-3 focus:outline-none focus:border-void-border-1"
+							/>
+
+							<input
+								type="password"
+								placeholder="Password"
+								value={password}
+								onChange={(e) => setPassword(e.target.value)}
+								onKeyDown={handleKeyDown}
+								className="w-full px-3 py-2.5 rounded-lg border border-void-border-2 bg-void-bg-2 text-void-fg-1 text-sm placeholder:text-void-fg-3 focus:outline-none focus:border-void-border-1"
+							/>
+
+							<button
+								onClick={handleEmailSubmit}
+								disabled={authState.isLoading || !email || !password || (mode === 'signup' && !name)}
+								className="w-full px-4 py-2.5 rounded-lg bg-void-bg-1 hover:opacity-90 text-void-fg-1 text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed border border-void-border-2"
+							>
+								{authState.isLoading
+									? 'Please wait...'
+									: mode === 'signup'
+										? 'Create Account'
+										: 'Sign In'
+								}
 							</button>
 						</div>
 
@@ -72,9 +170,17 @@ export const voidLogin = () => {
 							<div className="text-red-400 text-sm text-center">{authState.error}</div>
 						)}
 
+						{/* Continue without signing in */}
+						<button
+							onClick={() => authService.continueAsGuest()}
+							className="text-void-fg-3 text-xs hover:text-void-fg-2 transition-colors underline underline-offset-2"
+						>
+							Continue without signing in
+						</button>
+
 						{/* Footer */}
-						<div className="text-void-fg-3 text-xs text-center mt-4">
-							void requires sign-in to use AI features
+						<div className="text-void-fg-3 text-xs text-center">
+							Sign in to access AI features via Void's servers, or continue with your own API keys
 						</div>
 					</div>
 				</ErrorBoundary>

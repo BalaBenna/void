@@ -23,13 +23,13 @@ import {
 	void_REJECT_ALL_DIFFS_ACTION_ID
 } from '../../../actionIDs.js';
 
-export const voidCommandBarMain = ({ uri, editor }: voidCommandBarProps) => {
+export const VoidCommandBarMain = ({ uri, editor }: voidCommandBarProps) => {
 	const isDark = useIsDark()
 
 	return <div
 		className={`@@void-scope ${isDark ? 'dark' : ''}`}
 	>
-		<voidCommandBar uri={uri} editor={editor} />
+		<VoidCommandBar uri={uri} editor={editor} />
 	</div>
 }
 
@@ -83,7 +83,7 @@ export const RejectAllButtonWrapper = ({ text, onClick, className, ...props }: {
 
 
 
-export const voidCommandBar = ({ uri, editor }: voidCommandBarProps) => {
+const VoidCommandBar = ({ uri, editor }: voidCommandBarProps) => {
 	const accessor = useAccessor()
 	const editCodeService = accessor.get('IEditCodeService')
 	const editorService = accessor.get('ICodeEditorService')

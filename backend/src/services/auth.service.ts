@@ -1,101 +1,276 @@
-import { OAuth2Client } from "google-auth-library";
-import jwt from "jsonwebtoken";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db";
-import { env } from "../config/env";
-import { redis } from "../config/redis";
-import type { AuthTokenPayload, AuthResponse, User } from "../shared/types";
-import crypto from "crypto";
+import { supabaseAdmin } from "../config/supabase";
+import type { AuthResponse, User } from "../shared/types";
 
 // ============================================================
-// Google OAuth Client
+// Supabase OAuth URL
 // ============================================================
-
-const googleClient = new OAuth2Client(
-  env.GOOGLE_CLIENT_ID,
-  env.GOOGLE_CLIENT_SECRET,
-  env.GOOGLE_REDIRECT_URI
-);
 
 /**
- * Generate the Google OAuth consent URL.
- * The desktop app opens this in the system browser.
+ * Generate the Google OAuth URL via Supabase Auth.
+ * Supabase handles the entire OAuth handshake.
  */
-export function getGoogleAuthUrl(state?: string): string {
-  return googleClient.generateAuthUrl({
-    access_type: "offline",
-    scope: ["openid", "email", "profile"],
-    state: state || crypto.randomUUID(),
-    prompt: "consent",
+export async function getGoogleAuthUrl(redirectTo: string): Promise<string> {
+  const { data, error } = await supabaseAdmin.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo,
+      queryParams: {
+        access_type: "offline",
+        prompt: "consent",
+      },
+    },
   });
+
+  if (error) throw new Error(`Supabase OAuth error: ${error.message}`);
+  return data.url;
 }
 
+// ============================================================
+// Exchange Code for Session
+// ============================================================
+
 /**
- * Exchange the Google auth code for user info, then find or create user.
+ * Exchange a Supabase auth code for a session.
+ * Called after Supabase redirects back with ?code=...
  */
-export async function handleGoogleCallback(
+export async function exchangeCodeForSession(
   code: string
 ): Promise<AuthResponse> {
-  // 1. Exchange code for tokens
-  const { tokens } = await googleClient.getToken(code);
-  googleClient.setCredentials(tokens);
+  const { data, error } = await supabaseAdmin.auth.exchangeCodeForSession(code);
 
-  // 2. Get user info from Google
-  const ticket = await googleClient.verifyIdToken({
-    idToken: tokens.id_token!,
-    audience: env.GOOGLE_CLIENT_ID,
-  });
-  const payload = ticket.getPayload();
-  if (!payload || !payload.email) {
-    throw new Error("Failed to get user info from Google");
+  if (error || !data.session || !data.user) {
+    throw new Error(error?.message || "Failed to exchange code for session");
   }
 
-  // 3. Find or create user in DB
+  const supabaseUser = data.user;
+
+  // Sync user to our DB (find or create)
   const user = await findOrCreateUser({
-    email: payload.email,
-    name: payload.name || payload.email.split("@")[0],
-    avatarUrl: payload.picture,
-    googleId: payload.sub,
+    email: supabaseUser.email!,
+    name:
+      supabaseUser.user_metadata?.full_name ||
+      supabaseUser.user_metadata?.name ||
+      supabaseUser.email!.split("@")[0],
+    avatarUrl: supabaseUser.user_metadata?.avatar_url || null,
+    supabaseId: supabaseUser.id,
   });
 
-  // 4. Generate JWT tokens
-  const authResponse = await generateTokens(user);
+  return {
+    token: data.session.access_token,
+    refreshToken: data.session.refresh_token,
+    user,
+  };
+}
 
-  return authResponse;
+// ============================================================
+// Refresh Token
+// ============================================================
+
+/**
+ * Refresh a Supabase session using a refresh token.
+ */
+export async function refreshAccessToken(
+  refreshToken: string
+): Promise<AuthResponse> {
+  const { data, error } = await supabaseAdmin.auth.refreshSession({
+    refresh_token: refreshToken,
+  });
+
+  if (error || !data.session || !data.user) {
+    throw new Error(error?.message || "Failed to refresh session");
+  }
+
+  // Get user from our DB
+  const [dbUser] = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.email, data.user.email!))
+    .limit(1);
+
+  if (!dbUser) {
+    throw new Error("User not found");
+  }
+
+  return {
+    token: data.session.access_token,
+    refreshToken: data.session.refresh_token,
+    user: mapUserToDto(dbUser),
+  };
+}
+
+// ============================================================
+// Verify Token
+// ============================================================
+
+/**
+ * Verify a Supabase access token and return user info.
+ */
+export async function verifyToken(
+  token: string
+): Promise<{ userId: string; email: string; plan: string }> {
+  const {
+    data: { user },
+    error,
+  } = await supabaseAdmin.auth.getUser(token);
+
+  if (error || !user) {
+    throw new Error(error?.message || "Invalid token");
+  }
+
+  // Look up our DB user
+  const [dbUser] = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.email, user.email!))
+    .limit(1);
+
+  if (!dbUser) {
+    throw new Error("User not found in database");
+  }
+
+  return {
+    userId: dbUser.id,
+    email: dbUser.email,
+    plan: dbUser.plan,
+  };
+}
+
+// ============================================================
+// Email Auth
+// ============================================================
+
+/**
+ * Sign up a new user with email and password via Supabase Auth.
+ */
+export async function signUpWithEmail(
+  email: string,
+  password: string,
+  name: string
+): Promise<AuthResponse> {
+  // Use admin API to create user with auto-confirm (skips email verification)
+  const { data: adminData, error: adminError } =
+    await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: name },
+    });
+
+  if (adminError || !adminData.user) {
+    throw new Error(adminError?.message || "Failed to create account");
+  }
+
+  // Now sign in to get a session token
+  const { data: signInData, error: signInError } =
+    await supabaseAdmin.auth.signInWithPassword({ email, password });
+
+  if (signInError || !signInData.session) {
+    throw new Error(signInError?.message || "Account created but sign-in failed");
+  }
+
+  const user = await findOrCreateUser({
+    email: adminData.user.email!,
+    name,
+    avatarUrl: null,
+    supabaseId: adminData.user.id,
+    authProvider: "email",
+  });
+
+  return {
+    token: signInData.session.access_token,
+    refreshToken: signInData.session.refresh_token,
+    user,
+  };
 }
 
 /**
- * Find existing user by Google ID or email, or create a new one.
+ * Sign in an existing user with email and password via Supabase Auth.
  */
+export async function signInWithEmail(
+  email: string,
+  password: string
+): Promise<AuthResponse> {
+  const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error || !data.session || !data.user) {
+    throw new Error(error?.message || "Invalid email or password");
+  }
+
+  // Look up user in our DB
+  const [dbUser] = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.email, data.user.email!))
+    .limit(1);
+
+  if (!dbUser) {
+    // User exists in Supabase but not in our DB — create them
+    const user = await findOrCreateUser({
+      email: data.user.email!,
+      name:
+        data.user.user_metadata?.full_name ||
+        data.user.email!.split("@")[0],
+      avatarUrl: null,
+      supabaseId: data.user.id,
+    });
+
+    return {
+      token: data.session.access_token,
+      refreshToken: data.session.refresh_token,
+      user,
+    };
+  }
+
+  return {
+    token: data.session.access_token,
+    refreshToken: data.session.refresh_token,
+    user: mapUserToDto(dbUser),
+  };
+}
+
+/**
+ * Revoke all sessions — used for "logout everywhere".
+ */
+export async function revokeAllTokens(userId: string): Promise<void> {
+  // Supabase handles session revocation, but we also clean up
+  // any refresh tokens we stored in our DB
+  await db
+    .update(schema.refreshTokens)
+    .set({ revoked: true })
+    .where(eq(schema.refreshTokens.userId, userId));
+}
+
+// ============================================================
+// Find or Create User
+// ============================================================
+
 async function findOrCreateUser(profile: {
   email: string;
   name: string;
-  avatarUrl?: string;
-  googleId: string;
+  avatarUrl: string | null;
+  supabaseId: string;
+  authProvider?: string;
 }): Promise<User> {
-  // Try finding by Google ID first
+  // Try by email first
   let [existingUser] = await db
     .select()
     .from(schema.users)
-    .where(eq(schema.users.googleId, profile.googleId))
+    .where(eq(schema.users.email, profile.email))
     .limit(1);
 
-  if (!existingUser) {
-    // Try by email
-    [existingUser] = await db
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.email, profile.email))
-      .limit(1);
-  }
-
   if (existingUser) {
-    // Update Google ID and avatar if needed
+    // Update avatar and last active
     const [updated] = await db
       .update(schema.users)
       .set({
-        googleId: profile.googleId,
         avatarUrl: profile.avatarUrl || existingUser.avatarUrl,
+        googleId: profile.supabaseId || existingUser?.googleId,
+        lastActiveAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(schema.users.id, existingUser.id))
@@ -111,118 +286,26 @@ async function findOrCreateUser(profile: {
       email: profile.email,
       name: profile.name,
       avatarUrl: profile.avatarUrl,
-      googleId: profile.googleId,
+      googleId: profile.supabaseId,
+      authProvider: profile.authProvider || "google",
       plan: "free",
+      lastActiveAt: new Date(),
     })
     .returning();
 
   return mapUserToDto(newUser);
 }
 
-/**
- * Generate access + refresh JWT tokens.
- */
-export async function generateTokens(user: User): Promise<AuthResponse> {
-  const tokenPayload: Omit<AuthTokenPayload, "iat" | "exp"> = {
-    userId: user.id,
-    email: user.email,
-    plan: user.plan,
-  };
+// ============================================================
+// DTO Mapper
+// ============================================================
 
-  const token = jwt.sign(tokenPayload, env.JWT_SECRET, {
-    expiresIn: env.JWT_EXPIRY,
-  });
-
-  const refreshToken = jwt.sign(tokenPayload, env.JWT_REFRESH_SECRET, {
-    expiresIn: env.JWT_REFRESH_EXPIRY,
-  });
-
-  // Store refresh token in DB
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 30);
-
-  await db.insert(schema.refreshTokens).values({
-    userId: user.id,
-    token: refreshToken,
-    expiresAt,
-  });
-
-  return { token, refreshToken, user };
-}
-
-/**
- * Verify and decode a JWT access token.
- */
-export function verifyToken(token: string): AuthTokenPayload {
-  return jwt.verify(token, env.JWT_SECRET) as AuthTokenPayload;
-}
-
-/**
- * Refresh an access token using a refresh token.
- */
-export async function refreshAccessToken(
-  refreshToken: string
-): Promise<AuthResponse> {
-  // Verify the refresh token
-  const payload = jwt.verify(
-    refreshToken,
-    env.JWT_REFRESH_SECRET
-  ) as AuthTokenPayload;
-
-  // Check if refresh token exists and is not revoked
-  const [storedToken] = await db
-    .select()
-    .from(schema.refreshTokens)
-    .where(eq(schema.refreshTokens.token, refreshToken))
-    .limit(1);
-
-  if (!storedToken || storedToken.revoked) {
-    throw new Error("Invalid refresh token");
-  }
-
-  // Revoke the old refresh token (rotation)
-  await db
-    .update(schema.refreshTokens)
-    .set({ revoked: true })
-    .where(eq(schema.refreshTokens.id, storedToken.id));
-
-  // Get user
-  const [user] = await db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.id, payload.userId))
-    .limit(1);
-
-  if (!user) {
-    throw new Error("User not found");
-  }
-
-  // Generate new tokens
-  return generateTokens(mapUserToDto(user));
-}
-
-/**
- * Revoke all refresh tokens for a user (logout everywhere).
- */
-export async function revokeAllTokens(userId: string): Promise<void> {
-  await db
-    .update(schema.refreshTokens)
-    .set({ revoked: true })
-    .where(eq(schema.refreshTokens.userId, userId));
-
-  // Also invalidate cached session in Redis
-  await redis.del(`session:${userId}`);
-}
-
-/**
- * Map DB user row to User DTO.
- */
 function mapUserToDto(row: typeof schema.users.$inferSelect): User {
   return {
     id: row.id,
     email: row.email,
     name: row.name,
-    avatarUrl: row.avatarUrl || undefined,
+    avatarUrl: row.avatarUrl,
     plan: row.plan,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

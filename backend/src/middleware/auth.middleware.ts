@@ -1,12 +1,11 @@
 import type { Context, Next } from "hono";
 import { verifyToken } from "../services/auth.service";
 import { ERROR_CODES } from "../shared/types";
-import type { AuthTokenPayload } from "../shared/types";
 
 /**
- * JWT authentication middleware.
- * Extracts and verifies the Bearer token from Authorization header.
- * Sets `userId`, `email`, and `plan` on the context.
+ * Supabase JWT authentication middleware.
+ * Verifies the access token via Supabase Auth,
+ * then sets `userId`, `email`, and `plan` on the context.
  */
 export async function authMiddleware(c: Context, next: Next) {
   const authHeader = c.req.header("Authorization");
@@ -24,7 +23,7 @@ export async function authMiddleware(c: Context, next: Next) {
   const token = authHeader.slice(7);
 
   try {
-    const payload: AuthTokenPayload = verifyToken(token);
+    const payload = await verifyToken(token);
 
     c.set("userId", payload.userId);
     c.set("email", payload.email);
@@ -32,19 +31,9 @@ export async function authMiddleware(c: Context, next: Next) {
 
     await next();
   } catch (error: any) {
-    if (error.name === "TokenExpiredError") {
-      return c.json(
-        {
-          error: "Token expired. Please refresh your token.",
-          code: ERROR_CODES.UNAUTHORIZED,
-        },
-        401
-      );
-    }
-
     return c.json(
       {
-        error: "Invalid token",
+        error: error.message || "Invalid token",
         code: ERROR_CODES.UNAUTHORIZED,
       },
       401

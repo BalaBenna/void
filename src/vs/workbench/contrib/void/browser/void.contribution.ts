@@ -19,7 +19,7 @@ import './quickEditActions.js'
 import './autocompleteService.js'
 
 // register Context services
-// import './contextGatheringService.js'
+import './contextGatheringService.js'
 // import './contextUserChangesService.js'
 
 // settings pane
@@ -37,6 +37,12 @@ import './convertToLLMMessageWorkbenchContrib.js'
 // tools
 import './toolsService.js'
 import './terminalToolService.js'
+
+// Terminal Capture Service (auto-detect terminal errors)
+import './terminalCaptureService.js'
+
+// Diagnostic CodeLens Service ("Fix with Void" on errors)
+import './diagnosticCodeLensService.js'
 
 // Error Classification Service
 import './errorClassificationService.js'
@@ -71,14 +77,15 @@ import './agentEventService.js'
 // Phase 3: Rules Service
 import './rulesService.js'
 
-// Phase 1: Token Budget Service
-import './tokenBudgetService.js'
 
 // Phase 2: Sandbox Service
 import './sandboxService.js'
 
 // Phase 6: Embeddings / Codebase Search Service
 import './embeddingsService.js'
+
+// Smart Context Service (auto-retrieves relevant code for chat)
+import './smartContextService.js'
 
 // Phase 7: Model Router Service
 import './modelRouterService.js'
@@ -92,8 +99,29 @@ import './parallelAgentService.js'
 // Phase 10: Background Agent Service
 import './backgroundAgentService.js'
 
+// Ambient Agent Service
+import './ambientAgentService.js'
+
+// Mission Control Service
+import './missionControlService.js'
+
+// Visual Editor Service
+import './visualEditorService.js'
+
+// Time Travel Service
+import './timeTravelService.js'
+
+// BugBot Service
+import './bugBotService.js'
+
+// Live Pair Programming Service
+import './livePairService.js'
+
 // ping
 import './metricsPollService.js'
+
+// Notepad Service (reusable context snippets)
+import './notepadService.js'
 
 // helper services
 import './helperServices/consistentItemService.js'
@@ -124,6 +152,16 @@ import './fileService.js'
 
 // register source control management
 import './voidSCMService.js'
+
+// PR Review / Find Issues
+import './prReviewService.js'
+
+// Sentinel - AI Code Review & Security Analysis
+import './sentinelService.js'
+import './sentinelDecorationService.js'
+import './sentinelCodeLensService.js'
+import './sentinelRulesService.js'
+
 
 // ---------- common (unclear if these actually need to be imported, because they're already imported wherever they're used) ----------
 

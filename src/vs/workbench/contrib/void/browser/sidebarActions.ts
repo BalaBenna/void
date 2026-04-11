@@ -17,7 +17,7 @@ import { void_VIEW_CONTAINER_ID } from './sidebarPane.js';
 import { IMetricsService } from '../common/metricsService.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { void_TOGGLE_SETTINGS_ACTION_ID } from './voidSettingsPane.js';
-import { void_CTRL_L_ACTION_ID } from './actionIDs.js';
+import { void_CTRL_L_ACTION_ID, void_STOP_AGENT_ACTION_ID } from './actionIDs.js';
 import { localize2 } from '../../../../nls.js';
 import { IChatThreadService } from './chatThreadService.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
@@ -83,7 +83,7 @@ registerAction2(class extends Action2 {
 			title: localize2('voidCmdL', 'void: Add Selection to Chat'),
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyCode.KeyL,
-				weight: KeybindingWeight.voidExtension
+				weight: KeybindingWeight.VoidExtension
 			}
 		});
 	}
@@ -151,7 +151,7 @@ registerAction2(class extends Action2 {
 			title: 'New Chat',
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyL,
-				weight: KeybindingWeight.voidExtension,
+				weight: KeybindingWeight.VoidExtension,
 			},
 			icon: { id: 'add' },
 			// menu removed - rendered in React ChatHeader instead
@@ -230,6 +230,32 @@ registerAction2(class extends Action2 {
 		metricsService.capture('Chat Navigation', { type: 'History' })
 		commandService.executeCommand(void_CMD_SHIFT_L_ACTION_ID)
 
+	}
+})
+
+
+// Stop Agent (Cmd+Shift+Backspace)
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: void_STOP_AGENT_ACTION_ID,
+			f1: true,
+			title: localize2('voidStopAgent', 'void: Stop Agent'),
+			keybinding: {
+				primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.Backspace,
+				weight: KeybindingWeight.VoidExtension,
+			}
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const chatThreadService = accessor.get(IChatThreadService)
+		const metricsService = accessor.get(IMetricsService)
+
+		metricsService.capture('Stop Agent', {})
+
+		const threadId = chatThreadService.state.currentThreadId
+		await chatThreadService.abortRunning(threadId)
+		await chatThreadService.focusCurrentChat()
 	}
 })
 

@@ -35,14 +35,14 @@ export const voidOnboarding = () => {
 				style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
 			>
 				<ErrorBoundary>
-					<voidOnboardingContent />
+					<VoidOnboardingContent />
 				</ErrorBoundary>
 			</div>
 		</div>
 	)
 }
 
-const voidIcon = () => {
+const VoidIcon = () => {
 	const accessor = useAccessor()
 	const themeService = accessor.get('IThemeService')
 
@@ -461,7 +461,7 @@ const PrimaryActionButton = ({ children, className, ringSize, ...props }: { chil
 
 type WantToUseOption = 'smart' | 'cheap' | 'all'
 
-const voidOnboardingContent = () => {
+const VoidOnboardingContent = () => {
 
 
 	const accessor = useAccessor()
@@ -587,7 +587,7 @@ const voidOnboardingContent = () => {
 
 				{/* Slice of void image */}
 				<div className='max-w-md w-full h-[30vh] mx-auto flex items-center justify-center'>
-					{!isLinux && <voidIcon />}
+					{!isLinux && <VoidIcon />}
 				</div>
 
 

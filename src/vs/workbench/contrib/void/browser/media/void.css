@@ -92,13 +92,13 @@
 	opacity: 80%;
 }
 
-/* Hide the native VS Code composite header bar and title bar in the void auxiliary panel */
-/* 1. The icon tab strip at the very top (composite header with action bar) */
-.monaco-workbench .pane-composite-part.auxiliarybar > .header-or-footer.header {
-	display: none !important;
+/* Remove left border from auxiliary bar */
+.monaco-workbench .part.auxiliarybar {
+	border-left: none !important;
 }
 
-/* 2. The "Chat" title bar with actions */
+/* Hide the native VS Code composite header bar and title bar in the void auxiliary panel */
+.monaco-workbench .pane-composite-part.auxiliarybar > .header-or-footer,
 .monaco-workbench .part.auxiliarybar > .composite.title {
 	display: none !important;
 }

@@ -11,6 +11,13 @@ import { IvoidSettingsService } from '../common/voidSettingsService.js';
 import { SandboxMode, CommandRiskLevel, SandboxPolicy } from '../common/sandboxTypes.js';
 import { IAgentEventService } from './agentEventService.js';
 import { os } from '../common/helpers/systemInfo.js';
+import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
+
+export interface E2BCommandResult {
+	stdout: string;
+	stderr: string;
+	exitCode: number;
+}
 
 export interface ISandboxService {
 	readonly _serviceBrand: undefined;
@@ -18,6 +25,9 @@ export interface ISandboxService {
 	classifyRisk(command: string): CommandRiskLevel;
 	isSandboxAvailable(): boolean;
 	getSandboxMode(): SandboxMode;
+	isE2BMode(): boolean;
+	runInE2B(command: string, cwd?: string): Promise<E2BCommandResult>;
+	destroyE2BSandbox(): Promise<void>;
 }
 
 export const ISandboxService = createDecorator<ISandboxService>('voidSandboxService');
@@ -25,20 +35,31 @@ export const ISandboxService = createDecorator<ISandboxService>('voidSandboxServ
 class SandboxService extends Disposable implements ISandboxService {
 	declare readonly _serviceBrand: undefined;
 
+	private _e2bSandboxId: string | null = null;
+
 	constructor(
 		@IvoidSettingsService private readonly _settingsService: IvoidSettingsService,
 		@IWorkspaceContextService private readonly _workspaceContextService: IWorkspaceContextService,
 		@IAgentEventService _agentEventService: IAgentEventService,
+		@IMainProcessService private readonly _mainProcessService: IMainProcessService,
 	) {
 		super();
 	}
 
 	isSandboxAvailable(): boolean {
+		const mode = this.getSandboxMode();
+		if (mode === 'e2b') {
+			return !!this._settingsService.state.globalSettings.e2bSandboxConfig.apiKey;
+		}
 		return os === 'mac'; // sandbox-exec is macOS only
 	}
 
 	getSandboxMode(): SandboxMode {
 		return this._settingsService.state.globalSettings.sandboxMode;
+	}
+
+	isE2BMode(): boolean {
+		return this.getSandboxMode() === 'e2b';
 	}
 
 	classifyRisk(command: string): CommandRiskLevel {
@@ -63,7 +84,7 @@ class SandboxService extends Disposable implements ISandboxService {
 	wrapCommand(command: string): string {
 		const sandboxMode = this.getSandboxMode();
 
-		if (sandboxMode === 'off' || !this.isSandboxAvailable()) {
+		if (sandboxMode === 'off' || sandboxMode === 'e2b' || !this.isSandboxAvailable()) {
 			return command;
 		}
 
@@ -74,6 +95,70 @@ class SandboxService extends Disposable implements ISandboxService {
 		const profile = this._generateSeatbeltProfile(workspacePath, policy);
 		const escapedCommand = command.replace(/'/g, "'\\''");
 		return `sandbox-exec -p '${profile}' /bin/bash -c '${escapedCommand}'`;
+	}
+
+	// ── E2B Cloud Sandbox ──
+
+	async runInE2B(command: string, cwd?: string): Promise<E2BCommandResult> {
+		const config = this._settingsService.state.globalSettings.e2bSandboxConfig;
+		if (!config.apiKey) {
+			throw new Error('E2B API key not configured. Go to Settings > Sandbox and add your E2B API key.');
+		}
+
+		const channel = this._mainProcessService.getChannel('void-channel-e2b-sandbox');
+
+		// Create sandbox if we don't have one yet
+		if (!this._e2bSandboxId) {
+			const createResult: any = await channel.call('createSandbox', {
+				apiKey: config.apiKey,
+				template: config.template,
+				timeoutMs: config.timeoutMs,
+			});
+
+			if (createResult.error) {
+				throw new Error(`Failed to create E2B sandbox: ${createResult.error}`);
+			}
+			this._e2bSandboxId = createResult.sandboxId;
+		}
+
+		// Run the command
+		const result: any = await channel.call('runCommand', {
+			apiKey: config.apiKey,
+			sandboxId: this._e2bSandboxId,
+			command,
+			cwd,
+			timeoutMs: config.timeoutMs,
+		});
+
+		if (result.error) {
+			// If sandbox expired, clear it and retry once
+			if (result.error.includes('404') || result.error.includes('not found')) {
+				this._e2bSandboxId = null;
+				return this.runInE2B(command, cwd);
+			}
+			throw new Error(`E2B command failed: ${result.error}`);
+		}
+
+		return {
+			stdout: result.stdout || '',
+			stderr: result.stderr || '',
+			exitCode: result.exitCode ?? 0,
+		};
+	}
+
+	async destroyE2BSandbox(): Promise<void> {
+		if (!this._e2bSandboxId) return;
+
+		const config = this._settingsService.state.globalSettings.e2bSandboxConfig;
+		if (!config.apiKey) return;
+
+		const channel = this._mainProcessService.getChannel('void-channel-e2b-sandbox');
+		await channel.call('destroySandbox', {
+			apiKey: config.apiKey,
+			sandboxId: this._e2bSandboxId,
+		});
+
+		this._e2bSandboxId = null;
 	}
 
 	private _generateSeatbeltProfile(workspacePath: string, policy: SandboxPolicy): string {

@@ -8,6 +8,8 @@ export interface voidRule {
 	description: string;
 	globs: string[];
 	alwaysApply: boolean;
+	applyIntelligently: boolean;
 	content: string;
 	filePath: string;
+	source: 'project' | 'user' | 'agents_md';
 }

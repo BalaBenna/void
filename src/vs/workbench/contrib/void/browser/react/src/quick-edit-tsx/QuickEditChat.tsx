@@ -5,9 +5,9 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSettingsState, useAccessor, useCtrlKZoneStreamingState } from '../util/services.js';
-import { TextAreaFns, voidInputBox2 } from '../util/inputs.js';
+import { TextAreaFns, VoidInputBox2 } from '../util/inputs.js';
 import { QuickEditPropsType } from '../../../quickEditActions.js';
-import { ButtonStop, ButtonSubmit, IconX, voidChatArea } from '../sidebar-tsx/SidebarChat.js';
+import { ButtonStop, ButtonSubmit, IconX, VoidChatArea } from '../sidebar-tsx/SidebarChat.js';
 import { void_CTRL_K_ACTION_ID } from '../../../actionIDs.js';
 import { useRefState } from '../util/helpers.js';
 import { isFeatureNameDisabled } from '../../../../../../../workbench/contrib/void/common/voidSettingsTypes.js';
@@ -95,7 +95,7 @@ export const QuickEditChat = ({
 
 	const chatAreaRef = useRef<HTMLDivElement | null>(null)
 	return <div ref={sizerRef} style={{ maxWidth: 450 }} className={`py-2 w-full`}>
-		<voidChatArea
+		<VoidChatArea
 			featureName='Ctrl+K'
 			divRef={chatAreaRef}
 			onSubmit={onSubmit}
@@ -106,7 +106,7 @@ export const QuickEditChat = ({
 			isDisabled={isDisabled}
 			onClickAnywhere={() => { textAreaRef.current?.focus() }}
 		>
-			<voidInputBox2
+			<VoidInputBox2
 				className='px-1'
 				initValue={initText}
 				ref={useCallback((r: HTMLTextAreaElement | null) => {
@@ -131,7 +131,7 @@ export const QuickEditChat = ({
 				}}
 				multiline={true}
 			/>
-		</voidChatArea>
+		</VoidChatArea>
 	</div>
 
 

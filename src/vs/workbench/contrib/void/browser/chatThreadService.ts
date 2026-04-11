@@ -17,11 +17,11 @@ import { AnthropicReasoning, getErrorMessage, RawToolCallObj, RawToolParamsObj }
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { ChatMode, FeatureName, ModelSelection, ModelSelectionOptions } from '../common/voidSettingsTypes.js';
 import { IvoidSettingsService } from '../common/voidSettingsService.js';
-import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolResultType, ToolCallParams, ToolName, ToolResult } from '../common/toolsServiceTypes.js';
+import { approvalTypeOfBuiltinToolName, assessToolRisk, BuiltinToolCallParams, BuiltinToolResultType, ToolCallParams, ToolName, ToolResult } from '../common/toolsServiceTypes.js';
 import { IToolsService } from './toolsService.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { ILanguageFeaturesService } from '../../../../editor/common/services/languageFeatures.js';
-import { ChatMessage, CheckpointEntry, CodespanLocationLink, ImageAttachment, PlanItem, StagingSelectionItem, ToolMessage } from '../common/chatThreadServiceTypes.js';
+import { BranchPoint, ChatMessage, CheckpointEntry, CodespanLocationLink, ImageAttachment, PlanItem, StagingSelectionItem, ToolMessage } from '../common/chatThreadServiceTypes.js';
 import { Position } from '../../../../editor/common/core/position.js';
 import { IMetricsService } from '../common/metricsService.js';
 import { shorten } from '../../../../base/common/labels.js';
@@ -41,13 +41,13 @@ import { IFileService } from '../../../../platform/files/common/files.js';
 import { IMCPService } from '../common/mcpService.js';
 import { RawMCPToolCall } from '../common/mcpServiceTypes.js';
 import { IAgentEventService } from './agentEventService.js';
-import { ITokenBudgetService } from './tokenBudgetService.js';
 import { IModelRouterService } from './modelRouterService.js';
 import { IMemoryService } from './memoryService.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { VSBuffer } from '../../../../base/common/buffer.js';
 import { ISelfHealingService } from './selfHealingService.js';
-import { IvoidAuthService } from './voidAuthService.js';
+import { ITerminalCaptureService } from './terminalCaptureService.js';
+import { IVerificationPipelineService } from './verificationPipelineService.js';
 
 
 // related to retrying when LLM message has error
@@ -61,13 +61,19 @@ const findStagingSelectionIndex = (currentSelections: StagingSelectionItem[] | u
 	for (let i = 0; i < currentSelections.length; i += 1) {
 		const s = currentSelections[i]
 
-		if (s.uri.fsPath !== newSelection.uri.fsPath) continue
+		// Branch selections don't have URIs, handle separately
+		if (s.type === 'Branch' || newSelection.type === 'Branch') {
+			if (s.type === 'Branch' && newSelection.type === 'Branch') return i
+			continue
+		}
+
+		if (s.uri?.fsPath !== newSelection.uri?.fsPath) continue
 
 		if (s.type === 'File' && newSelection.type === 'File') {
 			return i
 		}
 		if (s.type === 'CodeSelection' && newSelection.type === 'CodeSelection') {
-			if (s.uri.fsPath !== newSelection.uri.fsPath) continue
+			if (s.uri?.fsPath !== newSelection.uri?.fsPath) continue
 			// if there's any collision return true
 			const [oldStart, oldEnd] = s.range
 			const [newStart, newEnd] = newSelection.range
@@ -143,6 +149,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	readonly onDidChangeStreamState: Event<{ threadId: string }> = this._onDidChangeStreamState.event;
 
 	readonly streamState: ThreadStreamState = {}
+
+	// Message queue: queued messages waiting to be sent when the thread is no longer busy
+	private _messageQueue: Map<string, Array<{ userMessage: string, _chatSelections?: StagingSelectionItem[], webSearchEnabled?: boolean, images?: ImageAttachment[] }>> = new Map()
 	state: ThreadsState // allThreads is persisted, currentThread is not
 
 	// Plan file URI -> { threadId, planMessageIdx } mapping
@@ -169,12 +178,12 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@IFileService private readonly _fileService: IFileService,
 		@IMCPService private readonly _mcpService: IMCPService,
 		@IAgentEventService private readonly _agentEventService: IAgentEventService,
-		@ITokenBudgetService _tokenBudgetService: ITokenBudgetService,
 		@IModelRouterService private readonly _modelRouterService: IModelRouterService,
 		@IMemoryService private readonly _memoryService: IMemoryService,
 		@IEditorService private readonly _editorService: IEditorService,
 		@ISelfHealingService private readonly _selfHealingService: ISelfHealingService,
-		@IvoidAuthService private readonly _authService: IvoidAuthService,
+		@ITerminalCaptureService private readonly _terminalCaptureService: ITerminalCaptureService,
+		@IVerificationPipelineService private readonly _verificationPipelineService: IVerificationPipelineService,
 	) {
 		super()
 		this.state = { allThreads: {}, currentThreadId: null as unknown as string } // default state
@@ -190,6 +199,20 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		// always be in a thread
 		this.openNewThread()
 
+		// Subscribe to terminal errors for auto-fix flow
+		this._register(this._terminalCaptureService.onDidDetectError(error => {
+			const threadId = this.state.currentThreadId
+			const isRunning = this.streamState[threadId]?.isRunning
+			if (!isRunning || isRunning === 'idle') {
+				// Agent is idle - auto-populate chat with terminal error context
+				const terminalSelection: StagingSelectionItem = {
+					type: 'Terminal',
+					terminalId: error.terminalId,
+					content: error.fullOutput,
+				}
+				this.addNewStagingSelection(terminalSelection)
+			}
+		}))
 
 		// keep track of user-modified files
 		// const disposablesOfModelId: { [modelId: string]: IDisposable[] } = {}
@@ -398,6 +421,14 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		this._setStreamState(threadId, undefined)
 	}
 
+	respondToAskUser(threadId: string, userResponse: string) {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return
+
+		// The ask_user tool is waiting for user input — resolve it so the agent loop continues
+		this._toolsService.respondToAskUser(userResponse)
+	}
+
 	private _computeMCPServerOfToolName = (toolName: string) => {
 		return this._mcpService.getMCPTools()?.find(t => t.name === toolName)?.mcpServerName
 	}
@@ -487,14 +518,27 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			if (toolName === 'edit_file') { this._addToolEditCheckpoint({ threadId, uri: (toolParams as BuiltinToolCallParams['edit_file']).uri }) }
 			if (toolName === 'rewrite_file') { this._addToolEditCheckpoint({ threadId, uri: (toolParams as BuiltinToolCallParams['rewrite_file']).uri }) }
 
-			// 2. if tool requires approval, break from the loop, awaiting approval
+			// 2. if tool requires approval, use tiered risk assessment
 
 			const approvalType = isBuiltInTool ? approvalTypeOfBuiltinToolName[toolName] : 'MCP tools'
 			if (approvalType) {
 				const autoApprove = this._settingsService.state.globalSettings.autoApprove[approvalType]
-				// add a tool_request because we use it for UI if a tool is loading (this should be improved in the future)
-				this._addMessageToThread(threadId, { role: 'tool', type: 'tool_request', content: '(Awaiting user permission...)', result: null, name: toolName, params: toolParams, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName })
-				if (!autoApprove) {
+
+				// Tiered risk assessment: safe tools auto-approve, moderate follow settings, dangerous always ask
+				let needsApproval = !autoApprove
+				if (isBuiltInTool) {
+					const riskLevel = assessToolRisk(toolName, opts.unvalidatedToolParams)
+					if (riskLevel === 'safe') {
+						needsApproval = false // Always auto-approve safe (read-only) tools
+					} else if (riskLevel === 'dangerous') {
+						needsApproval = true // Always require approval for dangerous tools
+					}
+					// 'moderate' follows the existing autoApprove setting
+				}
+
+				// add a tool_request because we use it for UI if a tool is loading
+				this._addMessageToThread(threadId, { role: 'tool', type: 'tool_request', content: needsApproval ? '(Awaiting user permission...)' : '(Auto-approved)', result: null, name: toolName, params: toolParams, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName })
+				if (needsApproval) {
 					return { awaitingUserApproval: true }
 				}
 			}
@@ -620,7 +664,6 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		let nMessagesSent = 0
 		let shouldSendAnotherMessage = true
 		let isRunningWhenEnd: IsRunningType = undefined
-
 		// Emit loop start event
 		this._agentEventService.emitSimple('loop_start', threadId, 0, maxIterations)
 
@@ -645,10 +688,13 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 			this._setStreamState(threadId, { isRunning: 'idle', interrupt: idleInterruptor })
 
-			const chatMessages = this.state.allThreads[threadId]?.messages ?? []
+			let chatMessages = this.state.allThreads[threadId]?.messages ?? []
+
+			let currentModelSelection = modelSelection
+
 			const { messages, separateSystemMessage } = await this._convertToLLMMessagesService.prepareLLMChatMessages({
 				chatMessages,
-				modelSelection,
+				modelSelection: currentModelSelection,
 				chatMode,
 				webSearchEnabled,
 			})
@@ -660,6 +706,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 			let shouldRetryLLM = true
 			let nAttempts = 0
+			const triedModels = new Set<string>()
+			if (modelSelection) triedModels.add(this._modelRouterService.modelKey(modelSelection))
 			while (shouldRetryLLM) {
 				shouldRetryLLM = false
 				nAttempts += 1
@@ -674,11 +722,12 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 				// Global proxy config is automatically injected by ILLMMessageService
 
+				const llmStartTime = Date.now()
 				const llmCancelToken = this._llmMessageService.sendLLMMessage({
 					messagesType: 'chatMessages',
 					chatMode,
 					messages: messages,
-					modelSelection,
+					modelSelection: currentModelSelection,
 					modelSelectionOptions,
 					overridesOfModel,
 					logging: { loggingName: `Chat - ${chatMode}`, loggingExtras: { threadId, nMessagesSent, chatMode } },
@@ -721,7 +770,29 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				}
 				// llm res error
 				else if (llmRes.type === 'llmError') {
-					// error, should retry
+					// Record error latency
+					if (currentModelSelection) {
+						this._modelRouterService.recordLatency(currentModelSelection, Date.now() - llmStartTime, false)
+					}
+
+					// Try fallback model first
+					if (currentModelSelection) {
+						const fallback = this._modelRouterService.getNextFallback(currentModelSelection, triedModels)
+						if (fallback) {
+							currentModelSelection = fallback
+							shouldRetryLLM = true
+							nAttempts = 0 // reset attempts for new model
+							this._setStreamState(threadId, { isRunning: 'idle', interrupt: idleInterruptor })
+							await timeout(500) // brief pause before fallback
+							if (interruptedWhenIdle) {
+								this._setStreamState(threadId, undefined)
+								return
+							}
+							continue // retry with fallback model
+						}
+					}
+
+					// No fallback available, retry same model
 					if (nAttempts < CHAT_RETRIES) {
 						shouldRetryLLM = true
 						this._setStreamState(threadId, { isRunning: 'idle', interrupt: idleInterruptor })
@@ -746,13 +817,16 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					}
 				}
 
-				// llm res success
+				// llm res success — record latency and cost
+				if (currentModelSelection) {
+					this._modelRouterService.recordLatency(currentModelSelection, Date.now() - llmStartTime, true)
+				}
 				const { toolCall, info } = llmRes
 
 				this._addMessageToThread(threadId, { role: 'assistant', displayContent: info.fullText, reasoning: info.fullReasoning, anthropicReasoning: info.anthropicReasoning })
 
 				// Live progress: if this is a plan execution (chatModeOverride used), parse COMPLETED TASK N markers
-				if (chatModeOverride === 'agent' && info.fullText) {
+				if (chatModeOverride === 'build' && info.fullText) {
 					this._updatePlanProgressFromResponse(threadId, info.fullText)
 				}
 
@@ -806,8 +880,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 					}
 
 					// Phase 1.2: Lint retry cap - track read_lint_errors per file
-					if (toolCall.name === 'read_lint_errors' && toolCall.rawParams?.uri) {
-						const filePath = String(toolCall.rawParams.uri)
+					if (toolCall.name === 'read_lint_errors' && (toolCall.rawParams?.uri || toolCall.rawParams?.uris)) {
+						const filePath = String(toolCall.rawParams.uris ?? toolCall.rawParams.uri)
 						const count = (lintRetryCountByFile.get(filePath) ?? 0) + 1
 						lintRetryCountByFile.set(filePath, count)
 						if (count > lintRetryLimit) {
@@ -939,6 +1013,65 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				state: { stagingSelections: [], isBeingEdited: false },
 			})
 			isRunningWhenEnd = undefined
+		}
+
+		// Cascade Mode: Auto-verify after agent completes work
+		const { cascadeMode } = this._settingsService.state.globalSettings
+		if (cascadeMode && (chatMode === 'auto' || chatMode === 'build') && !isRunningWhenEnd && nMessagesSent >= 2) {
+			try {
+				const workspaceFolders = this._workspaceContextService.getWorkspace().folders
+				const cwd = workspaceFolders.length > 0 ? workspaceFolders[0].uri.fsPath : null
+				const pipelineResult = await this._verificationPipelineService.runPipeline(cwd, null)
+
+				if (pipelineResult.results.length > 0) {
+					const resultSummary = pipelineResult.results.map(r =>
+						`${r.passed ? 'PASS' : 'FAIL'}: ${r.step.name} (${r.durationMs}ms)${r.output ? `\n  ${r.output.substring(0, 200)}` : ''}`
+					).join('\n')
+
+					const statusEmoji = pipelineResult.allPassed ? 'All checks passed' : 'Some checks failed'
+
+					this._addMessageToThread(threadId, {
+						role: 'user',
+						content: `[Cascade Verification]\n${statusEmoji}\n\n${resultSummary}`,
+						displayContent: `[Verification: ${statusEmoji}]\n${resultSummary}`,
+						selections: [],
+						state: { stagingSelections: [], isBeingEdited: false },
+					})
+
+					// If verification failed, re-enter the agent loop to fix (up to 3 cascade retries)
+					if (!pipelineResult.allPassed && pipelineResult.firstFailure) {
+						const cascadeRetries = (this as any).__cascadeRetryCount ?? 0
+						if (cascadeRetries < 3) {
+							(this as any).__cascadeRetryCount = cascadeRetries + 1
+							this._addMessageToThread(threadId, {
+								role: 'user',
+								content: `The verification pipeline detected failures (attempt ${cascadeRetries + 1}/3). Please analyze and fix the issues:\n\n${pipelineResult.firstFailure.output || 'Check failed: ' + pipelineResult.firstFailure.step.name}`,
+								displayContent: `[Cascade: Auto-fixing verification failures (attempt ${cascadeRetries + 1}/3)]`,
+								selections: [],
+								state: { stagingSelections: [], isBeingEdited: false },
+							})
+							// Re-enter the agent loop to fix the failures
+							await this._runChatAgent({ threadId, modelSelection, modelSelectionOptions, webSearchEnabled, chatModeOverride: chatMode })
+							return // The recursive call handles the rest
+						} else {
+							// Max retries reached, stop and inform
+							(this as any).__cascadeRetryCount = 0
+							this._addMessageToThread(threadId, {
+								role: 'user',
+								content: `Cascade verification failed after 3 attempts. Manual intervention needed.\n\nLast failure: ${pipelineResult.firstFailure.output || pipelineResult.firstFailure.step.name}`,
+								displayContent: '[Cascade: Max retries reached, stopping]',
+								selections: [],
+								state: { stagingSelections: [], isBeingEdited: false },
+							})
+						}
+					} else if (pipelineResult.allPassed) {
+						// Reset cascade retry count on success
+						(this as any).__cascadeRetryCount = 0
+					}
+				}
+			} catch {
+				// Silently fail — verification is optional enhancement
+			}
 		}
 
 		// if awaiting user approval, keep isRunning true, else end isRunning
@@ -1222,11 +1355,11 @@ Return ONLY the JSON array, no other text.`
 		this._addMessageToThread(threadId, userHistoryElt)
 		this._setThreadState(threadId, { currCheckpointIdx: null })
 
-		// Run agent with chatModeOverride: 'agent' so LLM gets full tool access
+		// Run agent with chatModeOverride: 'build' so LLM gets full tool access
 		const agentPromise = this._runChatAgent({
 			threadId,
 			...this._currentModelSelectionProps(),
-			chatModeOverride: 'agent',
+			chatModeOverride: 'build',
 		})
 
 		this._wrapRunAgentToNotify(agentPromise, threadId)
@@ -1346,7 +1479,7 @@ Return ONLY the JSON array, no other text.`
 		const agentPromise = this._runChatAgent({
 			threadId,
 			...this._currentModelSelectionProps(),
-			chatModeOverride: 'agent',
+			chatModeOverride: 'build',
 		})
 
 		this._wrapRunAgentToNotify(agentPromise, threadId)
@@ -1467,6 +1600,43 @@ Return ONLY the JSON array, no other text.`
 		return { voidFileSnapshotOfURI }
 	}
 
+
+	private async _populateBranchSelections(selections: StagingSelectionItem[]): Promise<StagingSelectionItem[]> {
+		const hasBranch = selections.some(s => s.type === 'Branch')
+		if (!hasBranch) return selections
+
+		const workspaceFolders = this._workspaceContextService.getWorkspace().folders
+		const cwd = workspaceFolders[0]?.uri.fsPath
+		if (!cwd) return selections
+
+		return Promise.all(selections.map(async (s) => {
+			if (s.type !== 'Branch' || s.branchDiffContent) return s
+			try {
+				const branchCmd = await this._toolsService.callTool.run_command({
+					command: 'git branch --show-current',
+					cwd,
+					terminalId: '__void_branch_context',
+				})
+				const branchResult = await branchCmd.result
+				const branchName = branchResult.result.trim()
+
+				const diffCmd = await this._toolsService.callTool.run_command({
+					command: `git diff main...HEAD --stat && echo "---VOID_BRANCH_SEP---" && git diff main...HEAD`,
+					cwd,
+					terminalId: '__void_branch_diff',
+				})
+				const diffResult = await diffCmd.result
+				const parts = diffResult.result.split('---VOID_BRANCH_SEP---')
+				const stat = (parts[0] || '').trim()
+				const diff = (parts[1] || '').trim()
+				const branchDiffContent = `Changed files:\n${stat}\n\nDiff:\n${diff}`
+
+				return { ...s, branchName: branchName || s.branchName, branchDiffContent } as StagingSelectionItem
+			} catch {
+				return { ...s, branchDiffContent: '(Unable to retrieve branch diff)' } as StagingSelectionItem
+			}
+		}))
+	}
 
 	private _addUserCheckpoint({ threadId }: { threadId: string }) {
 		const { voidFileSnapshotOfURI } = this._computeNewCheckpointInfo({ threadId }) ?? {}
@@ -1662,6 +1832,45 @@ We only need to do it for files that were edited since `from`, ie files between 
 	}
 
 
+	async branchFromCheckpoint(threadId: string, checkpointMessageIdx: number): Promise<BranchPoint | null> {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return null
+
+		const message = thread.messages[checkpointMessageIdx]
+		if (!message || message.role !== 'checkpoint') return null
+
+		// 1. Fork the thread up to the checkpoint
+		const newThreadId = this.forkThread(threadId, checkpointMessageIdx)
+		if (!newThreadId) return null
+
+		// 2. Restore file snapshots from the checkpoint
+		this.jumpToCheckpointBeforeMessageIdx({ threadId: newThreadId, messageIdx: checkpointMessageIdx, jumpToUserModified: false })
+
+		// 3. Create a git branch
+		const branchName = `grace-branch-${Date.now()}`
+		try {
+			const { result } = await (this as any).callTool?.run_command?.({ command: `git checkout -b ${branchName}`, cwd: null, waitMs: null, useShell: null }) ?? { result: '' }
+			if (result && !result.includes('error')) {
+				// success
+			}
+		} catch {
+			// Git branch creation is optional — continue even if it fails
+		}
+
+		// 4. Switch to the new thread
+		this.switchToThread(newThreadId)
+
+		const branchPoint: BranchPoint = {
+			parentThreadId: threadId,
+			checkpointIndex: checkpointMessageIdx,
+			branchThreadId: newThreadId,
+			branchName,
+			createdAt: Date.now(),
+		}
+
+		return branchPoint
+	}
+
 	private _wrapRunAgentToNotify(p: Promise<void>, threadId: string) {
 		const notify = ({ error }: { error: string | null }) => {
 			const thread = this.state.allThreads[threadId]
@@ -1725,9 +1934,25 @@ We only need to do it for files that were edited since `from`, ie files between 
 
 		// add user's message to chat history
 		const instructions = userMessage
-		const currSelns: StagingSelectionItem[] = _chatSelections ?? thread.state.stagingSelections
+		let currSelns: StagingSelectionItem[] = _chatSelections ?? thread.state.stagingSelections
 
-		const userMessageContent = await chat_userMessageContent(instructions, currSelns, { directoryStrService: this._directoryStringService, fileService: this._fileService }) // user message + names of files (NOT content)
+		// Auto-include active file context when no explicit selections exist
+		if (currSelns.length === 0) {
+			const activeResource = this._editorService.activeEditor?.resource
+			if (activeResource && activeResource.scheme === 'file') {
+				currSelns = [{
+					type: 'File',
+					uri: activeResource,
+					language: '',
+					state: { wasAddedAsCurrentFile: true },
+				}]
+			}
+		}
+
+		// populate branch diff content for any @Branch selections
+		const populatedSelns = await this._populateBranchSelections(currSelns)
+
+		const userMessageContent = await chat_userMessageContent(instructions, populatedSelns, { directoryStrService: this._directoryStringService, fileService: this._fileService }) // user message + names of files (NOT content)
 		const userHistoryElt: ChatMessage = { role: 'user', content: userMessageContent, displayContent: instructions, selections: currSelns, images: images && images.length > 0 ? images : undefined, state: defaultMessageState }
 		this._addMessageToThread(threadId, userHistoryElt)
 
@@ -1745,9 +1970,17 @@ We only need to do it for files that were edited since `from`, ie files between 
 	}
 
 
-	async addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId, webSearchEnabled, images }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string, webSearchEnabled?: boolean, images?: ImageAttachment[] }) {
+	async addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId, webSearchEnabled, images, immediate }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string, webSearchEnabled?: boolean, images?: ImageAttachment[], immediate?: boolean }) {
 		const thread = this.state.allThreads[threadId];
 		if (!thread) return
+
+		// Queue message if thread is busy (unless immediate=true from Cmd+Enter)
+		const isRunning = this.streamState[threadId]?.isRunning
+		if (isRunning && isRunning !== 'idle' && !immediate) {
+			if (!this._messageQueue.has(threadId)) this._messageQueue.set(threadId, [])
+			this._messageQueue.get(threadId)!.push({ userMessage, _chatSelections, webSearchEnabled, images })
+			return
+		}
 
 		// if there's a current checkpoint, delete all messages after it
 		if (thread.state.currCheckpointIdx !== null) {
@@ -1767,9 +2000,25 @@ We only need to do it for files that were edited since `from`, ie files between 
 			this._setState({ allThreads: newThreads });
 		}
 
+		// If immediate and already running, abort first
+		if (immediate && isRunning && isRunning !== 'idle') {
+			await this.abortRunning(threadId)
+		}
+
 		// Now call the original method to add the user message and stream the response
 		await this._addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId, webSearchEnabled, images });
 
+		// After streaming completes, process queued messages
+		this._processMessageQueue(threadId)
+	}
+
+	private async _processMessageQueue(threadId: string): Promise<void> {
+		const queue = this._messageQueue.get(threadId)
+		if (!queue || queue.length === 0) return
+		const next = queue.shift()!
+		if (queue.length === 0) this._messageQueue.delete(threadId)
+		await this._addUserMessageAndStreamResponse({ ...next, threadId })
+		this._processMessageQueue(threadId)
 	}
 
 	editUserMessageAndStreamResponse: IChatThreadService['editUserMessageAndStreamResponse'] = async ({ userMessage, messageIdx, threadId }) => {
@@ -1818,7 +2067,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 			// URIs of user selections
 			if (m.role === 'user') {
 				for (const sel of m.selections ?? []) {
-					addURI(sel.uri)
+					if (sel.uri) addURI(sel.uri)
 				}
 			}
 			// URIs of files that have been read
@@ -1907,7 +2156,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 			// else search codebase for `target`
 			let uris: URI[] = []
 			try {
-				const { result } = await this._toolsService.callTool['search_pathnames_only']({ query: target, includePattern: null, pageNumber: 0 })
+				const { result } = await this._toolsService.callTool['search_pathnames_only']({ query: target, includePattern: null, globPattern: null, pageNumber: 0 })
 				const { uris: uris_ } = await result
 				uris = uris_
 			} catch (e) {
@@ -2132,6 +2381,9 @@ We only need to do it for files that were edited since `from`, ie files between 
 		const newThreads = { ...currentThreads };
 		delete newThreads[threadId];
 
+		// Clean up stream state to prevent memory leak
+		delete this.streamState[threadId];
+
 		// store the updated threads
 		this._storeAllThreads(newThreads);
 		this._setState({ ...this.state, allThreads: newThreads })
@@ -2153,6 +2405,27 @@ We only need to do it for files that were edited since `from`, ie files between 
 		this._setState({ allThreads: newThreads })
 	}
 
+
+	forkThread(threadId: string, fromMessageIdx: number): string | null {
+		const { allThreads: currentThreads } = this.state
+		const threadToFork = currentThreads[threadId]
+		if (!threadToFork) return null
+
+		const forkedThread = {
+			...deepClone(threadToFork),
+			id: generateUuid(),
+			messages: deepClone(threadToFork.messages.slice(0, fromMessageIdx + 1)),
+			lastModified: new Date().toISOString(),
+		}
+
+		const newThreads = {
+			...currentThreads,
+			[forkedThread.id]: forkedThread,
+		}
+		this._storeAllThreads(newThreads)
+		this._setState({ allThreads: newThreads, currentThreadId: forkedThread.id })
+		return forkedThread.id
+	}
 
 	// Phase 5: Run a subagent on a hidden in-memory thread
 	async runSubagentThread({

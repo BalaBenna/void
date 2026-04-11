@@ -56,7 +56,7 @@ declare namespace monaco {
 	}
 
 	export interface IDisposable {
-		dispose(): forge;
+		dispose(): void;
 	}
 
 	export interface IEvent<T> {
@@ -69,8 +69,8 @@ declare namespace monaco {
 	export class Emitter<T> {
 		constructor();
 		readonly event: Event<T>;
-		fire(event: T): forge;
-		dispose(): forge;
+		fire(event: T): void;
+		dispose(): void;
 	}
 
 #include(vs/platform/markers/common/markers): MarkerTag, MarkerSeverity
@@ -95,7 +95,7 @@ declare namespace monaco.editor {
 #include(vs/editor/standalone/browser/standaloneWebWorker): MonacoWebWorker, IInternalWebWorkerOptions
 #include(vs/editor/standalone/browser/standaloneCodeEditor): IActionDescriptor, IGlobalEditorOptions, IStandaloneEditorConstructionOptions, IStandaloneDiffEditorConstructionOptions, IStandaloneCodeEditor, IStandaloneDiffEditor
 export interface ICommandHandler {
-	(...args: any[]): forge;
+	(...args: any[]): void;
 }
 export interface ILocalizedString {
 	original: string;
