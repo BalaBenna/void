@@ -3,7 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMessageOnFinalMessageParams, ServiceSendLLMMessageParams, MainSendLLMMessageParams, MainLLMMessageAbortParams, ServiceModelListParams, EventModelListOnSuccessParams, EventModelListOnErrorParams, MainModelListParams, OllamaModelResponse, OpenaiCompatibleModelResponse, } from './sendLLMMessageTypes.js';
+import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMessageOnFinalMessageParams, ServiceSendLLMMessageParams, MainSendLLMMessageParams, MainLLMMessageAbortParams, ServiceModelListParams, EventModelListOnSuccessParams, EventModelListOnErrorParams, MainModelListParams, OpenaiCompatibleModelResponse, } from './sendLLMMessageTypes.js';
 
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
@@ -22,7 +22,6 @@ export interface ILLMMessageService {
 	readonly _serviceBrand: undefined;
 	sendLLMMessage: (params: ServiceSendLLMMessageParams) => string | null;
 	abort: (requestId: string) => void;
-	ollamaList: (params: ServiceModelListParams<OllamaModelResponse>) => void;
 	openAICompatibleList: (params: ServiceModelListParams<OpenaiCompatibleModelResponse>) => void;
 }
 
@@ -43,16 +42,12 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 
 	// list hooks
 	private readonly listHooks = {
-		ollama: {
-			success: {} as { [eventId: string]: ((params: EventModelListOnSuccessParams<OllamaModelResponse>) => void) },
-			error: {} as { [eventId: string]: ((params: EventModelListOnErrorParams<OllamaModelResponse>) => void) },
-		},
 		openAICompat: {
 			success: {} as { [eventId: string]: ((params: EventModelListOnSuccessParams<OpenaiCompatibleModelResponse>) => void) },
 			error: {} as { [eventId: string]: ((params: EventModelListOnErrorParams<OpenaiCompatibleModelResponse>) => void) },
 		}
 	} satisfies {
-		[providerName in 'ollama' | 'openAICompat']: {
+		[providerName in 'openAICompat']: {
 			success: { [eventId: string]: ((params: EventModelListOnSuccessParams<any>) => void) },
 			error: { [eventId: string]: ((params: EventModelListOnErrorParams<any>) => void) },
 		}
@@ -85,12 +80,6 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			console.error('Error in LLMMessageService:', JSON.stringify(e))
 		}))
 		// .list()
-		this._register((this.channel.listen('onSuccess_list_ollama') satisfies Event<EventModelListOnSuccessParams<OllamaModelResponse>>)(e => {
-			this.listHooks.ollama.success[e.requestId]?.(e)
-		}))
-		this._register((this.channel.listen('onError_list_ollama') satisfies Event<EventModelListOnErrorParams<OllamaModelResponse>>)(e => {
-			this.listHooks.ollama.error[e.requestId]?.(e)
-		}))
 		this._register((this.channel.listen('onSuccess_list_openAICompatible') satisfies Event<EventModelListOnSuccessParams<OpenaiCompatibleModelResponse>>)(e => {
 			this.listHooks.openAICompat.success[e.requestId]?.(e)
 		}))
@@ -146,25 +135,6 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 	}
 
 
-	ollamaList = (params: ServiceModelListParams<OllamaModelResponse>) => {
-		const { onSuccess, onError, ...proxyParams } = params
-
-		const { settingsOfProvider } = this.voidSettingsService.state
-
-		// add state for request id
-		const requestId_ = generateUuid();
-		this.listHooks.ollama.success[requestId_] = onSuccess
-		this.listHooks.ollama.error[requestId_] = onError
-
-		this.channel.call('ollamaList', {
-			...proxyParams,
-			settingsOfProvider,
-			providerName: 'ollama',
-			requestId: requestId_,
-		} satisfies MainModelListParams<OllamaModelResponse>)
-	}
-
-
 	openAICompatibleList = (params: ServiceModelListParams<OpenaiCompatibleModelResponse>) => {
 		const { onSuccess, onError, ...proxyParams } = params
 
@@ -186,9 +156,6 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 		delete this.llmMessageHooks.onText[requestId]
 		delete this.llmMessageHooks.onFinalMessage[requestId]
 		delete this.llmMessageHooks.onError[requestId]
-
-		delete this.listHooks.ollama.success[requestId]
-		delete this.listHooks.ollama.error[requestId]
 
 		delete this.listHooks.openAICompat.success[requestId]
 		delete this.listHooks.openAICompat.error[requestId]

@@ -160,26 +160,6 @@ export type EventLLMMessageOnErrorParams = Parameters<OnError>[0] & { requestId:
 
 
 
-// These are from 'ollama' SDK
-interface OllamaModelDetails {
-	parent_model: string;
-	format: string;
-	family: string;
-	families: string[];
-	parameter_size: string;
-	quantization_level: string;
-}
-
-export type OllamaModelResponse = {
-	name: string;
-	modified_at: Date;
-	size: number;
-	digest: string;
-	details: OllamaModelDetails;
-	expires_at: Date;
-	size_vram: number;
-}
-
 export type OpenaiCompatibleModelResponse = {
 	id: string;
 	created: number;

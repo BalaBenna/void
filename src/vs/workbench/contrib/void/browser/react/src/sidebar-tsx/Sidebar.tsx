@@ -21,9 +21,10 @@ export const Sidebar = ({ className }: { className: string }) => {
 		<div
 			// default background + text styles for sidebar
 			className={`
-				w-full h-full
+				w-full h-full overflow-hidden
 				bg-void-bg-2
 				text-void-fg-1
+				void-cursor-shell
 			`}
 		>
 
@@ -38,4 +39,3 @@ export const Sidebar = ({ className }: { className: string }) => {
 
 
 }
-

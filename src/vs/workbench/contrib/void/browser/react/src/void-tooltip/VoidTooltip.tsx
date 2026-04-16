@@ -45,7 +45,7 @@ export const VoidTooltip = () => {
 		<>
 			<style>
 				{`
-				#void-tooltip, #void-tooltip-orange, #void-tooltip-green, #void-tooltip-ollama-settings, #void-tooltip-provider-info {
+				#void-tooltip, #void-tooltip-orange, #void-tooltip-green, #void-tooltip-provider-info {
 					font-size: 12px;
 					padding: 0px 8px;
 					border-radius: 6px;
@@ -69,7 +69,7 @@ export const VoidTooltip = () => {
 					color: white;
 				}
 
-				#void-tooltip-ollama-settings, #void-tooltip-provider-info {
+				#void-tooltip-provider-info {
 					background-color: var(--vscode-editor-background);
 					color: var(--vscode-input-foreground);
 				}
@@ -100,32 +100,6 @@ export const VoidTooltip = () => {
 				opacity={1}
 				delayShow={50}
 			/>
-			<Tooltip
-				id="void-tooltip-ollama-settings"
-				border='1px solid rgba(100,100,100,.2)'
-				opacity={1}
-				openEvents={{ mouseover: true, click: true, focus: true }}
-				place='right'
-				style={{ pointerEvents: 'all', userSelect: 'text', fontSize: 11 }}
-			>
-				<div style={{ padding: '8px 10px' }}>
-					<div style={{ opacity: 0.8, textAlign: 'center', fontWeight: 'bold', marginBottom: 8 }}>
-						Good starter models
-					</div>
-					<div style={{ marginBottom: 4 }}>
-						<span style={{ opacity: 0.8 }}>For chat:{` `}</span>
-						<span style={{ opacity: 0.8, fontWeight: 'bold' }}>gemma3</span>
-					</div>
-					<div style={{ marginBottom: 4 }}>
-						<span style={{ opacity: 0.8 }}>For autocomplete:{` `}</span>
-						<span style={{ opacity: 0.8, fontWeight: 'bold' }}>qwen2.5-coder</span>
-					</div>
-					<div style={{ marginBottom: 0 }}>
-						<span style={{ opacity: 0.8 }}>Use the largest version of these you can!</span>
-					</div>
-				</div>
-			</Tooltip>
-
 			<Tooltip
 				id="void-tooltip-provider-info"
 				border='1px solid rgba(100,100,100,.2)'

@@ -3,11 +3,10 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { useMemo, useState } from 'react';
-import { CopyButton, IconShell1 } from '../markdown/ApplyBlockHoverButtons.js';
-import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useFullChatThreadsStreamState, useSettingsState } from '../util/services.js';
-import { IconX } from './SidebarChat.js';
-import { Check, Copy, Icon, LoaderCircle, MessageCircleQuestion, Trash2, UserCheck, X } from 'lucide-react';
+import { useState } from 'react';
+import { IconShell1 } from '../markdown/ApplyBlockHoverButtons.js';
+import { useAccessor, useChatThreadsState, useFullChatThreadsStreamState } from '../util/services.js';
+import { Check, Copy, LoaderCircle, MessageCircleQuestion, Trash2, X } from 'lucide-react';
 import { IsRunningType, ThreadType } from '../../../chatThreadService.js';
 
 
@@ -19,7 +18,7 @@ export const PastThreadsList = ({ className = '' }: { className?: string }) => {
 	const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
 
 	const threadsState = useChatThreadsState()
-	const { allThreads } = threadsState
+	const { allThreads, currentThreadId } = threadsState
 
 	const streamState = useFullChatThreadsStreamState()
 
@@ -43,7 +42,7 @@ export const PastThreadsList = ({ className = '' }: { className?: string }) => {
 	const displayThreads = showAll ? sortedThreadIds : sortedThreadIds.slice(0, numInitialThreads);
 
 	return (
-		<div className={`flex flex-col mb-2 gap-2 w-full text-nowrap text-void-fg-3 select-none relative ${className}`}>
+		<div className={`void-cursor-panel-subtle flex flex-col gap-2 rounded-[24px] p-3 w-full text-nowrap text-void-fg-3 select-none relative ${className}`}>
 			{displayThreads.length === 0 // this should never happen
 				? <></>
 				: displayThreads.map((threadId, i) => {
@@ -60,6 +59,7 @@ export const PastThreadsList = ({ className = '' }: { className?: string }) => {
 							hoveredIdx={hoveredIdx}
 							setHoveredIdx={setHoveredIdx}
 							isRunning={runningThreadIds[pastThread.id]}
+							isActive={pastThread.id === currentThreadId}
 						/>
 					);
 				})
@@ -67,15 +67,15 @@ export const PastThreadsList = ({ className = '' }: { className?: string }) => {
 
 			{hasMoreThreads && !showAll && (
 				<div
-					className="text-void-fg-3 opacity-80 hover:opacity-100 hover:brightness-115 cursor-pointer p-1 text-xs"
+					className="text-void-fg-3 opacity-80 hover:opacity-100 hover:brightness-115 cursor-pointer px-1 py-0.5 text-xs"
 					onClick={() => setShowAll(true)}
 				>
-					Show {sortedThreadIds.length - numInitialThreads} more...
+					Show {sortedThreadIds.length - numInitialThreads} more conversations
 				</div>
 			)}
 			{hasMoreThreads && showAll && (
 				<div
-					className="text-void-fg-3 opacity-80 hover:opacity-100 hover:brightness-115 cursor-pointer p-1 text-xs"
+					className="text-void-fg-3 opacity-80 hover:opacity-100 hover:brightness-115 cursor-pointer px-1 py-0.5 text-xs"
 					onClick={() => setShowAll(false)}
 				>
 					Show less
@@ -112,6 +112,12 @@ const formatTime = (date: Date) => {
 		minute: '2-digit',
 		hour12: true
 	});
+};
+
+const summarizeThread = (thread: ThreadType) => {
+	const firstUserMsg = thread.messages.find((msg) => msg.role === 'user' && msg.displayContent?.trim());
+	const summary = firstUserMsg?.role === 'user' ? firstUserMsg.displayContent.trim() : 'Untitled conversation';
+	return summary.length > 72 ? `${summary.slice(0, 72).trimEnd()}...` : summary;
 };
 
 
@@ -168,12 +174,13 @@ const TrashButton = ({ threadId }: { threadId: string }) => {
 	)
 }
 
-const PastThreadElement = ({ pastThread, idx, hoveredIdx, setHoveredIdx, isRunning }: {
+const PastThreadElement = ({ pastThread, idx, hoveredIdx, setHoveredIdx, isRunning, isActive }: {
 	pastThread: ThreadType,
 	idx: number,
 	hoveredIdx: number | null,
 	setHoveredIdx: (idx: number | null) => void,
 	isRunning: IsRunningType | undefined,
+	isActive: boolean,
 }
 
 ) => {
@@ -207,33 +214,17 @@ const PastThreadElement = ({ pastThread, idx, hoveredIdx, setHoveredIdx, isRunni
 	// 	toolTipName={`Copy As Void Chat`}
 	// />
 
-	let firstMsg = null;
-	const firstUserMsgIdx = pastThread.messages.findIndex((msg) => msg.role === 'user');
-
-	if (firstUserMsgIdx !== -1) {
-		const firsUsertMsgObj = pastThread.messages[firstUserMsgIdx];
-		firstMsg = firsUsertMsgObj.role === 'user' && firsUsertMsgObj.displayContent || '';
-	} else {
-		firstMsg = '""';
-	}
+	const firstMsg = summarizeThread(pastThread);
 
 	const numMessages = pastThread.messages.filter((msg) => msg.role === 'assistant' || msg.role === 'user').length;
 
-	const detailsHTML = <span
-	// data-tooltip-id='void-tooltip'
-	// data-tooltip-content={`Last modified ${formatTime(new Date(pastThread.lastModified))}`}
-	// data-tooltip-place='top'
-	>
-		<span className='opacity-60'>{numMessages}</span>
-		{` `}
-		{formatDate(new Date(pastThread.lastModified))}
-		{/* {` messages `} */}
-	</span>
+	const detailsHTML = isActive ? <span className='text-xs text-void-fg-4'>Open</span> : null
 
 	return <div
 		key={pastThread.id}
 		className={`
-			py-1 px-2 rounded text-sm bg-zinc-700/5 hover:bg-zinc-700/10 dark:bg-zinc-300/5 dark:hover:bg-zinc-300/10 cursor-pointer opacity-80 hover:opacity-100
+			${isActive ? 'void-cursor-thread-active' : 'void-cursor-subtle-card hover:brightness-[1.04]'}
+			rounded-2xl px-3 py-2 text-sm cursor-pointer transition-all duration-150
 		`}
 		onClick={() => {
 			chatThreadsService.switchToThread(pastThread.id);
@@ -241,25 +232,31 @@ const PastThreadElement = ({ pastThread, idx, hoveredIdx, setHoveredIdx, isRunni
 		onMouseEnter={() => setHoveredIdx(idx)}
 		onMouseLeave={() => setHoveredIdx(null)}
 	>
-		<div className="flex items-center justify-between gap-1">
-			<span className="flex items-center gap-2 min-w-0 overflow-hidden">
+		<div className="flex items-start justify-between gap-2">
+			<span className="flex items-start gap-2 min-w-0 overflow-hidden">
 				{/* spinner */}
-				{isRunning === 'LLM' || isRunning === 'tool' || isRunning === 'idle' ? <LoaderCircle className="animate-spin bg-void-stroke-1 flex-shrink-0 flex-grow-0" size={14} />
+				{isRunning === 'LLM' || isRunning === 'tool' || isRunning === 'idle' ? <LoaderCircle className="animate-spin flex-shrink-0 flex-grow-0 mt-0.5 text-void-fg-3" size={14} />
 					:
-					isRunning === 'awaiting_user' ? <MessageCircleQuestion className="bg-void-stroke-1 flex-shrink-0 flex-grow-0" size={14} />
+					isRunning === 'awaiting_user' ? <MessageCircleQuestion className="flex-shrink-0 flex-grow-0 mt-0.5 text-void-warning" size={14} />
 						:
 						null}
-				{/* name */}
-				<span className="truncate overflow-hidden text-ellipsis"
-					data-tooltip-id='void-tooltip'
-					data-tooltip-content={numMessages + ' messages'}
-					data-tooltip-place='top'
-				>{firstMsg}</span>
-
-				{/* <span className='opacity-60'>{`(${numMessages})`}</span> */}
+				<div className="min-w-0 flex flex-col gap-1">
+					<span className="truncate overflow-hidden text-ellipsis text-void-fg-1"
+						data-tooltip-id='void-tooltip'
+						data-tooltip-content={numMessages + ' messages'}
+						data-tooltip-place='top'
+					>{firstMsg}</span>
+					<span className="text-xs text-void-fg-4 flex items-center gap-1.5">
+						<span>{formatDate(new Date(pastThread.lastModified))}</span>
+						<span className="opacity-40">•</span>
+						<span>{formatTime(new Date(pastThread.lastModified))}</span>
+						<span className="opacity-40">•</span>
+						<span>{numMessages} msg{numMessages === 1 ? '' : 's'}</span>
+					</span>
+				</div>
 			</span>
 
-			<div className="flex items-center gap-x-1 opacity-60">
+			<div className="flex items-center gap-x-1 opacity-70">
 				{idx === hoveredIdx ?
 					<>
 						{/* trash icon */}

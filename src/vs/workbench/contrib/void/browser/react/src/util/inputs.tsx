@@ -756,7 +756,7 @@ export const VoidInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fun
 			className={`w-full resize-none max-h-[500px] overflow-y-auto text-void-fg-1 placeholder:text-void-fg-3 ${className}`}
 			style={{
 				// defaultInputBoxStyles
-				background: asCssVariable(inputBackground),
+				background: 'transparent',
 				color: asCssVariable(inputForeground)
 				// inputBorder: asCssVariable(inputBorder),
 			}}
@@ -1994,5 +1994,4 @@ export const VoidDiffEditor = ({ uri, searchReplaceBlocks, language }: { uri?: a
 		</div>
 	);
 };
-
 

@@ -6,17 +6,14 @@
 // disable foreign import complaints
 /* eslint-disable */
 import Anthropic from '@anthropic-ai/sdk';
-import { Ollama } from 'ollama';
-import OpenAI, { ClientOptions, AzureOpenAI } from 'openai';
-import { MistralCore } from '@mistralai/mistralai/core.js';
-import { fimComplete } from '@mistralai/mistralai/funcs/fimComplete.js';
+import OpenAI, { ClientOptions } from 'openai';
 import { Tool as GeminiTool, FunctionDeclaration, GoogleGenAI, ThinkingConfig, Schema, Type } from '@google/genai';
 import { GoogleAuth } from 'google-auth-library'
 /* eslint-enable */
 
-import { AnthropicLLMChatMessage, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, ModelListParams, OllamaModelResponse, OnError, OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj } from '../../common/sendLLMMessageTypes.js';
+import { AnthropicLLMChatMessage, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, ModelListParams, OnError, OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj } from '../../common/sendLLMMessageTypes.js';
 import { ChatMode, displayInfoOfProviderName, ModelSelectionOptions, OverridesOfModel, ProviderName, SettingsOfProvider } from '../../common/voidSettingsTypes.js';
-import { getSendableReasoningInfo, getModelCapabilities, getProviderCapabilities, defaultProviderSettings, getReservedOutputTokenSpace } from '../../common/modelCapabilities.js';
+import { getSendableReasoningInfo, getModelCapabilities, getProviderCapabilities, getReservedOutputTokenSpace } from '../../common/modelCapabilities.js';
 import { extractReasoningWrapper, extractXMLToolsWrapper } from './extractGrammar.js';
 import { availableTools, InternalToolInfo } from '../../common/prompt/prompts.js';
 import { generateUuid } from '../../../../../base/common/uuid.js';
@@ -78,34 +75,6 @@ const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includ
 		const thisConfig = settingsOfProvider[providerName]
 		return new OpenAI({ apiKey: thisConfig.apiKey, ...commonPayloadOpts })
 	}
-	else if (providerName === 'ollama') {
-		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({ baseURL: `${thisConfig.endpoint}/v1`, apiKey: 'noop', ...commonPayloadOpts })
-	}
-	else if (providerName === 'vLLM') {
-		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({ baseURL: `${thisConfig.endpoint}/v1`, apiKey: 'noop', ...commonPayloadOpts })
-	}
-	else if (providerName === 'liteLLM') {
-		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({ baseURL: `${thisConfig.endpoint}/v1`, apiKey: 'noop', ...commonPayloadOpts })
-	}
-	else if (providerName === 'lmStudio') {
-		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({ baseURL: `${thisConfig.endpoint}/v1`, apiKey: 'noop', ...commonPayloadOpts })
-	}
-	else if (providerName === 'openRouter') {
-		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({
-			baseURL: 'https://openrouter.ai/api/v1',
-			apiKey: thisConfig.apiKey,
-			defaultHeaders: {
-				'HTTP-Referer': 'https://voideditor.com', // Optional, for including your app on openrouter.ai rankings.
-				'X-Title': 'Void', // Optional. Shows in rankings on openrouter.ai.
-			},
-			...commonPayloadOpts,
-		})
-	}
 	else if (providerName === 'googleVertex') {
 		// https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/call-vertex-using-openai-library
 		const thisConfig = settingsOfProvider[providerName]
@@ -113,59 +82,14 @@ const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includ
 		const apiKey = await getGoogleApiKey()
 		return new OpenAI({ baseURL: baseURL, apiKey: apiKey, ...commonPayloadOpts })
 	}
-	else if (providerName === 'microsoftAzure') {
-		// https://learn.microsoft.com/en-us/rest/api/aifoundry/model-inference/get-chat-completions/get-chat-completions?view=rest-aifoundry-model-inference-2024-05-01-preview&tabs=HTTP
-		//  https://github.com/openai/openai-node?tab=readme-ov-file#microsoft-azure-openai
-		const thisConfig = settingsOfProvider[providerName]
-		const endpoint = `https://${thisConfig.project}.openai.azure.com/`;
-		const apiVersion = thisConfig.azureApiVersion ?? '2024-04-01-preview';
-		const options = { endpoint, apiKey: thisConfig.apiKey, apiVersion };
-		return new AzureOpenAI({ ...options, ...commonPayloadOpts });
-	}
-	else if (providerName === 'awsBedrock') {
-		/**
-		  * We treat Bedrock as *OpenAI-compatible only through a proxy*:
-		  *   • LiteLLM default → http://localhost:4000/v1
-		  *   • Bedrock-Access-Gateway → https://<api-id>.execute-api.<region>.amazonaws.com/openai/
-		  *
-		  * The native Bedrock runtime endpoint
-		  *   https://bedrock-runtime.<region>.amazonaws.com
-		  * is **NOT** OpenAI-compatible, so we do *not* fall back to it here.
-		  */
-		const { endpoint, apiKey } = settingsOfProvider.awsBedrock
-
-		// ① use the user-supplied proxy if present
-		// ② otherwise default to local LiteLLM
-		let baseURL = endpoint || 'http://localhost:4000/v1'
-
-		// Normalize: make sure we end with “/v1”
-		if (!baseURL.endsWith('/v1'))
-			baseURL = baseURL.replace(/\/+$/, '') + '/v1'
-
-		return new OpenAI({ baseURL, apiKey, ...commonPayloadOpts })
-	}
-
-
-	else if (providerName === 'deepseek') {
-		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({ baseURL: 'https://api.deepseek.com/v1', apiKey: thisConfig.apiKey, ...commonPayloadOpts })
-	}
 	else if (providerName === 'openAICompatible') {
 		const thisConfig = settingsOfProvider[providerName]
 		const headers = parseHeadersJSON(thisConfig.headersJSON)
 		return new OpenAI({ baseURL: thisConfig.endpoint, apiKey: thisConfig.apiKey, defaultHeaders: headers, ...commonPayloadOpts })
 	}
-	else if (providerName === 'groq') {
-		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({ baseURL: 'https://api.groq.com/openai/v1', apiKey: thisConfig.apiKey, ...commonPayloadOpts })
-	}
 	else if (providerName === 'xAI') {
 		const thisConfig = settingsOfProvider[providerName]
 		return new OpenAI({ baseURL: 'https://api.x.ai/v1', apiKey: thisConfig.apiKey, ...commonPayloadOpts })
-	}
-	else if (providerName === 'mistral') {
-		const thisConfig = settingsOfProvider[providerName]
-		return new OpenAI({ baseURL: 'https://api.mistral.ai/v1', apiKey: thisConfig.apiKey, ...commonPayloadOpts })
 	}
 
 	else throw new Error(`Void providerName was invalid: ${providerName}.`)
@@ -297,10 +221,6 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 
 	// instance
 	const openai: OpenAI = await newOpenAICompatibleSDK({ providerName, settingsOfProvider, includeInPayload })
-	if (providerName === 'microsoftAzure') {
-		// Required to select the model
-		(openai as AzureOpenAI).deploymentName = modelName;
-	}
 	const options: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
 		model: modelName,
 		messages: messages as any,
@@ -580,105 +500,6 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 
 
 
-// ------------ MISTRAL ------------
-// https://docs.mistral.ai/api/#tag/fim
-const sendMistralFIM = ({ messages, onFinalMessage, onError, settingsOfProvider, overridesOfModel, modelName: modelName_, _setAborter, providerName }: SendFIMParams_Internal) => {
-	const { modelName, supportsFIM } = getModelCapabilities(providerName, modelName_, overridesOfModel)
-	if (!supportsFIM) {
-		if (modelName === modelName_)
-			onError({ message: `Model ${modelName} does not support FIM.`, fullError: null })
-		else
-			onError({ message: `Model ${modelName_} (${modelName}) does not support FIM.`, fullError: null })
-		return
-	}
-
-	const mistral = new MistralCore({ apiKey: settingsOfProvider.mistral.apiKey })
-	fimComplete(mistral,
-		{
-			model: modelName,
-			prompt: messages.prefix,
-			suffix: messages.suffix,
-			stream: false,
-			maxTokens: 300,
-			stop: messages.stopTokens,
-		})
-		.then(async response => {
-
-			// unfortunately, _setAborter() does not exist
-			let content = response?.ok ? response.value.choices?.[0]?.message?.content ?? '' : '';
-			const fullText = typeof content === 'string' ? content
-				: content.map(chunk => (chunk.type === 'text' ? chunk.text : '')).join('')
-
-			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
-		})
-		.catch(error => {
-			onError({ message: error + '', fullError: error });
-		})
-}
-
-
-// ------------ OLLAMA ------------
-const newOllamaSDK = ({ endpoint }: { endpoint: string }) => {
-	// if endpoint is empty, normally ollama will send to 11434, but we want it to fail - the user should type it in
-	if (!endpoint) throw new Error(`Ollama Endpoint was empty (please enter ${defaultProviderSettings.ollama.endpoint} in Void if you want the default url).`)
-	const ollama = new Ollama({ host: endpoint })
-	return ollama
-}
-
-const ollamaList = async ({ onSuccess: onSuccess_, onError: onError_, settingsOfProvider }: ListParams_Internal<OllamaModelResponse>) => {
-	const onSuccess = ({ models }: { models: OllamaModelResponse[] }) => {
-		onSuccess_({ models })
-	}
-	const onError = ({ error }: { error: string }) => {
-		onError_({ error })
-	}
-	try {
-		const thisConfig = settingsOfProvider.ollama
-		const ollama = newOllamaSDK({ endpoint: thisConfig.endpoint })
-		ollama.list()
-			.then((response) => {
-				const { models } = response
-				onSuccess({ models })
-			})
-			.catch((error) => {
-				onError({ error: error + '' })
-			})
-	}
-	catch (error) {
-		onError({ error: error + '' })
-	}
-}
-
-const sendOllamaFIM = ({ messages, onFinalMessage, onError, settingsOfProvider, modelName, _setAborter }: SendFIMParams_Internal) => {
-	const thisConfig = settingsOfProvider.ollama
-	const ollama = newOllamaSDK({ endpoint: thisConfig.endpoint })
-
-	let fullText = ''
-	ollama.generate({
-		model: modelName,
-		prompt: messages.prefix,
-		suffix: messages.suffix,
-		options: {
-			stop: messages.stopTokens,
-			num_predict: 300, // max tokens
-			// repeat_penalty: 1,
-		},
-		raw: true,
-		stream: true, // stream is not necessary but lets us expose the
-	})
-		.then(async stream => {
-			_setAborter(() => stream.abort())
-			for await (const chunk of stream) {
-				const newText = chunk.response
-				fullText += newText
-			}
-			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null })
-		})
-		// when error/fail
-		.catch((error) => {
-			onError({ message: error + '', fullError: error })
-		})
-}
 
 // ---------------- GEMINI NATIVE IMPLEMENTATION ----------------
 
@@ -875,50 +696,8 @@ export const sendLLMMessageToProviderImplementation = {
 		sendFIM: null,
 		list: null,
 	},
-	mistral: {
-		sendChat: (params) => _sendOpenAICompatibleChat(params),
-		sendFIM: (params) => sendMistralFIM(params),
-		list: null,
-	},
-	ollama: {
-		sendChat: (params) => _sendOpenAICompatibleChat(params),
-		sendFIM: sendOllamaFIM,
-		list: ollamaList,
-	},
 	openAICompatible: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params), // using openai's SDK is not ideal (your implementation might not do tools, reasoning, FIM etc correctly), talk to us for a custom integration
-		sendFIM: (params) => _sendOpenAICompatibleFIM(params),
-		list: null,
-	},
-	openRouter: {
-		sendChat: (params) => _sendOpenAICompatibleChat(params),
-		sendFIM: (params) => _sendOpenAICompatibleFIM(params),
-		list: null,
-	},
-	vLLM: {
-		sendChat: (params) => _sendOpenAICompatibleChat(params),
-		sendFIM: (params) => _sendOpenAICompatibleFIM(params),
-		list: (params) => _openaiCompatibleList(params),
-	},
-	deepseek: {
-		sendChat: (params) => _sendOpenAICompatibleChat(params),
-		sendFIM: null,
-		list: null,
-	},
-	groq: {
-		sendChat: (params) => _sendOpenAICompatibleChat(params),
-		sendFIM: null,
-		list: null,
-	},
-
-	lmStudio: {
-		// lmStudio has no suffix parameter in /completions, so sendFIM might not work
-		sendChat: (params) => _sendOpenAICompatibleChat(params),
-		sendFIM: (params) => _sendOpenAICompatibleFIM(params),
-		list: (params) => _openaiCompatibleList(params),
-	},
-	liteLLM: {
-		sendChat: (params) => _sendOpenAICompatibleChat(params),
 		sendFIM: (params) => _sendOpenAICompatibleFIM(params),
 		list: null,
 	},
@@ -927,41 +706,5 @@ export const sendLLMMessageToProviderImplementation = {
 		sendFIM: null,
 		list: null,
 	},
-	microsoftAzure: {
-		sendChat: (params) => _sendOpenAICompatibleChat(params),
-		sendFIM: null,
-		list: null,
-	},
-	awsBedrock: {
-		sendChat: (params) => _sendOpenAICompatibleChat(params),
-		sendFIM: null,
-		list: null,
-	},
 
 } satisfies CallFnOfProvider
-
-
-
-
-/*
-FIM info (this may be useful in the future with vLLM, but in most cases the only way to use FIM is if the provider explicitly supports it):
-
-qwen2.5-coder https://ollama.com/library/qwen2.5-coder/blobs/e94a8ecb9327
-<|fim_prefix|>{{ .Prompt }}<|fim_suffix|>{{ .Suffix }}<|fim_middle|>
-
-codestral https://ollama.com/library/codestral/blobs/51707752a87c
-[SUFFIX]{{ .Suffix }}[PREFIX] {{ .Prompt }}
-
-deepseek-coder-v2 https://ollama.com/library/deepseek-coder-v2/blobs/22091531faf0
-<｜fim▁begin｜>{{ .Prompt }}<｜fim▁hole｜>{{ .Suffix }}<｜fim▁end｜>
-
-starcoder2 https://ollama.com/library/starcoder2/blobs/3b190e68fefe
-<file_sep>
-<fim_prefix>
-{{ .Prompt }}<fim_suffix>{{ .Suffix }}<fim_middle>
-<|end_of_text|>
-
-codegemma https://ollama.com/library/codegemma:2b/blobs/48d9a8140749
-<|fim_prefix|>{{ .Prompt }}<|fim_suffix|>{{ .Suffix }}<|fim_middle|>
-
-*/

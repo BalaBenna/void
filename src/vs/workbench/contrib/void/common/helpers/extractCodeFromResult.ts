@@ -133,7 +133,7 @@ export const extractCodeFromRegular = ({ text, recentlyAddedTextLen }: { text: s
 
 
 
-// Ollama has its own FIM, we should not use this if we use that
+// FIM extraction helper
 export const extractCodeFromFIM = ({ text, recentlyAddedTextLen, midTag, }: { text: string, recentlyAddedTextLen: number, midTag: string }): [string, string, string] => {
 
 	/* ------------- summary of the regex -------------

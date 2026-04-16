@@ -776,7 +776,7 @@ export const ctrlKStream_userMessage = ({
 	prefix,
 	suffix,
 	instructions,
-	// isOllamaFIM: false, // Remove unused variable
+	// isFIM: false, // Remove unused variable
 	fimTags,
 	language }: {
 		selection: string, prefix: string, suffix: string, instructions: string, fimTags: QuickEditFimTagsType, language: string,

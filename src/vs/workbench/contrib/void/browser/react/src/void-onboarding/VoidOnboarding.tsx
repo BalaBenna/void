@@ -8,7 +8,7 @@ import { useAccessor, useIsDark, useSettingsState } from '../util/services.js';
 import { Brain, Check, ChevronRight, DollarSign, ExternalLink, Lock, X } from 'lucide-react';
 import { displayInfoOfProviderName, ProviderName, providerNames, localProviderNames, featureNames, FeatureName, isFeatureNameDisabled } from '../../../../common/voidSettingsTypes.js';
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js';
-import { OllamaSetupInstructions, OneClickSwitchButton, SettingsForProvider, ModelDump } from '../void-settings-tsx/Settings.js';
+import { OneClickSwitchButton, SettingsForProvider, ModelDump } from '../void-settings-tsx/Settings.js';
 import { ColorScheme } from '../../../../../../../platform/theme/common/theme.js';
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js';
 import { isLinux } from '../../../../../../../base/common/platform.js';
@@ -100,13 +100,13 @@ const tabNames = ['Free', 'Paid', 'Local'] as const;
 type TabName = typeof tabNames[number] | 'Cloud/Other';
 
 // Data for cloud providers tab
-const cloudProviders: ProviderName[] = ['googleVertex', 'liteLLM', 'microsoftAzure', 'awsBedrock', 'openAICompatible'];
+const cloudProviders: ProviderName[] = ['googleVertex', 'openAICompatible'];
 
 // Data structures for provider tabs
 const providerNamesOfTab: Record<TabName, ProviderName[]> = {
-	Free: ['gemini', 'openRouter'],
+	Free: ['gemini'],
 	Local: localProviderNames,
-	Paid: providerNames.filter(pn => !(['gemini', 'openRouter', ...localProviderNames, ...cloudProviders] as string[]).includes(pn)) as ProviderName[],
+	Paid: providerNames.filter(pn => !(['gemini', ...localProviderNames, ...cloudProviders] as string[]).includes(pn)) as ProviderName[],
 	'Cloud/Other': cloudProviders,
 };
 
@@ -212,20 +212,11 @@ const AddProvidersPage = ({ pageIndex, setPageIndex }: { pageIndex: number, setP
 								className="ml-1 text-xs align-top text-blue-400"
 							>*</span>
 						)}
-						{providerName === 'openRouter' && (
-							<span
-								data-tooltip-id="void-tooltip-provider-info"
-								data-tooltip-content="OpenRouter offers 50 free messages a day, and 1000 if you deposit $10. Only applies to models labeled ':free'."
-								data-tooltip-place="right"
-								className="ml-1 text-xs align-top text-blue-400"
-							>*</span>
-						)}
 					</div>
 					<div>
 						<SettingsForProvider providerName={providerName} showProviderTitle={false} showProviderSuggestions={true} />
 
 					</div>
-					{providerName === 'ollama' && <OllamaSetupInstructions />}
 				</div>
 			))}
 
@@ -369,19 +360,6 @@ const OnboardingPageShell = ({ top, bottom, content, hasMaxWidth = true, classNa
 	)
 }
 
-const OllamaDownloadOrRemoveModelButton = ({ modelName, isModelInstalled, sizeGb }: { modelName: string, isModelInstalled: boolean, sizeGb: number | false | 'not-known' }) => {
-	// for now just link to the ollama download page
-	return <a
-		href={`https://ollama.com/library/${modelName}`}
-		target="_blank"
-		rel="noopener noreferrer"
-		className="flex items-center justify-center text-void-fg-2 hover:text-void-fg-1"
-	>
-		<ExternalLink className="w-3.5 h-3.5" />
-	</a>
-
-}
-
 
 const YesNoText = ({ val }: { val: boolean | null }) => {
 
@@ -485,7 +463,7 @@ const VoidOnboardingContent = () => {
 	// Replace the single selectedProviderName with four separate states
 	// page 2 state - each tab gets its own state
 	const [selectedIntelligentProvider, setSelectedIntelligentProvider] = useState<ProviderName>('anthropic');
-	const [selectedPrivateProvider, setSelectedPrivateProvider] = useState<ProviderName>('ollama');
+	const [selectedPrivateProvider, setSelectedPrivateProvider] = useState<ProviderName>('openAICompatible');
 	const [selectedAffordableProvider, setSelectedAffordableProvider] = useState<ProviderName>('gemini');
 	const [selectedAllProvider, setSelectedAllProvider] = useState<ProviderName>('anthropic');
 
@@ -510,9 +488,9 @@ const VoidOnboardingContent = () => {
 	}
 
 	const providerNamesOfWantToUseOption: { [wantToUseOption in WantToUseOption]: ProviderName[] } = {
-		smart: ['anthropic', 'openAI', 'gemini', 'openRouter'],
-		private: ['ollama', 'vLLM', 'openAICompatible', 'lmStudio'],
-		cheap: ['gemini', 'deepseek', 'openRouter', 'ollama', 'vLLM'],
+		smart: ['anthropic', 'openAI', 'gemini'],
+		private: ['openAICompatible'],
+		cheap: ['gemini'],
 		all: providerNames,
 	}
 
@@ -564,7 +542,7 @@ const VoidOnboardingContent = () => {
 	const detailedDescOfWantToUseOption: { [wantToUseOption in WantToUseOption]: string } = {
 		smart: "Most intelligent and best for agent mode.",
 		private: "Private-hosted so your data never leaves your computer or network. [Email us](mailto:founders@voideditor.com) for help setting up at your company.",
-		cheap: "Use great deals like Gemini 2.5 Pro, or self-host a model with Ollama or vLLM for free.",
+		cheap: "Use great deals like Gemini 2.5 Pro for free.",
 		all: "",
 	}
 
